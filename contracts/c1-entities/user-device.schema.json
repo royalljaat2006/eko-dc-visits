@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.eko-dc-visits/c1/user-device.schema.json",
+  "title": "User and Device",
+  "$defs": {
+    "user": {
+      "type": "object",
+      "required": ["id", "tenant_id", "name", "phone", "role", "status"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "tenant_id": { "$ref": "common.schema.json#/$defs/tenantId" },
+        "name": { "type": "string" },
+        "phone": { "type": "string", "pattern": "^[6-9][0-9]{9}$", "description": "Login identity. PII: field-encrypted at rest." },
+        "employee_code": { "type": "string" },
+        "role": { "$ref": "common.schema.json#/$defs/role" },
+        "scope_location_id": { "oneOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }], "description": "Authorization scope node (C6). DC: null (self-scoped via assignments)." },
+        "status": { "type": "string", "enum": ["INVITED", "ACTIVE", "SUSPENDED", "EXITED"], "description": "EXITED users are redacted-in-place, never deleted." }
+      },
+      "additionalProperties": false
+    },
+    "device": {
+      "type": "object",
+      "required": ["id", "tenant_id", "user_id", "binding_state"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "tenant_id": { "$ref": "common.schema.json#/$defs/tenantId" },
+        "user_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "hardware": { "type": "object", "properties": { "manufacturer": {"type": "string"}, "model": {"type": "string"}, "os_version": {"type": "string"} }, "additionalProperties": false },
+        "public_key": { "type": "string", "description": "Base64 device Keystore public key; verifies envelope signatures. M0: recorded, not yet enforced." },
+        "binding_state": { "type": "string", "enum": ["PENDING", "BOUND", "REPLACED", "REVOKED"], "description": "One BOUND device per DC. REVOKED → no session (hard gate #3)." }
+      },
+      "additionalProperties": false
+    }
+  }
+}

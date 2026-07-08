@@ -1,0 +1,256 @@
+openapi: 3.1.0
+info:
+  title: Eko DC Visit Management API
+  version: 0.1.0
+  description: >
+    Contract-first spec (M0 scope). Hand-written; code conforms to this, never the reverse.
+    Server validates its own responses against this spec in test mode. All endpoints are
+    tenant-scoped via the authenticated principal (ADR-0006). Errors use problem-details.
+servers:
+  - url: /api/v1
+tags:
+  - { name: auth, description: OTP enrollment + session (daily entry is local PIN/biometric on-device) }
+  - { name: master-data, description: Server→client delta pull (C3 §6) }
+  - { name: sync, description: Evidence ingestion (C3) }
+  - { name: dashboard, description: Role-scoped reads (C6) }
+paths:
+  /auth/otp/request:
+    post:
+      tags: [auth]
+      operationId: requestOtp
+      summary: Request an enrollment OTP (M0 stub gateway always sends '000000' in dev)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone: { type: string, pattern: '^[6-9][0-9]{9}$' }
+      responses:
+        '204': { description: OTP dispatched (or stubbed) }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/otp/verify:
+    post:
+      tags: [auth]
+      operationId: verifyOtp
+      summary: Verify OTP, register/bind device, establish session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, otp, device]
+              properties:
+                phone: { type: string }
+                otp: { type: string }
+                device:
+                  type: object
+                  required: [hardware]
+                  properties:
+                    hardware:
+                      type: object
+                      properties:
+                        manufacturer: { type: string }
+                        model: { type: string }
+                        os_version: { type: string }
+                    public_key: { type: string, description: Base64 Keystore public key (recorded in M0, enforced later) }
+      responses:
+        '200':
+          description: Session established; device registered (binding PENDING→BOUND is admin policy; M0 auto-binds)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, refresh_token, user, device_id]
+                properties:
+                  access_token: { type: string, description: JWT, ~1h }
+                  refresh_token: { type: string, description: Rotating, 30–45d, device-bound }
+                  device_id: { type: string, format: uuid }
+                  user: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Problem' }
+  /master-data/locations:
+    get:
+      tags: [master-data]
+      operationId: listLocations
+      summary: Delta-pull location hierarchy (scoped to the caller's territory)
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: updated_since, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, default: 500, maximum: 1000 } }
+      responses:
+        '200':
+          description: Locations changed since cursor, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Location' }
+                  next_cursor: { type: [string, 'null'], format: date-time }
+  /master-data/beat-plans:
+    get:
+      tags: [master-data]
+      operationId: getBeatPlans
+      summary: DC pulls own beat plans (today + upcoming; pullable from D-1 evening per C3 §6)
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: from_date, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Assigned plans
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/BeatPlan' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /sync/batches:
+    post:
+      tags: [sync]
+      operationId: submitSyncBatch
+      summary: Submit an evidence batch (C3 §2–3; idempotent at-least-once)
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SyncBatch' }
+      responses:
+        '200':
+          description: Per-op dispositions aligned with ops[]
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [batch_id, results]
+                properties:
+                  batch_id: { type: string, format: uuid }
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [op_id, result]
+                      properties:
+                        op_id: { type: string, format: uuid }
+                        result: { type: string, enum: [accepted, accepted-flagged, duplicate, quarantined, rejected] }
+                        flags: { type: array, items: { type: string } }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /dashboard/visits:
+    get:
+      tags: [dashboard]
+      operationId: listVisits
+      summary: Role-scoped visits for a date (AM sees assigned DCs; scoping is server-side — clients render what they receive)
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: date, in: query, required: true, schema: { type: string, format: date }, description: IST calendar date }
+      responses:
+        '200':
+          description: Visits with server-derived geofence results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Visit' }
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+  responses:
+    Problem:
+      description: Problem-details error
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    RateLimited:
+      description: Backoff requested (C3 §3); client honors Retry-After
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+    User: { $ref: '../c1-entities/user-device.schema.json#/$defs/user' }
+    Location: { $ref: '../c1-entities/location.schema.json' }
+    BeatPlan: { $ref: '../c1-entities/beat-plan.schema.json' }
+    CheckInEvent: { $ref: '../c1-entities/checkin-event.schema.json' }
+    SyncBatch:
+      type: object
+      required: [batch_id, device_id, seq_from, seq_to, client_time, app_version, contract_version, ops]
+      properties:
+        batch_id: { type: string, format: uuid }
+        device_id: { type: string, format: uuid }
+        seq_from: { type: integer, minimum: 0 }
+        seq_to: { type: integer, minimum: 0 }
+        client_time: { type: string, format: date-time }
+        app_version: { type: string }
+        contract_version: { type: string }
+        queue_depth_by_tier:
+          type: object
+          properties:
+            t1: { type: integer }
+            t2: { type: integer }
+            t3: { type: integer }
+            t4: { type: integer }
+        oldest_unsynced_age_s: { type: integer }
+        health:
+          type: object
+          properties:
+            battery_pct: { type: integer, minimum: 0, maximum: 100 }
+            network: { type: string }
+            storage_free_mb: { type: integer }
+        ops:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [op_id, seq, type, payload]
+            properties:
+              op_id: { type: string, format: uuid }
+              seq: { type: integer, minimum: 0 }
+              type: { type: string, enum: [visit.checkin] }
+              payload: { $ref: '#/components/schemas/CheckInEvent' }
+        signature: { type: string }
+    Visit:
+      type: object
+      description: Server read model derived from evidence events; events themselves are never mutated.
+      required: [id, dc_user_id, location_id, checkin, geofence_result, sync_state]
+      properties:
+        id: { type: string, format: uuid }
+        dc_user_id: { type: string, format: uuid }
+        dc_name: { type: string }
+        location_id: { type: string, format: uuid }
+        location_name: { type: string }
+        location_code: { type: string }
+        planned: { type: boolean }
+        checkin:
+          type: object
+          required: [occurred_at, fix]
+          properties:
+            occurred_at: { type: string, format: date-time, description: device_wall_time; server_received_at available to auditors }
+            server_received_at: { type: string, format: date-time }
+            fix: { $ref: '../c1-entities/common.schema.json#/$defs/geoPoint' }
+        distance_from_master_m: { type: number }
+        geofence_result: { type: string, enum: [INSIDE, OUTSIDE_FLAGGED], description: Advisory (ADR-0004); computed against effective radius = radius_m + accuracy_m }
+        out_of_radius_reason: { type: [string, 'null'] }
+        sync_state: { type: string, enum: [SYNCED, LATE_SYNC] }

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.eko-dc-visits/c1/beat-plan.schema.json",
+  "title": "BeatPlanAssignment (server→client, one-directional)",
+  "type": "object",
+  "required": ["id", "tenant_id", "dc_user_id", "plan_date", "stops", "version", "updated_at"],
+  "properties": {
+    "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "tenant_id": { "$ref": "common.schema.json#/$defs/tenantId" },
+    "dc_user_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "plan_date": { "type": "string", "format": "date", "description": "IST calendar date. Must be on-device the night before (ADR-0008)." },
+    "version": { "type": "integer", "minimum": 1, "description": "Executed visits record the plan version they ran against; plan changes apply forward-only." },
+    "stops": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "seq", "location_id", "visit_type"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/uuid" },
+          "seq": { "type": "integer", "minimum": 1, "description": "Suggested order. Compliance is set-based, not sequence-based (C7)." },
+          "location_id": { "$ref": "common.schema.json#/$defs/uuid" },
+          "visit_type": { "type": "string", "enum": ["CSP_AUDIT", "CSP_FOLLOWUP", "BRANCH_MEETING", "RBO_MEETING", "LHO_MEETING"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

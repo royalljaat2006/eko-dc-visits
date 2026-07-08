@@ -1,0 +1,49 @@
+# C6 — Role/permission matrix (contracts v0.1.0, M0 scope: DC + AM + CORPORATE_ADMIN)
+# Machine-readable: backend generates middleware checks from this; web generates route guards.
+# Scope semantics: tenant is the outermost scope (ADR-0006); then role x node on the geo tree.
+# Historical queries resolve scope as-of-date (time-bounded GeoAssignments).
+
+roles:
+  DC:
+    scope: self            # own assignments, own evidence, own metrics
+    permissions:
+      - { resource: beat-plan,   actions: [read] }
+      - { resource: location,    actions: [read] }          # assigned territory only
+      - { resource: sync-batch,  actions: [create] }
+      - { resource: visit,       actions: [read] }          # own visits (self-view parity rule)
+  AM:
+    scope: assigned-dcs    # via GeoAssignment
+    permissions:
+      - { resource: visit,       actions: [read] }
+      - { resource: location,    actions: [read] }
+      - { resource: beat-plan,   actions: [read, create, update] }
+      - { resource: anomaly-flag, actions: [read, review] }  # M2
+  CORPORATE_ADMIN:
+    scope: tenant-root
+    permissions:
+      - { resource: "*", actions: [read, create, update] }   # update = admin records only; evidence has no update path
+
+# Self-view parity rule (BUILD_PLAN §7.9): no metric endpoint is manager-visible
+# without a DC-visible counterpart. Contract tests assert this.
+
+# ---------------------------------------------------------------------------
+# THE CLOSED HARD-GATE LIST (ADR-0004). Additions require a product-owner RFC.
+# Everything not listed here is capture-flag-corroborate: it can NEVER block a field action.
+hard_gates:
+  - id: HG1
+    rule: "No gallery/file-picker photo path exists — in-app camera only."
+  - id: HG2
+    rule: "No visit submission without mandatory photo slots filled (content judged later)."
+  - id: HG3
+    rule: "No session from a REVOKED device binding."
+  - id: HG4
+    rule: "No check-in without an open AttendanceSession (M1; not enforced in M0 skeleton)."
+  - id: HG5
+    rule: "No evidence record without client UUID + monotonic seq (storage-layer invariant)."
+  - id: HG6
+    rule: "No check-in with location services fully off (some fix required, however poor)."
+explicit_non_gates:
+  - "Geofence distance (advisory; OUTSIDE_FLAGGED + reason + AM review)"
+  - "Mock-location / integrity flags at action time (signals to the server, never client blocks)"
+  - "Morning attendance location (logged, never gated)"
+  - "Face-match score mid-day (feature vetoed entirely, ADR-0007)"
