@@ -1,0 +1,22 @@
+{
+  "name": "@eko-dc-visits/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "M0 AM dashboard (Lane E) — walking skeleton. Ugly is fine; correct is mandatory.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "node --test src/lib/format.test.ts src/lib/chips.test.ts"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.12",
+    "@types/node": "^22.20.1",
+    "typescript": "^5.8.3",
+    "vite": "^6.0.0"
+  }
+}

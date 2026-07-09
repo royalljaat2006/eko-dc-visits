@@ -1,0 +1,42 @@
+[
+  {
+    "id": "018f5a00-0000-7000-8000-000000000201",
+    "tenant_id": "eko",
+    "name": "Asha Kumari",
+    "phone": "9800000001",
+    "employee_code": "EKO-DC-001",
+    "role": "DC",
+    "scope_location_id": null,
+    "status": "ACTIVE"
+  },
+  {
+    "id": "018f5a00-0000-7000-8000-000000000202",
+    "tenant_id": "eko",
+    "name": "Vikram Singh",
+    "phone": "9800000002",
+    "employee_code": "EKO-DC-002",
+    "role": "DC",
+    "scope_location_id": null,
+    "status": "ACTIVE"
+  },
+  {
+    "id": "018f5a00-0000-7000-8000-000000000203",
+    "tenant_id": "eko",
+    "name": "Priya Sharma",
+    "phone": "9800000003",
+    "employee_code": "EKO-AM-001",
+    "role": "AM",
+    "scope_location_id": "018f5a00-0000-7000-8000-000000000102",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "018f5a00-0000-7000-8000-000000000204",
+    "tenant_id": "eko",
+    "name": "Rekha Menon",
+    "phone": "9800000004",
+    "employee_code": "EKO-CA-001",
+    "role": "CORPORATE_ADMIN",
+    "scope_location_id": null,
+    "status": "ACTIVE"
+  }
+]

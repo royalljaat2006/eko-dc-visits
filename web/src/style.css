@@ -1,0 +1,115 @@
+/* M0 walking skeleton — ugly is fine; correct is mandatory. */
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+  color: #1a1a1a;
+}
+main {
+  padding: 1rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* Login */
+.login form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 320px;
+}
+.login label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.hint {
+  color: #555;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* Day view */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.topbar h1 {
+  font-size: 1.25rem;
+  margin: 0.5rem 0;
+}
+.who {
+  color: #555;
+}
+.map {
+  height: 360px;
+  margin: 0.75rem 0;
+  border: 1px solid #ccc;
+}
+table.visits {
+  border-collapse: collapse;
+  width: 100%;
+}
+table.visits th,
+table.visits td {
+  border: 1px solid #ddd;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  font-size: 0.9rem;
+}
+table.visits th {
+  background: #f4f4f4;
+}
+
+/* Chips */
+.chip {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.chip-green {
+  background: #d7f5dd;
+  color: #135723;
+}
+.chip-amber {
+  background: #fdeec0;
+  color: #7a5300;
+}
+.chip-neutral {
+  background: #e8e8e8;
+  color: #333;
+}
+
+/* States */
+.status {
+  color: #555;
+  font-size: 0.85rem;
+  min-height: 1em;
+  margin: 0.25rem 0;
+}
+.error,
+.error-box {
+  color: #8f1d1d;
+}
+.error-box[hidden] {
+  /* author display:flex would otherwise defeat the hidden attribute */
+  display: none;
+}
+.error-box {
+  background: #fde2e2;
+  border: 1px solid #e8a0a0;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0.5rem 0;
+}
+.empty {
+  color: #555;
+  font-style: italic;
+  padding: 1rem 0;
+}

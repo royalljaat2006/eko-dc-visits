@@ -1,0 +1,205 @@
+import type {
+  BeatPlan,
+  BindingState,
+  Device,
+  GeoAssignment,
+  LocationNode,
+  OpDisposition,
+  QuarantinedOp,
+  RefreshToken,
+  StoredCheckInEvent,
+  TenantId,
+  User,
+  Visit,
+  VisitView,
+} from "../domain/types.js";
+import type { LocationPage, Repos, Scope } from "./types.js";
+
+function inDcScope(scope: Scope, dcUserId: string): boolean {
+  return scope.dc_user_ids === "ALL" || scope.dc_user_ids.has(dcUserId);
+}
+function inLocationScope(scope: Scope, locationId: string): boolean {
+  return scope.location_ids === "ALL" || scope.location_ids.has(locationId);
+}
+
+/**
+ * In-memory Repos implementation (ADR-0009): used by tests and `npm run dev`
+ * without DATABASE_URL. Evidence maps are only ever written by *IfAbsent
+ * inserts — append-only by construction.
+ */
+export class MemoryRepos implements Repos {
+  private users = new Map<string, User>(); // key tenant:id
+  private devices = new Map<string, Device>();
+  private refreshTokens = new Map<string, RefreshToken>();
+  private locations = new Map<string, LocationNode>();
+  private beatPlans = new Map<string, BeatPlan>();
+  private geoAssignments = new Map<string, GeoAssignment>();
+  private checkinEvents = new Map<string, StoredCheckInEvent>();
+  private visits = new Map<string, Visit>();
+  private opDispositions = new Map<string, OpDisposition>();
+  private quarantine = new Map<string, QuarantinedOp>();
+
+  private key(tenantId: TenantId, id: string): string {
+    return `${tenantId}:${id}`;
+  }
+
+  // --- users
+  async insertUser(u: User): Promise<void> {
+    this.users.set(this.key(u.tenant_id, u.id), u);
+  }
+  async getUserById(tenantId: TenantId, id: string): Promise<User | null> {
+    return this.users.get(this.key(tenantId, id)) ?? null;
+  }
+  async findUserByPhone(phone: string): Promise<User | null> {
+    for (const u of this.users.values()) if (u.phone === phone) return u;
+    return null;
+  }
+
+  // --- devices
+  async insertDevice(d: Device): Promise<void> {
+    this.devices.set(this.key(d.tenant_id, d.id), d);
+  }
+  async getDeviceById(tenantId: TenantId, id: string): Promise<Device | null> {
+    return this.devices.get(this.key(tenantId, id)) ?? null;
+  }
+  async setDeviceBindingState(tenantId: TenantId, deviceId: string, state: BindingState): Promise<void> {
+    const d = this.devices.get(this.key(tenantId, deviceId));
+    if (d) this.devices.set(this.key(tenantId, deviceId), { ...d, binding_state: state });
+  }
+  async markUserDevicesReplaced(tenantId: TenantId, userId: string): Promise<void> {
+    for (const [k, d] of this.devices) {
+      if (d.tenant_id === tenantId && d.user_id === userId && d.binding_state === "BOUND") {
+        this.devices.set(k, { ...d, binding_state: "REPLACED" });
+      }
+    }
+  }
+
+  // --- sessions
+  async insertRefreshToken(t: RefreshToken): Promise<void> {
+    this.refreshTokens.set(t.token, t);
+  }
+
+  // --- locations
+  async insertLocation(l: LocationNode): Promise<void> {
+    this.locations.set(this.key(l.tenant_id, l.id), l);
+  }
+  async getLocationById(tenantId: TenantId, id: string): Promise<LocationNode | null> {
+    return this.locations.get(this.key(tenantId, id)) ?? null;
+  }
+  async listAllLocations(tenantId: TenantId): Promise<LocationNode[]> {
+    return [...this.locations.values()].filter((l) => l.tenant_id === tenantId);
+  }
+  async listLocationsUpdatedSince(scope: Scope, updatedSince: string | null, limit: number): Promise<LocationPage> {
+    const since = updatedSince ? new Date(updatedSince).getTime() : null;
+    const all = [...this.locations.values()]
+      .filter((l) => l.tenant_id === scope.tenant_id)
+      .filter((l) => inLocationScope(scope, l.id))
+      .filter((l) => since === null || new Date(l.updated_at).getTime() > since)
+      .sort((a, b) => a.updated_at.localeCompare(b.updated_at) || a.id.localeCompare(b.id));
+    const items = all.slice(0, limit);
+    const last = items[items.length - 1];
+    const next_cursor = all.length > items.length && last ? last.updated_at : null;
+    return { items, next_cursor };
+  }
+
+  // --- beat plans
+  async insertBeatPlan(p: BeatPlan): Promise<void> {
+    this.beatPlans.set(this.key(p.tenant_id, p.id), p);
+  }
+  async listBeatPlansForDcs(tenantId: TenantId, dcUserIds: "ALL" | ReadonlySet<string>): Promise<BeatPlan[]> {
+    return [...this.beatPlans.values()].filter(
+      (p) => p.tenant_id === tenantId && (dcUserIds === "ALL" || dcUserIds.has(p.dc_user_id)),
+    );
+  }
+  async listBeatPlansFromDate(scope: Scope, fromDate: string): Promise<BeatPlan[]> {
+    return [...this.beatPlans.values()]
+      .filter((p) => p.tenant_id === scope.tenant_id)
+      .filter((p) => inDcScope(scope, p.dc_user_id))
+      .filter((p) => p.plan_date >= fromDate)
+      .sort((a, b) => a.plan_date.localeCompare(b.plan_date));
+  }
+
+  // --- geo assignments
+  async insertGeoAssignment(a: GeoAssignment): Promise<void> {
+    this.geoAssignments.set(this.key(a.tenant_id, a.id), a);
+  }
+  async listAssignedDcIds(tenantId: TenantId, amUserId: string, asOfDate: string): Promise<string[]> {
+    return [...this.geoAssignments.values()]
+      .filter((g) => g.tenant_id === tenantId && g.am_user_id === amUserId)
+      .filter((g) => g.valid_from <= asOfDate && (g.valid_to === null || g.valid_to >= asOfDate))
+      .map((g) => g.dc_user_id);
+  }
+
+  // --- evidence (append-only)
+  async insertCheckinEventIfAbsent(e: StoredCheckInEvent): Promise<void> {
+    const k = this.key(e.tenant_id, e.id);
+    if (!this.checkinEvents.has(k)) this.checkinEvents.set(k, e);
+  }
+  async countCheckinEvents(tenantId: TenantId): Promise<number> {
+    return [...this.checkinEvents.values()].filter((e) => e.tenant_id === tenantId).length;
+  }
+  async insertVisitIfAbsent(v: Visit): Promise<void> {
+    const k = this.key(v.tenant_id, v.id);
+    if (!this.visits.has(k)) this.visits.set(k, v);
+  }
+  async listVisitsByIstDate(scope: Scope, istDate: string): Promise<VisitView[]> {
+    const IST_OFFSET_MS = 5.5 * 3600 * 1000;
+    const istDateOf = (iso: string) => new Date(new Date(iso).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+    return [...this.visits.values()]
+      .filter((v) => v.tenant_id === scope.tenant_id)
+      .filter((v) => inDcScope(scope, v.dc_user_id)) // scoping enforced in the query layer
+      .filter((v) => istDateOf(v.occurred_at) === istDate)
+      .sort((a, b) => a.occurred_at.localeCompare(b.occurred_at) || a.id.localeCompare(b.id))
+      .map((v): VisitView => {
+        const dc = this.users.get(this.key(v.tenant_id, v.dc_user_id));
+        const loc = this.locations.get(this.key(v.tenant_id, v.location_id));
+        return {
+          id: v.id,
+          dc_user_id: v.dc_user_id,
+          dc_name: dc?.name ?? "(unknown)",
+          location_id: v.location_id,
+          location_name: loc?.name ?? "(unknown)",
+          location_code: loc?.code ?? "(unknown)",
+          planned: v.planned,
+          checkin: { occurred_at: v.occurred_at, server_received_at: v.server_received_at, fix: v.fix },
+          distance_from_master_m: v.distance_from_master_m,
+          geofence_result: v.geofence_result,
+          out_of_radius_reason: v.out_of_radius_reason,
+          sync_state: v.sync_state,
+        };
+      });
+  }
+
+  // --- sync op dedupe
+  async getOpDisposition(tenantId: TenantId, opId: string): Promise<OpDisposition | null> {
+    return this.opDispositions.get(this.key(tenantId, opId)) ?? null;
+  }
+  async putOpDispositionIfAbsent(tenantId: TenantId, opId: string, d: OpDisposition): Promise<void> {
+    const k = this.key(tenantId, opId);
+    if (!this.opDispositions.has(k)) this.opDispositions.set(k, d);
+  }
+
+  // --- quarantine
+  async insertQuarantineIfAbsent(q: QuarantinedOp): Promise<void> {
+    const k = this.key(q.tenant_id, q.op_id);
+    if (!this.quarantine.has(k)) this.quarantine.set(k, q);
+  }
+  async countQuarantined(tenantId: TenantId): Promise<number> {
+    return [...this.quarantine.values()].filter((q) => q.tenant_id === tenantId).length;
+  }
+
+  /**
+   * Canonical deterministic dump of evidence-affecting state — used by the
+   * C3 §3 convergence property test to assert deep equality across
+   * permutations + duplications.
+   */
+  dumpConvergentState(): unknown {
+    const sortEntries = <V>(m: Map<string, V>) => [...m.entries()].sort(([a], [b]) => a.localeCompare(b));
+    return {
+      checkinEvents: sortEntries(this.checkinEvents),
+      visits: sortEntries(this.visits),
+      opDispositions: sortEntries(this.opDispositions),
+      quarantine: sortEntries(this.quarantine),
+    };
+  }
+}

@@ -50,4 +50,4 @@ implementing the same repository interfaces — `cd backend && npm install && np
 
 ## Status
 
-M0 walking skeleton in progress. Contract set: v0.1.0 (see `contracts/CHANGELOG.md`).
+M0 walking skeleton COMPLETE (backend + web + fixtures + sync simulator; Android lane deferred to a JDK-equipped machine — see android/README.md). Verified: 12 backend tests, 11 web tests, contracts:check, and the live sync-sim e2e story all green. Contract set: v0.1.0 (see `contracts/CHANGELOG.md`).
