@@ -12,7 +12,7 @@ import 'leaflet/dist/leaflet.css';
 import markerIconUrl from 'leaflet/dist/images/marker-icon.png';
 import markerIcon2xUrl from 'leaflet/dist/images/marker-icon-2x.png';
 import markerShadowUrl from 'leaflet/dist/images/marker-shadow.png';
-import { ApiError, listVisits, clearSession, getSession, type Visit } from '../api/client.ts';
+import { ApiError, listVisits, type Visit } from '../api/client.ts';
 import { formatIstDateTime, todayIstDate } from '../lib/format.ts';
 import { geofenceChip, syncChip, plannedLabel } from '../lib/chips.ts';
 
@@ -29,15 +29,13 @@ const markerIcon = L.icon({
 
 const POLL_MS = 10_000;
 
-export function renderDayView(root: HTMLElement, onLogout: () => void): () => void {
-  const user = getSession()?.user;
+export function renderDayView(root: HTMLElement): () => void {
+  // The app shell (main.ts) owns who/logout; this view owns the day controls.
   root.innerHTML = `
     <main class="day">
       <header class="topbar">
-        <h1>Circle Day View</h1>
-        <span class="who">${escapeHtml(user ? `${user.name} (${user.role === 'CIRCLE_HEAD' ? 'Circle Head' : user.role})` : '')}</span>
+        <h1>Visits</h1>
         <label>Date (IST) <input id="date" type="date" /></label>
-        <button id="logout" type="button">Log out</button>
       </header>
       <p id="day-status" class="status" role="status"></p>
       <div id="day-error" class="error-box" role="alert" hidden>
@@ -179,10 +177,6 @@ export function renderDayView(root: HTMLElement, onLogout: () => void): () => vo
     void refresh(true);
   });
   retryBtn.addEventListener('click', () => void refresh(true));
-  root.querySelector<HTMLButtonElement>('#logout')!.addEventListener('click', () => {
-    clearSession();
-    onLogout();
-  });
 
   void refresh(true);
   if (!document.hidden) startPolling();

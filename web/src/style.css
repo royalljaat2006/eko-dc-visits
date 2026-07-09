@@ -113,3 +113,34 @@ table.visits th {
   font-style: italic;
   padding: 1rem 0;
 }
+
+/* App-shell tab nav (main.ts) */
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 1.75rem 0;
+  border-bottom: 1px solid #d8d8d8;
+  background: #fafafa;
+}
+.tab {
+  padding: 0.4rem 0.9rem;
+  text-decoration: none;
+  color: #333;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+}
+.tab-active {
+  background: #fff;
+  border-color: #d8d8d8;
+  font-weight: 600;
+  margin-bottom: -1px;
+}
+.tabs-who {
+  margin-left: auto;
+  color: #555;
+}
+.tab-logout {
+  margin-left: 0.75rem;
+}

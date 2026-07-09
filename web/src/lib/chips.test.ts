@@ -32,3 +32,13 @@ test('plannedLabel maps true/false/absent', () => {
   assert.equal(plannedLabel(false), 'Unplanned');
   assert.equal(plannedLabel(undefined), '—');
 });
+
+import { attendanceChip } from './chips.ts';
+
+test('attendanceChip: ON_DUTY green, ENDED neutral, NOT_STARTED amber with tooltip', () => {
+  assert.equal(attendanceChip('ON_DUTY').className, 'chip chip-green');
+  assert.equal(attendanceChip('ENDED').className, 'chip chip-neutral');
+  const ns = attendanceChip('NOT_STARTED');
+  assert.equal(ns.className, 'chip chip-amber');
+  assert.ok(ns.title.length > 0, 'NOT_STARTED explains itself on hover');
+});

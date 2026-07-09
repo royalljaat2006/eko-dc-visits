@@ -89,7 +89,11 @@ async function main(): Promise<void> {
   const l3 = byId.get(stop3.location_id)!;
   check(l3.coordinate_confidence === "UNVERIFIED", `stop 3 (${l3.name}) has UNVERIFIED coordinates — bootstrap case`);
 
-  const wall = (h: number, m: number): string => `${today}T${String(h - 5).padStart(2, "0")}:${String(m + 30).padStart(2, "0")}:00Z`; // IST → UTC
+  // IST (UTC+5:30) wall time → UTC ISO instant on `today`.
+  const wall = (h: number, m: number): string => {
+    const total = h * 60 + m - 330;
+    return `${today}T${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}:00Z`;
+  };
   const mkOp = (seq: number, loc: Loc, stopId: string, fix: object, reason?: string) => ({
     op_id: randomUUID(),
     seq,

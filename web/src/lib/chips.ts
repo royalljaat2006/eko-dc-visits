@@ -2,7 +2,7 @@
  * Chip mappings for Visit fields (C2 Visit.geofence_result / Visit.sync_state).
  * Pure functions — unit-tested via node:test.
  */
-import type { GeofenceResult, SyncState } from '../api/client.ts';
+import type { AttendanceStatus, GeofenceResult, SyncState } from '../api/client.ts';
 
 export interface Chip {
   label: string;
@@ -39,4 +39,20 @@ export function syncChip(state: SyncState): Chip {
 export function plannedLabel(planned: boolean | undefined): string {
   if (planned === undefined) return '—';
   return planned ? 'Planned' : 'Unplanned';
+}
+
+/**
+ * Attendance board chips (C2 /dashboard/attendance, design 0001 §7).
+ * ON_DUTY green; ENDED neutral; NOT_STARTED amber — it's the row a National
+ * Head scans the board for.
+ */
+export function attendanceChip(status: AttendanceStatus): Chip {
+  switch (status) {
+    case 'ON_DUTY':
+      return { label: 'ON DUTY', className: 'chip chip-green', title: '' };
+    case 'ENDED':
+      return { label: 'ENDED', className: 'chip chip-neutral', title: '' };
+    case 'NOT_STARTED':
+      return { label: 'NOT STARTED', className: 'chip chip-amber', title: 'No Start Day event synced for this date' };
+  }
 }

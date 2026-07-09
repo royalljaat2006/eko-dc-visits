@@ -99,6 +99,48 @@ export interface VisitsResponse {
   items: Visit[];
 }
 
+/** C2 GET /dashboard/attendance row (v0.3.0, design 0001 §7). */
+export type AttendanceStatus = 'NOT_STARTED' | 'ON_DUTY' | 'ENDED';
+export interface AttendanceRow {
+  dc_user_id: string;
+  dc_name: string;
+  status: AttendanceStatus;
+  started_at?: string | null;
+  ended_at?: string | null;
+}
+export interface AttendanceResponse {
+  items: AttendanceRow[];
+}
+
+/** c1-entities/csp-assignment.schema.json (v0.2.0, design 0001 §3). */
+export type AssignmentReason = 'INITIAL_ALLOCATION' | 'TRANSFER' | 'REBALANCE' | 'COVERAGE_GAP';
+export interface CspAssignment {
+  id: string;
+  tenant_id: string;
+  circle_id: string;
+  csp_location_id: string;
+  dc_user_id: string;
+  assigned_by_user_id: string;
+  reason: AssignmentReason;
+  valid_from: string;
+  valid_to: string | null;
+  updated_at: string;
+}
+export interface CspAssignmentsResponse {
+  items: CspAssignment[];
+}
+
+/** 200 response of POST /circle/csp-assignments/transfer (C2 v0.3.0). */
+export interface TransferResponse {
+  assignment: CspAssignment;
+  ended_assignment_id: string | null;
+}
+
+export interface LocationsResponse {
+  items: Location[];
+  next_cursor: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Error type
 // ---------------------------------------------------------------------------
@@ -287,4 +329,49 @@ export async function listVisits(date: string, signal?: AbortSignal): Promise<Vi
     auth: true,
     signal,
   })) as VisitsResponse;
+}
+
+/** GET /dashboard/attendance?date= (C2 v0.3.0). NH/HR tenant-wide, CH circle, DC self — scoped server-side. */
+export async function listAttendance(date: string, signal?: AbortSignal): Promise<AttendanceResponse> {
+  const qs = new URLSearchParams({ date });
+  return (await request({
+    method: 'GET',
+    path: `/dashboard/attendance?${qs.toString()}`,
+    auth: true,
+    signal,
+  })) as AttendanceResponse;
+}
+
+/** GET /master-data/csp-assignments (C2 v0.2.0). DC own; Circle Head circle's. */
+export async function listCspAssignments(signal?: AbortSignal): Promise<CspAssignmentsResponse> {
+  return (await request({
+    method: 'GET',
+    path: '/master-data/csp-assignments',
+    auth: true,
+    signal,
+  })) as CspAssignmentsResponse;
+}
+
+/** GET /master-data/locations (C2). Single page is sufficient for a circle-sized territory. */
+export async function listLocations(signal?: AbortSignal): Promise<LocationsResponse> {
+  return (await request({
+    method: 'GET',
+    path: '/master-data/locations?limit=1000',
+    auth: true,
+    signal,
+  })) as LocationsResponse;
+}
+
+/** POST /circle/csp-assignments/transfer (C2 v0.3.0). Circle Head only; server enforces circle guardrails. */
+export async function transferCsp(
+  cspLocationId: string,
+  toDcUserId: string,
+  reason: AssignmentReason,
+): Promise<TransferResponse> {
+  return (await request({
+    method: 'POST',
+    path: '/circle/csp-assignments/transfer',
+    body: { csp_location_id: cspLocationId, to_dc_user_id: toDcUserId, reason },
+    auth: true,
+  })) as TransferResponse;
 }
