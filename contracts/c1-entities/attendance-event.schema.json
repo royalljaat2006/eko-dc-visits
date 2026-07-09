@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.eko-dc-visits/c1/attendance-event.schema.json",
+  "title": "AttendanceEvent (evidence; append-only; sync ops attendance.start / attendance.end)",
+  "type": "object",
+  "required": ["id", "dc_user_id", "device_id", "kind", "timestamps"],
+  "properties": {
+    "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "dc_user_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "device_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "kind": { "type": "string", "enum": ["START", "END"] },
+    "fix": { "$ref": "common.schema.json#/$defs/geoPoint", "description": "LOGGED, never gated (ADR-0004: attendance location is not a geofence)." },
+    "face_match": {
+      "type": "object",
+      "required": ["result"],
+      "properties": {
+        "result": { "type": "string", "enum": ["PASS", "FAIL", "SKIPPED"] },
+        "score": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false,
+      "description": "On-device ML Kit outcome; embedding never leaves the device (BUILD_PLAN §7.11)."
+    },
+    "timestamps": { "$ref": "common.schema.json#/$defs/evidenceTimestamps" }
+  },
+  "additionalProperties": false,
+  "description": "The server derives AttendanceDay per (dc, IST date) with commutative merges (earliest START, latest END) so late/out-of-order sync converges. Status: NOT_STARTED | ON_DUTY | ENDED. Late attendance is valid-with-flag territory for M2 analytics, never an ingest rejection (BUILD_PLAN scenario: blocking the day punishes the bank)."
+}

@@ -48,5 +48,25 @@
     "role": "NATIONAL_HEAD",
     "scope_location_id": null,
     "status": "ACTIVE"
+  },
+  {
+    "id": "018f5a00-0000-7000-8000-000000000206",
+    "tenant_id": "eko",
+    "name": "Manoj Kumar",
+    "phone": "9800000006",
+    "employee_code": "EKO-DC-003",
+    "role": "DC",
+    "scope_location_id": null,
+    "status": "ACTIVE"
+  },
+  {
+    "id": "018f5a00-0000-7000-8000-000000000207",
+    "tenant_id": "eko",
+    "name": "Meena Rao",
+    "phone": "9800000007",
+    "employee_code": "EKO-HR-001",
+    "role": "HR_ADMIN",
+    "scope_location_id": null,
+    "status": "ACTIVE"
   }
 ]

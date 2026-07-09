@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Eko DC Visit Management API
-  version: 0.2.0
+  version: 0.3.0
   description: >
     Contract-first spec (M0 scope). Hand-written; code conforms to this, never the reverse.
     Server validates its own responses against this spec in test mode. All endpoints are
@@ -165,6 +165,64 @@ paths:
                         result: { type: string, enum: [accepted, accepted-flagged, duplicate, quarantined, rejected] }
                         flags: { type: array, items: { type: string } }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /circle/csp-assignments/transfer:
+    post:
+      tags: [master-data]
+      operationId: transferCspAssignment
+      summary: Circle Head assigns/transfers a CSP to a DC in their circle (design 0001 §6; end-old + start-new, never edit history)
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [csp_location_id, to_dc_user_id, reason]
+              properties:
+                csp_location_id: { type: string, format: uuid }
+                to_dc_user_id: { type: string, format: uuid }
+                reason: { type: string, enum: [INITIAL_ALLOCATION, TRANSFER, REBALANCE, COVERAGE_GAP] }
+      responses:
+        '200':
+          description: New active assignment (previous one, if any, ended as of yesterday IST)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assignment]
+                properties:
+                  assignment: { $ref: '#/components/schemas/CspAssignment' }
+                  ended_assignment_id: { type: [string, 'null'], format: uuid }
+        '403': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+  /dashboard/attendance:
+    get:
+      tags: [dashboard]
+      operationId: listAttendance
+      summary: Attendance board (design 0001 §7 — National Head + HR/Admin tenant-wide; Circle Head circle; DC self)
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: date, in: query, required: true, schema: { type: string, format: date }, description: IST calendar date }
+      responses:
+        '200':
+          description: One row per DC in scope, including DCs with no events (NOT_STARTED)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [dc_user_id, dc_name, status]
+                      properties:
+                        dc_user_id: { type: string, format: uuid }
+                        dc_name: { type: string }
+                        status: { type: string, enum: [NOT_STARTED, ON_DUTY, ENDED] }
+                        started_at: { type: [string, 'null'], format: date-time }
+                        ended_at: { type: [string, 'null'], format: date-time }
   /dashboard/visits:
     get:
       tags: [dashboard]

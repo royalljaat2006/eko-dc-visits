@@ -197,3 +197,57 @@ test("CONVERGENCE (C3 §3): any permutation + duplication of batches → identic
     else assert.equal(snap, reference, `run ${run} diverged (seed ${SEED})`);
   }
 });
+
+test("attendance merge is commutative: START/END in any order converge (C3 §3, v0.3.0)", async () => {
+  const mkAttendance = (n: number, kind: "START" | "END", wall: string) => ({
+    op_id: uuidish(600000 + n),
+    seq: n,
+    type: kind === "START" ? ("attendance.start" as const) : ("attendance.end" as const),
+    payload: {
+      id: uuidish(600000 + n),
+      dc_user_id: DC_ASHA,
+      device_id: DEVICE,
+      kind,
+      timestamps: { device_wall_time: wall, monotonic_ms: n },
+    },
+  });
+  const mkBatch = (ops: unknown[], n: number): SyncBatch => ({
+    batch_id: uuidish(910000 + n),
+    device_id: DEVICE,
+    seq_from: 1,
+    seq_to: ops.length,
+    client_time: NOW.toISOString(),
+    app_version: "0.1.0-test",
+    contract_version: "0.3.0",
+    ops,
+  });
+  // START 03:30Z (09:00 IST), a duplicate later START, END 12:30Z (18:00 IST)
+  const opsA = [mkAttendance(1, "START", "2026-07-08T03:30:00Z"), mkAttendance(2, "END", "2026-07-08T12:30:00Z")];
+  const opsB = [mkAttendance(3, "START", "2026-07-08T05:00:00Z")]; // late second START must NOT move started_at forward
+
+  const orders: SyncBatch[][] = [
+    [mkBatch(opsA, 1), mkBatch(opsB, 2)],
+    [mkBatch(opsB, 2), mkBatch(opsA, 1)],
+    [mkBatch(opsB, 2), mkBatch(opsA, 1), mkBatch(opsA, 1)], // with duplication
+  ];
+  let reference: string | null = null;
+  for (const order of orders) {
+    const repos = await seeded();
+    for (const b of order) await applySyncBatch(repos, principal, b, clock);
+    const day = await repos.getAttendanceDay("eko", DC_ASHA, "2026-07-08");
+    const snap = JSON.stringify(day);
+    assert.equal(day?.started_at, "2026-07-08T03:30:00Z", "earliest START wins");
+    assert.equal(day?.ended_at, "2026-07-08T12:30:00Z", "latest END wins");
+    if (reference === null) reference = snap;
+    else assert.equal(snap, reference);
+  }
+});
+
+test("unknown op type → quarantined UNSUPPORTED_TYPE, never dropped (C3 v0.3.0)", async () => {
+  const repos = await seeded();
+  const batch = batchOf([checkin()]);
+  (batch.ops[0] as Record<string, unknown>).type = "visit.teleport";
+  const res = await applySyncBatch(repos, principal, batch, clock);
+  assert.equal(res.results[0]!.result, "quarantined");
+  assert.equal(await repos.countQuarantined("eko"), 1);
+});

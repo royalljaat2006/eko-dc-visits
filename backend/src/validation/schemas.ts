@@ -30,6 +30,7 @@ for (const file of [
   "user-device.schema.json",
   "beat-plan.schema.json",
   "checkin-event.schema.json",
+  "attendance-event.schema.json",
   "bank.schema.json",
   "circle.schema.json",
   "csp-assignment.schema.json",
@@ -46,6 +47,7 @@ function getValidator(ref: string): ValidateFunction {
 }
 
 export const validateCheckinEvent = getValidator("checkin-event.schema.json");
+export const validateAttendanceEvent = getValidator("attendance-event.schema.json");
 export const validateLocation = getValidator("location.schema.json");
 export const validateUser = getValidator("user-device.schema.json#/$defs/user");
 export const validateDevice = getValidator("user-device.schema.json#/$defs/device");

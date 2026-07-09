@@ -25,5 +25,14 @@
     "role_in_circle": "DC",
     "valid_from": "2026-06-01",
     "valid_to": null
+  },
+  {
+    "id": "018f5a00-0000-7000-8000-000000000514",
+    "tenant_id": "eko",
+    "circle_id": "018f5a00-0000-7000-8000-000000000501",
+    "user_id": "018f5a00-0000-7000-8000-000000000206",
+    "role_in_circle": "DC",
+    "valid_from": "2026-06-15",
+    "valid_to": null
   }
 ]

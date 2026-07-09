@@ -21,3 +21,13 @@
 - C6: roles rewritten per design 0001 §2; hard-gate list UNCHANGED.
 - Migration notes: GeoAssignment (fixture-defined, M0) is retired in favor of
   CircleMembership + CspAssignment. Historic scope resolution stays as-of-date.
+
+## v0.3.0 — attendance evidence, national/HR board, CSP transfer
+- C1: + attendance-event.schema.json (START/END, face_match result, fix logged-never-gated;
+  AttendanceDay derived via commutative earliest-START/latest-END merges → order-independent).
+- C2: 0.3.0; + POST /circle/csp-assignments/transfer (Circle Head only; end-old + start-new,
+  target DC must be in the head's circle); + GET /dashboard/attendance (NH/HR tenant-wide,
+  CH circle, DC self; rows include NOT_STARTED DCs).
+- C3: op types now visit.checkin | attendance.start | attendance.end; unknown types quarantine.
+- Note: check-in↔attendance correlation is deliberately NOT judged at ingest (order-dependent
+  flags would break the C3 §3 convergence invariant); it is an M2 server-side analytics rule.

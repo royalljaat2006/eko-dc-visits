@@ -11,6 +11,7 @@
  */
 import pg from "pg";
 import type {
+  AttendanceDay,
   Bank,
   BeatPlan,
   BindingState,
@@ -19,6 +20,7 @@ import type {
   CspAssignment,
   Device,
   LocationNode,
+  StoredAttendanceEvent,
   OpDisposition,
   QuarantinedOp,
   RefreshToken,
@@ -286,6 +288,17 @@ export class PgRepos implements Repos {
     return (rows as Row[]).map((r) => r.user_id as string);
   }
 
+  async getActiveDcCircleId(tenantId: TenantId, dcUserId: string, asOfDate: string): Promise<string | null> {
+    const { rows } = await this.pool.query(
+      `SELECT circle_id FROM circle_memberships
+       WHERE tenant_id = $1 AND user_id = $2 AND role_in_circle = 'DC'
+         AND valid_from <= $3 AND (valid_to IS NULL OR valid_to >= $3)
+       LIMIT 1`,
+      [tenantId, dcUserId, asOfDate],
+    );
+    return rows[0] ? ((rows[0] as Row).circle_id as string) : null;
+  }
+
   // --- CSP assignments (design 0001 §3; effective-dated)
   async insertCspAssignment(a: CspAssignment): Promise<void> {
     await this.pool.query(
@@ -322,6 +335,69 @@ export class PgRepos implements Repos {
       valid_to: r.valid_to === null ? null : typeof r.valid_to === "string" ? r.valid_to : (r.valid_to as Date).toISOString().slice(0, 10),
       updated_at: (r.updated_at as Date).toISOString(),
     }));
+  }
+
+  // --- users (board helpers)
+  async listDcUsers(tenantId: TenantId, dcUserIds: "ALL" | ReadonlySet<string>): Promise<User[]> {
+    const values: unknown[] = [tenantId];
+    let sql = `SELECT * FROM users WHERE tenant_id = $1 AND role = 'DC' AND status = 'ACTIVE'`;
+    if (dcUserIds !== "ALL") {
+      values.push([...dcUserIds]);
+      sql += ` AND id = ANY($${values.length}::uuid[])`;
+    }
+    sql += ` ORDER BY name`;
+    const { rows } = await this.pool.query(sql, values);
+    return (rows as Row[]).map(userFromRow);
+  }
+
+  // --- attendance (v0.3.0; read-model upsert is commutative LEAST/GREATEST)
+  async insertAttendanceEventIfAbsent(e: StoredAttendanceEvent): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO attendance_events (id, tenant_id, dc_user_id, device_id, kind, fix, face_match,
+                                      device_wall_time, monotonic_ms, server_received_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO NOTHING`,
+      [
+        e.id, e.tenant_id, e.dc_user_id, e.device_id, e.kind,
+        e.fix ? JSON.stringify(e.fix) : null, e.face_match ? JSON.stringify(e.face_match) : null,
+        e.timestamps.device_wall_time, e.timestamps.monotonic_ms, e.timestamps.server_received_at,
+      ],
+    );
+  }
+  async mergeAttendanceDay(tenantId: TenantId, dcUserId: string, istDate: string, kind: "START" | "END", occurredAt: string): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO attendance_days (tenant_id, dc_user_id, ist_date, started_at, ended_at)
+       VALUES ($1,$2,$3, CASE WHEN $4 = 'START' THEN $5::timestamptz END, CASE WHEN $4 = 'END' THEN $5::timestamptz END)
+       ON CONFLICT (tenant_id, dc_user_id, ist_date) DO UPDATE SET
+         started_at = LEAST(attendance_days.started_at, EXCLUDED.started_at),
+         ended_at = GREATEST(attendance_days.ended_at, EXCLUDED.ended_at)`,
+      [tenantId, dcUserId, istDate, kind, occurredAt],
+    );
+  }
+  async getAttendanceDay(tenantId: TenantId, dcUserId: string, istDate: string): Promise<AttendanceDay | null> {
+    const { rows } = await this.pool.query(
+      `SELECT * FROM attendance_days WHERE tenant_id = $1 AND dc_user_id = $2 AND ist_date = $3`,
+      [tenantId, dcUserId, istDate],
+    );
+    const r = rows[0] as Row | undefined;
+    if (!r) return null;
+    return {
+      tenant_id: r.tenant_id as string,
+      dc_user_id: r.dc_user_id as string,
+      ist_date: istDate,
+      started_at: r.started_at ? (r.started_at as Date).toISOString() : null,
+      ended_at: r.ended_at ? (r.ended_at as Date).toISOString() : null,
+    };
+  }
+
+  // --- CSP assignment mutations (design 0001 §6; effective-dating, not history edits)
+  async endActiveCspAssignment(tenantId: TenantId, cspLocationId: string, validTo: string): Promise<string | null> {
+    const { rows } = await this.pool.query(
+      `UPDATE csp_assignments SET valid_to = $3, updated_at = now()
+       WHERE tenant_id = $1 AND csp_location_id = $2 AND valid_to IS NULL
+       RETURNING id`,
+      [tenantId, cspLocationId, validTo],
+    );
+    return rows[0] ? ((rows[0] as Row).id as string) : null;
   }
 
   // --- evidence (append-only: INSERT ... ON CONFLICT DO NOTHING only)

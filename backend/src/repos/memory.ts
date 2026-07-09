@@ -1,4 +1,5 @@
 import type {
+  AttendanceDay,
   Bank,
   BeatPlan,
   BindingState,
@@ -7,6 +8,7 @@ import type {
   CspAssignment,
   Device,
   LocationNode,
+  StoredAttendanceEvent,
   OpDisposition,
   QuarantinedOp,
   RefreshToken,
@@ -41,6 +43,8 @@ export class MemoryRepos implements Repos {
   private circleMemberships = new Map<string, CircleMembership>();
   private cspAssignments = new Map<string, CspAssignment>();
   private checkinEvents = new Map<string, StoredCheckInEvent>();
+  private attendanceEvents = new Map<string, StoredAttendanceEvent>();
+  private attendanceDays = new Map<string, AttendanceDay>(); // key tenant:dc:istDate
   private visits = new Map<string, Visit>();
   private opDispositions = new Map<string, OpDisposition>();
   private quarantine = new Map<string, QuarantinedOp>();
@@ -59,6 +63,12 @@ export class MemoryRepos implements Repos {
   async findUserByPhone(phone: string): Promise<User | null> {
     for (const u of this.users.values()) if (u.phone === phone) return u;
     return null;
+  }
+  async listDcUsers(tenantId: TenantId, dcUserIds: "ALL" | ReadonlySet<string>): Promise<User[]> {
+    return [...this.users.values()]
+      .filter((u) => u.tenant_id === tenantId && u.role === "DC" && u.status === "ACTIVE")
+      .filter((u) => dcUserIds === "ALL" || dcUserIds.has(u.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   // --- devices
@@ -152,6 +162,15 @@ export class MemoryRepos implements Repos {
       .map((m) => m.user_id);
   }
 
+  async getActiveDcCircleId(tenantId: TenantId, dcUserId: string, asOfDate: string): Promise<string | null> {
+    for (const m of this.circleMemberships.values()) {
+      if (m.tenant_id === tenantId && m.user_id === dcUserId && m.role_in_circle === "DC" && this.activeAsOf(m.valid_from, m.valid_to, asOfDate)) {
+        return m.circle_id;
+      }
+    }
+    return null;
+  }
+
   // --- CSP assignments (design 0001 §3)
   async insertCspAssignment(a: CspAssignment): Promise<void> {
     this.cspAssignments.set(this.key(a.tenant_id, a.id), a);
@@ -166,6 +185,37 @@ export class MemoryRepos implements Repos {
       .filter((a) => dcUserIds === "ALL" || dcUserIds.has(a.dc_user_id))
       .filter((a) => this.activeAsOf(a.valid_from, a.valid_to, asOfDate))
       .sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  // --- attendance (v0.3.0)
+  async insertAttendanceEventIfAbsent(e: StoredAttendanceEvent): Promise<void> {
+    const k = this.key(e.tenant_id, e.id);
+    if (!this.attendanceEvents.has(k)) this.attendanceEvents.set(k, e);
+  }
+  async mergeAttendanceDay(tenantId: TenantId, dcUserId: string, istDate: string, kind: "START" | "END", occurredAt: string): Promise<void> {
+    const k = `${tenantId}:${dcUserId}:${istDate}`;
+    const cur = this.attendanceDays.get(k) ?? { tenant_id: tenantId, dc_user_id: dcUserId, ist_date: istDate, started_at: null, ended_at: null };
+    // Commutative: earliest START / latest END — converges under any op order.
+    const next: AttendanceDay = {
+      ...cur,
+      started_at: kind === "START" ? (cur.started_at === null || occurredAt < cur.started_at ? occurredAt : cur.started_at) : cur.started_at,
+      ended_at: kind === "END" ? (cur.ended_at === null || occurredAt > cur.ended_at ? occurredAt : cur.ended_at) : cur.ended_at,
+    };
+    this.attendanceDays.set(k, next);
+  }
+  async getAttendanceDay(tenantId: TenantId, dcUserId: string, istDate: string): Promise<AttendanceDay | null> {
+    return this.attendanceDays.get(`${tenantId}:${dcUserId}:${istDate}`) ?? null;
+  }
+
+  // --- CSP assignment mutations (design 0001 §6)
+  async endActiveCspAssignment(tenantId: TenantId, cspLocationId: string, validTo: string): Promise<string | null> {
+    for (const [k, a] of this.cspAssignments) {
+      if (a.tenant_id === tenantId && a.csp_location_id === cspLocationId && a.valid_to === null) {
+        this.cspAssignments.set(k, { ...a, valid_to: validTo, updated_at: new Date().toISOString() });
+        return a.id;
+      }
+    }
+    return null;
   }
 
   // --- evidence (append-only)

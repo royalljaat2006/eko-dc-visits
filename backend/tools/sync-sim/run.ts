@@ -107,40 +107,61 @@ async function main(): Promise<void> {
     },
   });
 
+  const mkAttendance = (seq: number, kind: "START" | "END", wallTime: string) => ({
+    op_id: randomUUID(),
+    seq,
+    type: kind === "START" ? ("attendance.start" as const) : ("attendance.end" as const),
+    payload: {
+      id: randomUUID(),
+      dc_user_id: dc.user_id,
+      device_id: dc.device_id,
+      kind,
+      fix: { lat: 25.35, lng: 85.75, accuracy_m: 150, provider: "fused" }, // logged, never gated
+      face_match: { result: "PASS" as const, score: 0.93 },
+      timestamps: { device_wall_time: wallTime, monotonic_ms: seq * 1000 },
+    },
+  });
+
   const batch = {
     batch_id: randomUUID(),
     device_id: dc.device_id,
     seq_from: 1,
-    seq_to: 3,
+    seq_to: 5,
     client_time: new Date().toISOString(),
     app_version: "0.1.0-sim",
-    contract_version: "0.1.0",
-    queue_depth_by_tier: { t1: 3, t2: 0, t3: 0, t4: 0 },
+    contract_version: "0.3.0",
+    queue_depth_by_tier: { t1: 5, t2: 0, t3: 0, t4: 0 },
     oldest_unsynced_age_s: 7200,
     health: { battery_pct: 63, network: "3g", storage_free_mb: 4096 },
     ops: [
+      // Start Day at 09:00 IST (face verified, GPS logged)
+      mkAttendance(0, "START", wall(9, 0)),
       // INSIDE: at the CSP, good fix
       mkOp(1, l1, stop1.id, { lat: l1.coordinates.lat, lng: l1.coordinates.lng, accuracy_m: 12, provider: "fused" }),
       // OUTSIDE with reason: ~550m off, tight accuracy (market-lane reality)
       mkOp(2, l2, stop2.id, { lat: l2.coordinates.lat + 0.005, lng: l2.coordinates.lng, accuracy_m: 15, provider: "fused" }, "INSIDE_PREMISES_GPS_WEAK"),
       // UNVERIFIED-coordinates CSP: at master pin, wide accuracy
       mkOp(3, l3, stop3.id, { lat: l3.coordinates.lat, lng: l3.coordinates.lng, accuracy_m: 35, provider: "fused" }),
+      // End Day at 18:00 IST — tracking hard stop (DPDP)
+      mkAttendance(4, "END", wall(18, 0)),
     ],
   };
 
-  console.log(`\nsubmitting batch (3 offline check-ins)…`);
+  console.log(`\nsubmitting batch (start day + 3 offline check-ins + end day)…`);
   const first = await api<{ results: Array<{ op_id: string; result: string; flags?: string[] }> }>(
     `/sync/batches`,
     { method: "POST", body: JSON.stringify(batch) },
     dc.token,
   );
   check(first.status === 200, `batch accepted (HTTP ${first.status})`);
-  check(first.body.results[0]!.result === "accepted", `op1 → ${first.body.results[0]!.result} (expected accepted)`);
+  check(first.body.results[0]!.result === "accepted", `attendance.start → ${first.body.results[0]!.result}`);
+  check(first.body.results[1]!.result === "accepted", `checkin 1 → ${first.body.results[1]!.result} (expected accepted)`);
   check(
-    first.body.results[1]!.result === "accepted-flagged" && (first.body.results[1]!.flags ?? []).includes("OUTSIDE_RADIUS"),
-    `op2 → ${first.body.results[1]!.result} [${(first.body.results[1]!.flags ?? []).join(",")}] (advisory geofence, ADR-0004)`,
+    first.body.results[2]!.result === "accepted-flagged" && (first.body.results[2]!.flags ?? []).includes("OUTSIDE_RADIUS"),
+    `checkin 2 → ${first.body.results[2]!.result} [${(first.body.results[2]!.flags ?? []).join(",")}] (advisory geofence, ADR-0004)`,
   );
-  check(first.body.results[2]!.result === "accepted", `op3 → ${first.body.results[2]!.result} (expected accepted)`);
+  check(first.body.results[3]!.result === "accepted", `checkin 3 → ${first.body.results[3]!.result} (expected accepted)`);
+  check(first.body.results[4]!.result === "accepted", `attendance.end → ${first.body.results[4]!.result}`);
 
   console.log(`\nre-submitting the SAME batch (lost-ack replay)…`);
   const second = await api<{ results: Array<{ result: string }> }>(`/sync/batches`, { method: "POST", body: JSON.stringify(batch) }, dc.token);
@@ -162,6 +183,23 @@ async function main(): Promise<void> {
     console.log(
       `  ${v.dc_name.padEnd(12)}${v.location_name.padEnd(28)}${v.location_code.padEnd(15)}${v.geofence_result.padEnd(18)}${v.checkin.occurred_at}`,
     );
+  }
+
+  // ---- National Head: attendance board (design 0001 §7) --------------------
+  console.log(`\nNational Head attendance board…`);
+  const nh = await login("9800000005"); // national head Arjun
+  const board = await api<{ items: Array<{ dc_name: string; status: string; started_at: string | null; ended_at: string | null }> }>(
+    `/dashboard/attendance?date=${today}`,
+    {},
+    nh.token,
+  );
+  check(board.status === 200 && board.body.items.length === 3, `board lists ${board.body.items.length} DCs tenant-wide (expected 3)`);
+  const statuses = new Map(board.body.items.map((r) => [r.dc_name, r.status]));
+  check(statuses.get("Asha Kumari") === "ENDED", `Asha Kumari → ${statuses.get("Asha Kumari")} (expected ENDED)`);
+  check(statuses.get("Vikram Singh") === "NOT_STARTED", `Vikram Singh → ${statuses.get("Vikram Singh")} (expected NOT_STARTED)`);
+  console.log(`\n  DC             STATUS        START(UTC)             END(UTC)`);
+  for (const r of board.body.items) {
+    console.log(`  ${r.dc_name.padEnd(15)}${r.status.padEnd(14)}${(r.started_at ?? "—").padEnd(23)}${r.ended_at ?? "—"}`);
   }
 
   if (failures > 0) {

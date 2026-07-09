@@ -1,4 +1,5 @@
 import type {
+  AttendanceDay,
   Bank,
   BeatPlan,
   BindingState,
@@ -7,6 +8,7 @@ import type {
   CspAssignment,
   Device,
   LocationNode,
+  StoredAttendanceEvent,
   OpDisposition,
   QuarantinedOp,
   RefreshToken,
@@ -72,6 +74,8 @@ export interface Repos {
   insertCircleMembership(m: CircleMembership): Promise<void>;
   /** DCs in circles the given user heads, as of date (C6 CIRCLE_HEAD scope). */
   listCircleDcIds(tenantId: TenantId, headUserId: string, asOfDate: string): Promise<string[]>;
+  /** The circle a DC actively belongs to, as of date (design 0001: exactly one). */
+  getActiveDcCircleId(tenantId: TenantId, dcUserId: string, asOfDate: string): Promise<string | null>;
 
   // CSP assignments (design 0001 §3; effective-dated — transfers end+start, never delete)
   insertCspAssignment(a: CspAssignment): Promise<void>;
@@ -81,6 +85,24 @@ export interface Repos {
     dcUserIds: "ALL" | ReadonlySet<string>,
     asOfDate: string,
   ): Promise<CspAssignment[]>;
+
+  // users (read helpers for boards)
+  /** DC-role users within a dc scope; feeds the attendance board's NOT_STARTED rows. */
+  listDcUsers(tenantId: TenantId, dcUserIds: "ALL" | ReadonlySet<string>): Promise<User[]>;
+
+  // attendance (evidence append-only + commutative read model, v0.3.0)
+  insertAttendanceEventIfAbsent(e: StoredAttendanceEvent): Promise<void>;
+  /**
+   * Commutative merge into AttendanceDay: earliest START / latest END per
+   * (dc, IST date). Order-independent by construction — this is what keeps the
+   * C3 §3 convergence invariant holding with attendance ops in the mix.
+   */
+  mergeAttendanceDay(tenantId: TenantId, dcUserId: string, istDate: string, kind: "START" | "END", occurredAt: string): Promise<void>;
+  getAttendanceDay(tenantId: TenantId, dcUserId: string, istDate: string): Promise<AttendanceDay | null>;
+
+  // CSP assignment mutations (design 0001 §6 — end-old + start-new, never edit)
+  /** Ends the active assignment for a CSP (sets valid_to). Returns the ended assignment's id, or null if none was active. */
+  endActiveCspAssignment(tenantId: TenantId, cspLocationId: string, validTo: string): Promise<string | null>;
 
   // evidence — append-only (no update methods, ever)
   insertCheckinEventIfAbsent(e: StoredCheckInEvent): Promise<void>;

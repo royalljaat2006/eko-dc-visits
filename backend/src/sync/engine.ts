@@ -18,16 +18,18 @@
  *   client ids, so any permutation + duplication of batches converges.
  */
 import type {
+  AttendanceEvent,
   CheckInEvent,
   OpDisposition,
   Principal,
+  StoredAttendanceEvent,
   StoredCheckInEvent,
   SyncBatch,
   Visit,
 } from "../domain/types.js";
 import type { Repos } from "../repos/types.js";
 import { haversineMeters, istDateOf } from "../geo.js";
-import { ajvErrorStrings, validateCheckinEvent } from "../validation/schemas.js";
+import { ajvErrorStrings, validateAttendanceEvent, validateCheckinEvent } from "../validation/schemas.js";
 
 export type Clock = () => Date;
 
@@ -69,7 +71,7 @@ export async function applySyncBatch(
       continue;
     }
 
-    const disposition = await applyNewOp(repos, principal, batch, opId, op.payload, clock);
+    const disposition = await applyNewOp(repos, principal, batch, opId, String(op.type ?? ""), op.payload, clock);
     await repos.putOpDispositionIfAbsent(tenant, opId, disposition);
     results.push(disposition);
   }
@@ -82,12 +84,13 @@ async function applyNewOp(
   principal: Principal,
   batch: SyncBatch,
   opId: string,
+  opType: string,
   payload: unknown,
   clock: Clock,
 ): Promise<OpDisposition> {
   const tenant = principal.tenant_id;
 
-  const quarantine = async (reason: "SCHEMA_INVALID" | "UNKNOWN_REFERENCE", errors: string[]): Promise<OpDisposition> => {
+  const quarantine = async (reason: "SCHEMA_INVALID" | "UNKNOWN_REFERENCE" | "UNSUPPORTED_TYPE", errors: string[]): Promise<OpDisposition> => {
     await repos.insertQuarantineIfAbsent({
       op_id: opId,
       tenant_id: tenant,
@@ -101,6 +104,14 @@ async function applyNewOp(
     });
     return { op_id: opId, result: "quarantined" };
   };
+
+  // Dispatch by op type (C3 v0.3.0). Unknown types quarantine, never drop.
+  if (opType === "attendance.start" || opType === "attendance.end") {
+    return applyAttendanceOp(repos, principal, opId, opType, payload, clock, quarantine);
+  }
+  if (opType !== "visit.checkin") {
+    return quarantine("UNSUPPORTED_TYPE", [`unknown op type "${opType}"`]);
+  }
 
   // C1 schema validation (checkin-event.schema.json) — failures quarantine.
   if (!validateCheckinEvent(payload)) {
@@ -158,4 +169,49 @@ async function applyNewOp(
   return inside
     ? { op_id: opId, result: "accepted" }
     : { op_id: opId, result: "accepted-flagged", flags: ["OUTSIDE_RADIUS"] };
+}
+
+/**
+ * attendance.start / attendance.end (C3 v0.3.0). Fix is LOGGED, never gated
+ * (ADR-0004). The AttendanceDay read model uses commutative merges, so the
+ * disposition and final state are independent of op order — deliberately no
+ * cross-op judgment here (e.g. "check-in before attendance") because
+ * order-dependent flags would break the C3 §3 convergence invariant; that
+ * correlation is an M2 server-side analytics rule over the stored evidence.
+ */
+async function applyAttendanceOp(
+  repos: Repos,
+  principal: Principal,
+  opId: string,
+  opType: "attendance.start" | "attendance.end",
+  payload: unknown,
+  clock: Clock,
+  quarantine: (reason: "SCHEMA_INVALID" | "UNKNOWN_REFERENCE", errors: string[]) => Promise<OpDisposition>,
+): Promise<OpDisposition> {
+  if (!validateAttendanceEvent(payload)) {
+    return quarantine("SCHEMA_INVALID", ajvErrorStrings(validateAttendanceEvent));
+  }
+  const event = payload as AttendanceEvent;
+  const expectedKind = opType === "attendance.start" ? "START" : "END";
+  if (event.kind !== expectedKind) {
+    return quarantine("SCHEMA_INVALID", [`op type ${opType} carries kind ${event.kind}`]);
+  }
+  const dcUser = await repos.getUserById(principal.tenant_id, event.dc_user_id);
+  if (!dcUser) return quarantine("UNKNOWN_REFERENCE", [`unknown dc_user_id ${event.dc_user_id}`]);
+
+  const serverReceivedAt = clock().toISOString();
+  const stored: StoredAttendanceEvent = {
+    ...event,
+    tenant_id: principal.tenant_id,
+    timestamps: { ...event.timestamps, server_received_at: serverReceivedAt },
+  };
+  await repos.insertAttendanceEventIfAbsent(stored);
+  await repos.mergeAttendanceDay(
+    principal.tenant_id,
+    event.dc_user_id,
+    istDateOf(event.timestamps.device_wall_time),
+    event.kind,
+    event.timestamps.device_wall_time,
+  );
+  return { op_id: opId, result: "accepted" };
 }

@@ -20,7 +20,9 @@ export const IMPLEMENTED_ROUTES: ReadonlyArray<{ method: string; path: string }>
   { method: "get", path: "/master-data/csp-assignments" },
   { method: "get", path: "/master-data/beat-plans" },
   { method: "post", path: "/sync/batches" },
+  { method: "post", path: "/circle/csp-assignments/transfer" },
   { method: "get", path: "/dashboard/visits" },
+  { method: "get", path: "/dashboard/attendance" },
 ];
 
 export const DEV_OTP = "000000"; // C2: M0 stub gateway always sends '000000' in dev
@@ -195,6 +197,91 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         }
         const response = await applySyncBatch(repos, principal, batch as SyncBatch, clock);
         return reply.code(200).send(response);
+      });
+
+      // ---- circle workbench (C2 /circle/csp-assignments/transfer, design 0001 §6)
+      api.post("/circle/csp-assignments/transfer", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
+        const principal = req.principal!;
+        // C6: csp-assignment create/transfer is CIRCLE_HEAD (CORPORATE_ADMIN via "*").
+        if (principal.role !== "CIRCLE_HEAD" && principal.role !== "CORPORATE_ADMIN") {
+          return problem(reply, 403, "Forbidden", "Only a Circle Head (or admin) may assign/transfer CSPs");
+        }
+        const body = (req.body ?? {}) as { csp_location_id?: unknown; to_dc_user_id?: unknown; reason?: unknown };
+        const reasons = ["INITIAL_ALLOCATION", "TRANSFER", "REBALANCE", "COVERAGE_GAP"];
+        if (
+          typeof body.csp_location_id !== "string" ||
+          typeof body.to_dc_user_id !== "string" ||
+          typeof body.reason !== "string" ||
+          !reasons.includes(body.reason)
+        ) {
+          return problem(reply, 400, "Bad Request", "csp_location_id, to_dc_user_id and a valid reason are required");
+        }
+
+        const today = istDateOf(clock());
+        const scope = await resolveScope(repos, principal, clock());
+        // Target DC must be inside the head's circle (design 0001 §6 guardrail:
+        // transfers can't orphan a CSP outside the circle).
+        if (scope.dc_user_ids !== "ALL" && !scope.dc_user_ids.has(body.to_dc_user_id)) {
+          return problem(reply, 422, "Unprocessable", "Target DC is not in your circle");
+        }
+        const [csp, circleId] = await Promise.all([
+          repos.getLocationById(principal.tenant_id, body.csp_location_id),
+          repos.getActiveDcCircleId(principal.tenant_id, body.to_dc_user_id, today),
+        ]);
+        if (!csp || csp.type !== "CSP") {
+          return problem(reply, 422, "Unprocessable", "csp_location_id must reference an existing CSP");
+        }
+        if (!circleId) {
+          return problem(reply, 422, "Unprocessable", "Target DC has no active circle membership");
+        }
+
+        // End-old + start-new; history is never edited (design 0001 §3). The
+        // old assignment ends as of YESTERDAY (IST) so the transfer takes
+        // effect immediately — valid_to is inclusive (C2 spec).
+        const yesterday = istDateOf(new Date(clock().getTime() - 24 * 3600 * 1000));
+        const ended_assignment_id = await repos.endActiveCspAssignment(principal.tenant_id, csp.id, yesterday);
+        const assignment = {
+          id: randomUUID(),
+          tenant_id: principal.tenant_id,
+          circle_id: circleId,
+          csp_location_id: csp.id,
+          dc_user_id: body.to_dc_user_id,
+          assigned_by_user_id: principal.user_id,
+          reason: body.reason as "INITIAL_ALLOCATION" | "TRANSFER" | "REBALANCE" | "COVERAGE_GAP",
+          valid_from: today,
+          valid_to: null,
+          updated_at: clock().toISOString(),
+        };
+        await repos.insertCspAssignment(assignment);
+        return reply.code(200).send({ assignment, ended_assignment_id });
+      });
+
+      // ---- dashboard (C2 /dashboard/attendance, design 0001 §7) --------------
+      api.get("/dashboard/attendance", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
+        const principal = req.principal!;
+        const q = req.query as { date?: string };
+        if (!q.date || !DATE_PATTERN.test(q.date)) {
+          return problem(reply, 400, "Bad Request", "date (YYYY-MM-DD, IST calendar date) is required");
+        }
+        // C6: HR_ADMIN is tenant-root for ATTENDANCE ONLY (its visit/location
+        // scope stays empty — PII minimisation).
+        const scope = await resolveScope(repos, principal, clock());
+        const dcScope = principal.role === "HR_ADMIN" ? ("ALL" as const) : scope.dc_user_ids;
+        const dcs = await repos.listDcUsers(scope.tenant_id, dcScope);
+        const items = await Promise.all(
+          dcs.map(async (dc) => {
+            const day = await repos.getAttendanceDay(scope.tenant_id, dc.id, q.date!);
+            const status = day?.ended_at ? "ENDED" : day?.started_at ? "ON_DUTY" : "NOT_STARTED";
+            return {
+              dc_user_id: dc.id,
+              dc_name: dc.name,
+              status,
+              started_at: day?.started_at ?? null,
+              ended_at: day?.ended_at ?? null,
+            };
+          }),
+        );
+        return reply.code(200).send({ items });
       });
 
       // ---- dashboard (C2 /dashboard/visits) ----------------------------------

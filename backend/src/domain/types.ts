@@ -133,6 +133,45 @@ export interface StoredCheckInEvent extends CheckInEvent {
   timestamps: EvidenceTimestamps & { server_received_at: string };
 }
 
+/** c1-entities/attendance-event.schema.json — append-only evidence (v0.3.0). */
+export interface AttendanceEvent {
+  id: string;
+  dc_user_id: string;
+  device_id: string;
+  kind: "START" | "END";
+  fix?: GeoPoint; // logged, never gated (ADR-0004)
+  face_match?: { result: "PASS" | "FAIL" | "SKIPPED"; score?: number };
+  timestamps: EvidenceTimestamps;
+}
+
+export interface StoredAttendanceEvent extends AttendanceEvent {
+  tenant_id: TenantId;
+  timestamps: EvidenceTimestamps & { server_received_at: string };
+}
+
+/**
+ * Derived per (dc, IST date) via COMMUTATIVE merges — earliest START, latest
+ * END — so any sync order converges (C3 §3). Status is computed at read time.
+ */
+export interface AttendanceDay {
+  tenant_id: TenantId;
+  dc_user_id: string;
+  ist_date: string;
+  started_at: string | null;
+  ended_at: string | null;
+}
+
+export type AttendanceStatus = "NOT_STARTED" | "ON_DUTY" | "ENDED";
+
+/** Board row (C2 /dashboard/attendance) — includes NOT_STARTED DCs. */
+export interface AttendanceView {
+  dc_user_id: string;
+  dc_name: string;
+  status: AttendanceStatus;
+  started_at: string | null;
+  ended_at: string | null;
+}
+
 /**
  * Visit read model (C2 #/components/schemas/Visit). Derived from evidence at
  * ingest; the underlying event is never mutated (checkin-event.schema.json
@@ -216,11 +255,13 @@ export interface RefreshToken {
   expires_at: string;
 }
 
+export type SyncOpType = "visit.checkin" | "attendance.start" | "attendance.end";
+
 /** C3 §2 batch envelope (subset typing; ajv on op payloads is the gate). */
 export interface SyncOp {
   op_id: string;
   seq: number;
-  type: "visit.checkin";
+  type: SyncOpType;
   payload: unknown;
 }
 
@@ -254,7 +295,7 @@ export interface QuarantinedOp {
   batch_id: string;
   device_id: string;
   submitted_by_user_id: string;
-  reason: "SCHEMA_INVALID" | "UNKNOWN_REFERENCE";
+  reason: "SCHEMA_INVALID" | "UNKNOWN_REFERENCE" | "UNSUPPORTED_TYPE";
   errors: string[];
   raw: unknown; // persisted raw, never discarded (ADR-0003)
   received_at: string;
