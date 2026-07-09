@@ -3,18 +3,80 @@
   "$id": "https://contracts.eko-dc-visits/c1/checkin-event.schema.json",
   "title": "CheckInEvent (evidence; append-only; sync op visit.checkin)",
   "type": "object",
-  "required": ["id", "dc_user_id", "device_id", "location_id", "fix", "timestamps"],
+  "required": [
+    "id",
+    "dc_user_id",
+    "device_id",
+    "location_id",
+    "fix",
+    "timestamps"
+  ],
   "properties": {
-    "id": { "$ref": "common.schema.json#/$defs/uuid", "description": "Client UUIDv7. Idempotency key: resends are duplicates, never conflicts." },
-    "dc_user_id": { "$ref": "common.schema.json#/$defs/uuid" },
-    "device_id": { "$ref": "common.schema.json#/$defs/uuid" },
-    "location_id": { "$ref": "common.schema.json#/$defs/uuid" },
-    "planned_stop_id": { "oneOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }], "description": "null = unplanned visit; first-class, flagged, never rejected." },
-    "beat_plan_version": { "type": "integer", "minimum": 1 },
-    "fix": { "$ref": "common.schema.json#/$defs/geoPoint" },
-    "timestamps": { "$ref": "common.schema.json#/$defs/evidenceTimestamps" },
-    "out_of_radius_reason": { "type": "string", "enum": ["INSIDE_PREMISES_GPS_WEAK", "CSP_RELOCATED", "MASTER_PIN_WRONG", "OTHER"], "description": "Required by the client UX when distance > effective radius; the server never rejects for radius (ADR-0004)." },
-    "remarks": { "type": "string", "maxLength": 500 }
+    "id": {
+      "$ref": "common.schema.json#/$defs/uuid",
+      "description": "Client UUIDv7. Idempotency key: resends are duplicates, never conflicts."
+    },
+    "dc_user_id": {
+      "$ref": "common.schema.json#/$defs/uuid"
+    },
+    "device_id": {
+      "$ref": "common.schema.json#/$defs/uuid"
+    },
+    "location_id": {
+      "$ref": "common.schema.json#/$defs/uuid"
+    },
+    "planned_stop_id": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "null = unplanned visit; first-class, flagged, never rejected."
+    },
+    "beat_plan_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "fix": {
+      "$ref": "common.schema.json#/$defs/geoPoint"
+    },
+    "timestamps": {
+      "$ref": "common.schema.json#/$defs/evidenceTimestamps"
+    },
+    "out_of_radius_reason": {
+      "type": "string",
+      "enum": [
+        "INSIDE_PREMISES_GPS_WEAK",
+        "CSP_RELOCATED",
+        "MASTER_PIN_WRONG",
+        "OTHER"
+      ],
+      "description": "Required by the client UX when distance > effective radius; the server never rejects for radius (ADR-0004)."
+    },
+    "remarks": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "trigger": {
+      "type": "string",
+      "enum": [
+        "MANUAL",
+        "AUTO_GEOFENCE"
+      ],
+      "default": "MANUAL",
+      "description": "Design 0001 §4: AUTO_GEOFENCE = dwell-matcher-emitted. Trigger mix is an analytics signal."
+    },
+    "nearby_candidates": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/uuid"
+      },
+      "maxItems": 5,
+      "description": "Other assigned CSPs whose effective radius also contained the fix (dense-market overlap; design 0001 §4)."
+    }
   },
   "additionalProperties": false,
   "description": "Server derives per event: distance_from_master_m, geofence_result (INSIDE | OUTSIDE_FLAGGED), against the location coordinate version valid at capture time. Derived values live on the Visit read model, never mutate the event."

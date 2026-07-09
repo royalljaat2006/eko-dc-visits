@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.eko-dc-visits/c1/csp-assignment.schema.json",
+  "title": "CspAssignment (design 0001 §3 — CSP↔DC, Circle-Head-owned, effective-dated)",
+  "type": "object",
+  "description": "At most one active assignment per CSP at a time within a circle. Transfer = end current + start new in one audit-logged transaction. Historic visits resolve against the assignment as-of-date. Server-authoritative admin record — never written via the sync protocol.",
+  "required": ["id", "tenant_id", "circle_id", "csp_location_id", "dc_user_id", "assigned_by_user_id", "reason", "valid_from", "updated_at"],
+  "properties": {
+    "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "tenant_id": { "$ref": "common.schema.json#/$defs/tenantId" },
+    "circle_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "csp_location_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "dc_user_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "assigned_by_user_id": { "$ref": "common.schema.json#/$defs/uuid", "description": "The Circle Head who made/last changed the assignment." },
+    "reason": { "type": "string", "enum": ["INITIAL_ALLOCATION", "TRANSFER", "REBALANCE", "COVERAGE_GAP"] },
+    "valid_from": { "type": "string", "format": "date" },
+    "valid_to": { "oneOf": [{ "type": "string", "format": "date" }, { "type": "null" }] },
+    "updated_at": { "type": "string", "format": "date-time", "description": "Delta-pull cursor (C3 §6)." }
+  },
+  "additionalProperties": false
+}

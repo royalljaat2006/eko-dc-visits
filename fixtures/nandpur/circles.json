@@ -1,0 +1,18 @@
+[
+  {
+    "id": "018f5a00-0000-7000-8000-000000000501",
+    "tenant_id": "eko",
+    "name": "Nandpur Circle",
+    "description": "Pilot circle \u2014 Nandpur district",
+    "status": "ACTIVE",
+    "updated_at": "2026-06-01T05:00:00Z"
+  },
+  {
+    "id": "018f5a00-0000-7000-8000-000000000502",
+    "tenant_id": "eko",
+    "name": "Betwa Circle",
+    "description": "Sparse rural circle (no head assigned yet)",
+    "status": "ACTIVE",
+    "updated_at": "2026-06-01T05:00:00Z"
+  }
+]

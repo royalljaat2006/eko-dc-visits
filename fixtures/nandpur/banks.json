@@ -1,0 +1,12 @@
+[
+  {
+    "id": "018f5a00-0000-7000-8000-000000000401",
+    "tenant_id": "eko",
+    "name": "State Bank of India",
+    "code": "SBI",
+    "license_no": "BC-SBI-2021-001",
+    "license_obtained_on": "2021-04-01",
+    "status": "ACTIVE",
+    "updated_at": "2026-06-01T05:00:00Z"
+  }
+]

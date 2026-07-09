@@ -3,32 +3,98 @@
   "$id": "https://contracts.eko-dc-visits/c1/common.schema.json",
   "title": "Common definitions (contracts v0.1.0)",
   "$defs": {
-    "uuid": { "type": "string", "format": "uuid", "description": "Client-generated UUIDv7 for field-originated records; server-generated for admin records." },
-    "tenantId": { "type": "string", "description": "BC-company tenant. v1 single-tenant: 'eko'." },
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Client-generated UUIDv7 for field-originated records; server-generated for admin records."
+    },
+    "tenantId": {
+      "type": "string",
+      "description": "BC-company tenant. v1 single-tenant: 'eko'."
+    },
     "geoPoint": {
       "type": "object",
-      "required": ["lat", "lng"],
+      "required": [
+        "lat",
+        "lng"
+      ],
       "properties": {
-        "lat": { "type": "number", "minimum": -90, "maximum": 90 },
-        "lng": { "type": "number", "minimum": -180, "maximum": 180 },
-        "accuracy_m": { "type": "number", "minimum": 0, "description": "Reported GPS accuracy in metres. Required on field-captured fixes." },
-        "provider": { "type": "string", "enum": ["fused", "gps", "network", "unknown"] },
-        "is_mock": { "type": "boolean", "description": "Client-reported mock-location flag. Signal, never a gate." }
+        "lat": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "lng": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "accuracy_m": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Reported GPS accuracy in metres. Required on field-captured fixes."
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "fused",
+            "gps",
+            "network",
+            "unknown"
+          ]
+        },
+        "is_mock": {
+          "type": "boolean",
+          "description": "Client-reported mock-location flag. Signal, never a gate."
+        }
       },
       "additionalProperties": false
     },
     "evidenceTimestamps": {
       "type": "object",
       "description": "Triple timestamps on every evidence record (ADR-0003). server_received_at is set by the server, never the client.",
-      "required": ["device_wall_time", "monotonic_ms"],
+      "required": [
+        "device_wall_time",
+        "monotonic_ms"
+      ],
       "properties": {
-        "device_wall_time": { "type": "string", "format": "date-time" },
-        "monotonic_ms": { "type": "integer", "minimum": 0, "description": "Device elapsed-realtime at capture; anchors ordering across clock manipulation." },
-        "server_received_at": { "type": "string", "format": "date-time", "readOnly": true }
+        "device_wall_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "monotonic_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Device elapsed-realtime at capture; anchors ordering across clock manipulation."
+        },
+        "server_received_at": {
+          "type": "string",
+          "format": "date-time",
+          "readOnly": true
+        }
       },
       "additionalProperties": false
     },
-    "locationType": { "type": "string", "enum": ["LHO", "RBO", "BRANCH", "CSP"] },
-    "role": { "type": "string", "enum": ["DC", "AM", "RM", "STATE_HEAD", "CORPORATE_ADMIN", "SBI_OFFICIAL"] }
+    "locationType": {
+      "type": "string",
+      "enum": [
+        "LHO",
+        "RBO",
+        "BRANCH",
+        "CSP"
+      ]
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "DC",
+        "CIRCLE_HEAD",
+        "NATIONAL_HEAD",
+        "HR_ADMIN",
+        "CORPORATE_ADMIN",
+        "BANK_OFFICIAL"
+      ],
+      "description": "v0.2.0 (design 0001): DC -> Circle Head -> National Head. HR_ADMIN = attendance-only visibility; BANK_OFFICIAL = per-bank read-only."
+    }
   }
 }

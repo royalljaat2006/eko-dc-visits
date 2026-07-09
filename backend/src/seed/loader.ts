@@ -10,7 +10,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import type { BeatPlan, GeoAssignment, LocationNode, User } from "../domain/types.js";
+import type { Bank, BeatPlan, Circle, CircleMembership, CspAssignment, LocationNode, User } from "../domain/types.js";
 import type { Repos } from "../repos/types.js";
 import { istDateOf } from "../geo.js";
 
@@ -27,10 +27,13 @@ export interface SeedOptions {
 }
 
 export interface SeedResult {
+  banks: Bank[];
   locations: LocationNode[];
   users: User[];
   beatPlans: BeatPlan[];
-  geoAssignments: GeoAssignment[];
+  circles: Circle[];
+  circleMemberships: CircleMembership[];
+  cspAssignments: CspAssignment[];
   today: string;
 }
 
@@ -38,19 +41,25 @@ export async function seedFixtures(repos: Repos, opts: SeedOptions = {}): Promis
   const now = opts.now ?? new Date();
   const today = istDateOf(now);
 
+  const banks = readJson<Bank[]>("banks.json");
   const locations = readJson<LocationNode[]>("locations.json");
   const users = readJson<User[]>("users.json");
-  const geoAssignments = readJson<GeoAssignment[]>("geo-assignments.json");
+  const circles = readJson<Circle[]>("circles.json");
+  const circleMemberships = readJson<CircleMembership[]>("circle-memberships.json");
+  const cspAssignments = readJson<CspAssignment[]>("csp-assignments.json");
   const beatPlans = readJson<BeatPlan[]>("beat-plans.json").map((p) => ({
     ...p,
     plan_date: today, // generated at seed time
     updated_at: now.toISOString(),
   }));
 
+  for (const b of banks) await repos.insertBank(b);
   for (const l of locations) await repos.insertLocation(l);
   for (const u of users) await repos.insertUser(u);
-  for (const g of geoAssignments) await repos.insertGeoAssignment(g);
+  for (const c of circles) await repos.insertCircle(c);
+  for (const m of circleMemberships) await repos.insertCircleMembership(m);
+  for (const a of cspAssignments) await repos.insertCspAssignment(a);
   for (const p of beatPlans) await repos.insertBeatPlan(p);
 
-  return { locations, users, beatPlans, geoAssignments, today };
+  return { banks, locations, users, beatPlans, circles, circleMemberships, cspAssignments, today };
 }

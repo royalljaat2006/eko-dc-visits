@@ -1,8 +1,9 @@
 /**
- * HTTP-layer tests against contracts/c2-api/openapi.yaml + C6 scoping.
- * Uses Fastify inject (no ports). The critical assertion: AM sees ONLY
- * assigned DCs' visits, filtered in the repository query layer via the
- * single choke point (ADR-0006) — proven here end-to-end over HTTP.
+ * HTTP-layer tests against contracts/c2-api/openapi.yaml + C6 scoping
+ * (contracts v0.2.0 — design 0001 circle hierarchy).
+ * Uses Fastify inject (no ports). The critical assertion: a Circle Head sees
+ * ONLY their circle's DCs' visits, filtered in the repository query layer via
+ * the single choke point (ADR-0006) — proven here end-to-end over HTTP.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -12,7 +13,7 @@ import { MemoryRepos } from "../src/repos/memory.js";
 import { seedFixtures } from "../src/seed/loader.js";
 import { istDateOf } from "../src/geo.js";
 
-const PHONES = { asha: "9800000001", vikram: "9800000002", amPriya: "9800000003", admin: "9800000004" };
+const PHONES = { asha: "9800000001", vikram: "9800000002", amPriya: "9800000003", admin: "9800000004", nationalHead: "9800000005" };
 const CSP_KISHANGANJ = "018f5a00-0000-7000-8000-000000000105";
 // Real clock: jose validates JWT exp against real time, so a pinned past clock
 // would mint already-expired tokens (engine-level time semantics are covered
@@ -111,7 +112,7 @@ test("DC pulls own beat plan for today (seeded night-before per C3 §6)", async 
   assert.equal(items[0]!.stops.length, 3);
 });
 
-test("C6 scoping over HTTP: AM sees assigned DC's visits only; admin sees all; AM cannot sync", async () => {
+test("C6 scoping over HTTP: Circle Head sees own circle DCs only; tenant-root sees all; Circle Head cannot sync", async () => {
   const { app } = await makeApp();
   const asha = await login(app, PHONES.asha);
   const vikram = await login(app, PHONES.vikram);
@@ -128,7 +129,7 @@ test("C6 scoping over HTTP: AM sees assigned DC's visits only; admin sees all; A
     assert.equal(results[0]!.result, "accepted");
   }
 
-  // AM Priya is assigned ONLY dc-asha (fixtures/geo-assignments.json)
+  // Circle Head Priya heads Nandpur Circle, whose only DC is asha; vikram is in Betwa Circle (fixtures/circle-memberships.json)
   const am = await login(app, PHONES.amPriya);
   const amView = await app.inject({
     method: "GET",
@@ -137,7 +138,7 @@ test("C6 scoping over HTTP: AM sees assigned DC's visits only; admin sees all; A
   });
   assert.equal(amView.statusCode, 200);
   const amItems = (amView.json() as { items: Array<{ dc_user_id: string; dc_name: string }> }).items;
-  assert.equal(amItems.length, 1, "AM must see exactly the assigned DC's visit");
+  assert.equal(amItems.length, 1, "Circle Head must see exactly her circle DC's visit");
   assert.equal(amItems[0]!.dc_user_id, asha.user_id);
   assert.ok(amItems.every((v) => v.dc_user_id !== vikram.user_id), "unassigned DC's visits must be filtered server-side");
 
@@ -149,7 +150,23 @@ test("C6 scoping over HTTP: AM sees assigned DC's visits only; admin sees all; A
   });
   assert.equal((adminView.json() as { items: unknown[] }).items.length, 2, "tenant root sees both");
 
-  // C6: sync-batch create is DC-only
+  // National Head: tenant-root READ visibility (design 0001 §7)
+  const nh = await login(app, PHONES.nationalHead);
+  const nhView = await app.inject({
+    method: "GET",
+    url: `/api/v1/dashboard/visits?date=${TODAY_IST}`,
+    headers: { authorization: `Bearer ${nh.token}` },
+  });
+  assert.equal((nhView.json() as { items: unknown[] }).items.length, 2, "National Head sees all circles' visits");
+  const nhSync = await app.inject({
+    method: "POST",
+    url: "/api/v1/sync/batches",
+    headers: { authorization: `Bearer ${nh.token}` },
+    payload: syncBatch(nh.user_id, nh.device_id, CSP_KISHANGANJ),
+  });
+  assert.equal(nhSync.statusCode, 403, "National Head visibility is read-only for evidence");
+
+  // C6: sync-batch create is DC-only (Circle Head gets 403)
   const amSync = await app.inject({
     method: "POST",
     url: "/api/v1/sync/batches",
@@ -157,6 +174,38 @@ test("C6 scoping over HTTP: AM sees assigned DC's visits only; admin sees all; A
     payload: syncBatch(am.user_id, am.device_id, CSP_KISHANGANJ),
   });
   assert.equal(amSync.statusCode, 403);
+});
+
+test("csp-assignments delta pull (design 0001 §5): DC gets own; Circle Head gets circle's; scoped in the query layer", async () => {
+  const { app } = await makeApp();
+  const asha = await login(app, PHONES.asha);
+  const ashaList = await app.inject({
+    method: "GET",
+    url: "/api/v1/master-data/csp-assignments",
+    headers: { authorization: `Bearer ${asha.token}` },
+  });
+  assert.equal(ashaList.statusCode, 200);
+  const ashaItems = (ashaList.json() as { items: Array<{ dc_user_id: string; csp_location_id: string; assigned_by_user_id: string }> }).items;
+  assert.equal(ashaItems.length, 5, "asha holds all 5 Nandpur CSPs (fixtures/csp-assignments.json)");
+  assert.ok(ashaItems.every((a) => a.dc_user_id === asha.user_id));
+
+  const ch = await login(app, PHONES.amPriya);
+  const chList = await app.inject({
+    method: "GET",
+    url: "/api/v1/master-data/csp-assignments",
+    headers: { authorization: `Bearer ${ch.token}` },
+  });
+  const chItems = (chList.json() as { items: Array<{ assigned_by_user_id: string }> }).items;
+  assert.equal(chItems.length, 5, "Circle Head sees her circle's assignments");
+  assert.ok(chItems.every((a) => a.assigned_by_user_id === ch.user_id), "assignments record the assigning Circle Head");
+
+  const vikram = await login(app, PHONES.vikram);
+  const vList = await app.inject({
+    method: "GET",
+    url: "/api/v1/master-data/csp-assignments",
+    headers: { authorization: `Bearer ${vikram.token}` },
+  });
+  assert.equal((vList.json() as { items: unknown[] }).items.length, 0, "Betwa DC has no assignments yet");
 });
 
 test("DC self-view parity (BUILD_PLAN §7.9): DC reads own visits from the same endpoint", async () => {

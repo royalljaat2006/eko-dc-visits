@@ -1,8 +1,11 @@
 import type {
+  Bank,
   BeatPlan,
   BindingState,
+  Circle,
+  CircleMembership,
+  CspAssignment,
   Device,
-  GeoAssignment,
   LocationNode,
   OpDisposition,
   QuarantinedOp,
@@ -33,7 +36,10 @@ export class MemoryRepos implements Repos {
   private refreshTokens = new Map<string, RefreshToken>();
   private locations = new Map<string, LocationNode>();
   private beatPlans = new Map<string, BeatPlan>();
-  private geoAssignments = new Map<string, GeoAssignment>();
+  private banks = new Map<string, Bank>();
+  private circles = new Map<string, Circle>();
+  private circleMemberships = new Map<string, CircleMembership>();
+  private cspAssignments = new Map<string, CspAssignment>();
   private checkinEvents = new Map<string, StoredCheckInEvent>();
   private visits = new Map<string, Visit>();
   private opDispositions = new Map<string, OpDisposition>();
@@ -119,15 +125,47 @@ export class MemoryRepos implements Repos {
       .sort((a, b) => a.plan_date.localeCompare(b.plan_date));
   }
 
-  // --- geo assignments
-  async insertGeoAssignment(a: GeoAssignment): Promise<void> {
-    this.geoAssignments.set(this.key(a.tenant_id, a.id), a);
+  // --- banks & circles (design 0001)
+  async insertBank(b: Bank): Promise<void> {
+    this.banks.set(this.key(b.tenant_id, b.id), b);
   }
-  async listAssignedDcIds(tenantId: TenantId, amUserId: string, asOfDate: string): Promise<string[]> {
-    return [...this.geoAssignments.values()]
-      .filter((g) => g.tenant_id === tenantId && g.am_user_id === amUserId)
-      .filter((g) => g.valid_from <= asOfDate && (g.valid_to === null || g.valid_to >= asOfDate))
-      .map((g) => g.dc_user_id);
+  async insertCircle(c: Circle): Promise<void> {
+    this.circles.set(this.key(c.tenant_id, c.id), c);
+  }
+  async insertCircleMembership(m: CircleMembership): Promise<void> {
+    this.circleMemberships.set(this.key(m.tenant_id, m.id), m);
+  }
+  private activeAsOf(valid_from: string, valid_to: string | null, asOfDate: string): boolean {
+    return valid_from <= asOfDate && (valid_to === null || valid_to >= asOfDate);
+  }
+  async listCircleDcIds(tenantId: TenantId, headUserId: string, asOfDate: string): Promise<string[]> {
+    const all = [...this.circleMemberships.values()].filter((m) => m.tenant_id === tenantId);
+    const headedCircles = new Set(
+      all
+        .filter((m) => m.user_id === headUserId && m.role_in_circle === "CIRCLE_HEAD")
+        .filter((m) => this.activeAsOf(m.valid_from, m.valid_to, asOfDate))
+        .map((m) => m.circle_id),
+    );
+    return all
+      .filter((m) => headedCircles.has(m.circle_id) && m.role_in_circle === "DC")
+      .filter((m) => this.activeAsOf(m.valid_from, m.valid_to, asOfDate))
+      .map((m) => m.user_id);
+  }
+
+  // --- CSP assignments (design 0001 §3)
+  async insertCspAssignment(a: CspAssignment): Promise<void> {
+    this.cspAssignments.set(this.key(a.tenant_id, a.id), a);
+  }
+  async listActiveCspAssignments(
+    tenantId: TenantId,
+    dcUserIds: "ALL" | ReadonlySet<string>,
+    asOfDate: string,
+  ): Promise<CspAssignment[]> {
+    return [...this.cspAssignments.values()]
+      .filter((a) => a.tenant_id === tenantId)
+      .filter((a) => dcUserIds === "ALL" || dcUserIds.has(a.dc_user_id))
+      .filter((a) => this.activeAsOf(a.valid_from, a.valid_to, asOfDate))
+      .sort((a, b) => a.id.localeCompare(b.id));
   }
 
   // --- evidence (append-only)

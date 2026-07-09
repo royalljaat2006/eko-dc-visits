@@ -17,6 +17,7 @@ export const IMPLEMENTED_ROUTES: ReadonlyArray<{ method: string; path: string }>
   { method: "post", path: "/auth/otp/request" },
   { method: "post", path: "/auth/otp/verify" },
   { method: "get", path: "/master-data/locations" },
+  { method: "get", path: "/master-data/csp-assignments" },
   { method: "get", path: "/master-data/beat-plans" },
   { method: "post", path: "/sync/batches" },
   { method: "get", path: "/dashboard/visits" },
@@ -146,6 +147,17 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         const scope = await resolveScope(repos, principal, clock());
         const page = await repos.listLocationsUpdatedSince(scope, updatedSince, limit);
         return reply.code(200).send({ items: page.items, next_cursor: page.next_cursor });
+      });
+
+      // ---- master-data (C2 /master-data/csp-assignments, design 0001 §5) -----
+      api.get("/master-data/csp-assignments", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
+        const principal = req.principal!;
+        const q = req.query as { as_of?: string };
+        const asOf = q.as_of && DATE_PATTERN.test(q.as_of) ? q.as_of : istDateOf(clock());
+        // DC → own; Circle Head → circle's; tenant-root → all (scope choke point).
+        const scope = await resolveScope(repos, principal, clock());
+        const items = await repos.listActiveCspAssignments(scope.tenant_id, scope.dc_user_ids, asOf);
+        return reply.code(200).send({ items });
       });
 
       // ---- master-data (C2 /master-data/beat-plans) --------------------------

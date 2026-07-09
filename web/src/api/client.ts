@@ -30,7 +30,7 @@ export interface GeoPoint {
 }
 
 /** c1-entities/common.schema.json#/$defs/role */
-export type Role = 'DC' | 'AM' | 'RM' | 'STATE_HEAD' | 'CORPORATE_ADMIN' | 'SBI_OFFICIAL';
+export type Role = 'DC' | 'CIRCLE_HEAD' | 'NATIONAL_HEAD' | 'HR_ADMIN' | 'CORPORATE_ADMIN' | 'BANK_OFFICIAL'; // contracts v0.2.0 (design 0001)
 
 /** c1-entities/user-device.schema.json#/$defs/user */
 export interface User {

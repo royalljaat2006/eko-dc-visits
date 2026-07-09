@@ -5,11 +5,14 @@
  * Every scoped read query in the repository layer takes the resulting Scope —
  * no endpoint writes its own ad-hoc WHERE logic.
  *
- *   DC              → self (C6 roles.DC.scope: self); territory = own beat-plan
- *                     locations + their ancestors
- *   AM              → assigned DCs via time-bounded GeoAssignments
- *                     (C6 roles.AM.scope: assigned-dcs)
- *   CORPORATE_ADMIN → tenant root (C6 roles.CORPORATE_ADMIN.scope: tenant-root)
+ *   DC              → self; territory = assigned CSPs (CspAssignment) ∪ own
+ *                     beat-plan stops, plus ancestors
+ *   CIRCLE_HEAD     → DCs in circles this user heads (time-bounded
+ *                     CircleMembership; design 0001 §2)
+ *   NATIONAL_HEAD   → tenant root, read (design 0001 §7)
+ *   CORPORATE_ADMIN → tenant root
+ *   HR_ADMIN        → attendance-only (no visit/location scope in M0/M1)
+ *   BANK_OFFICIAL   → per-bank read (M2; empty scope until then)
  */
 import type { LocationNode, Principal } from "./domain/types.js";
 import type { Repos, Scope } from "./repos/types.js";
@@ -31,24 +34,34 @@ function withAncestors(locationIds: Set<string>, all: LocationNode[]): Set<strin
 export async function resolveScope(repos: Repos, principal: Principal, now: Date): Promise<Scope> {
   const tenant_id = principal.tenant_id;
 
-  if (principal.role === "CORPORATE_ADMIN") {
+  if (principal.role === "CORPORATE_ADMIN" || principal.role === "NATIONAL_HEAD") {
+    // NATIONAL_HEAD is read-everything (C6); writes are gated per-endpoint
+    // (e.g. sync-batch create is DC-only), not via scope.
     return { tenant_id, dc_user_ids: "ALL", location_ids: "ALL" };
   }
 
+  const asOf = istDateOf(now);
   let dcIds: Set<string>;
   if (principal.role === "DC") {
     dcIds = new Set([principal.user_id]);
-  } else if (principal.role === "AM") {
-    dcIds = new Set(await repos.listAssignedDcIds(tenant_id, principal.user_id, istDateOf(now)));
+  } else if (principal.role === "CIRCLE_HEAD") {
+    dcIds = new Set(await repos.listCircleDcIds(tenant_id, principal.user_id, asOf));
   } else {
-    // RM / STATE_HEAD / SBI_OFFICIAL are out of M0 scope (C6 matrix lists DC, AM,
-    // CORPORATE_ADMIN only) — resolve to an empty scope rather than guessing.
+    // HR_ADMIN (attendance-only) and BANK_OFFICIAL (M2) have no visit/location
+    // scope yet — resolve empty rather than guessing.
     dcIds = new Set();
   }
 
-  const plans = await repos.listBeatPlansForDcs(tenant_id, dcIds);
-  const stopLocationIds = new Set<string>(plans.flatMap((p) => p.stops.map((s) => s.location_id)));
-  const location_ids = withAncestors(stopLocationIds, await repos.listAllLocations(tenant_id));
+  // Territory = assigned CSPs ∪ beat-plan stop locations, plus ancestors.
+  const [assignments, plans] = await Promise.all([
+    repos.listActiveCspAssignments(tenant_id, dcIds, asOf),
+    repos.listBeatPlansForDcs(tenant_id, dcIds),
+  ]);
+  const baseLocationIds = new Set<string>([
+    ...assignments.map((a) => a.csp_location_id),
+    ...plans.flatMap((p) => p.stops.map((s) => s.location_id)),
+  ]);
+  const location_ids = withAncestors(baseLocationIds, await repos.listAllLocations(tenant_id));
 
   return { tenant_id, dc_user_ids: dcIds, location_ids };
 }

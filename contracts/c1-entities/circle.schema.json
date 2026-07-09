@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.eko-dc-visits/c1/circle.schema.json",
+  "title": "Circle and CircleMembership (design 0001 §2–3)",
+  "$defs": {
+    "circle": {
+      "type": "object",
+      "required": ["id", "tenant_id", "name", "status", "updated_at"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "tenant_id": { "$ref": "common.schema.json#/$defs/tenantId" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "RETIRED"] },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "membership": {
+      "type": "object",
+      "description": "Effective-dated; never deleted. A DC belongs to exactly one circle at a time; a circle has one CIRCLE_HEAD at a time.",
+      "required": ["id", "tenant_id", "circle_id", "user_id", "role_in_circle", "valid_from"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "tenant_id": { "$ref": "common.schema.json#/$defs/tenantId" },
+        "circle_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "user_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "role_in_circle": { "type": "string", "enum": ["DC", "CIRCLE_HEAD"] },
+        "valid_from": { "type": "string", "format": "date" },
+        "valid_to": { "oneOf": [{ "type": "string", "format": "date" }, { "type": "null" }] }
+      },
+      "additionalProperties": false
+    }
+  }
+}

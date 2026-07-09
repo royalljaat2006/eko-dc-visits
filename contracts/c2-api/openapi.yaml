@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Eko DC Visit Management API
-  version: 0.1.0
+  version: 0.2.0
   description: >
     Contract-first spec (M0 scope). Hand-written; code conforms to this, never the reverse.
     Server validates its own responses against this spec in test mode. All endpoints are
@@ -93,6 +93,26 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/Location' }
                   next_cursor: { type: [string, 'null'], format: date-time }
+  /master-data/csp-assignments:
+    get:
+      tags: [master-data]
+      operationId: listCspAssignments
+      summary: Delta-pull active CSP assignments (DC gets own; Circle Head gets circle's; design 0001 §5)
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: as_of, in: query, schema: { type: string, format: date }, description: Defaults to today (IST) }
+      responses:
+        '200':
+          description: Active assignments in the caller's scope
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/CspAssignment' }
   /master-data/beat-plans:
     get:
       tags: [master-data]
@@ -191,6 +211,7 @@ components:
         status: { type: integer }
         detail: { type: string }
     User: { $ref: '../c1-entities/user-device.schema.json#/$defs/user' }
+    CspAssignment: { $ref: '../c1-entities/csp-assignment.schema.json' }
     Location: { $ref: '../c1-entities/location.schema.json' }
     BeatPlan: { $ref: '../c1-entities/beat-plan.schema.json' }
     CheckInEvent: { $ref: '../c1-entities/checkin-event.schema.json' }

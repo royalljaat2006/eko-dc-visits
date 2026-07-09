@@ -2,6 +2,7 @@
   {
     "id": "018f5a00-0000-7000-8000-000000000101",
     "tenant_id": "eko",
+    "bank_id": "018f5a00-0000-7000-8000-000000000401",
     "type": "LHO",
     "parent_id": null,
     "name": "Bihar LHO - Patna",
@@ -10,7 +11,10 @@
     "state": "Bihar",
     "district": "Patna",
     "pin_code": "800001",
-    "coordinates": { "lat": 25.6127, "lng": 85.1414 },
+    "coordinates": {
+      "lat": 25.6127,
+      "lng": 85.1414
+    },
     "radius_m": 200,
     "coordinate_confidence": "VERIFIED",
     "status": "ACTIVE",
@@ -19,6 +23,7 @@
   {
     "id": "018f5a00-0000-7000-8000-000000000102",
     "tenant_id": "eko",
+    "bank_id": "018f5a00-0000-7000-8000-000000000401",
     "type": "RBO",
     "parent_id": "018f5a00-0000-7000-8000-000000000101",
     "name": "RBO Nandpur",
@@ -27,7 +32,10 @@
     "state": "Bihar",
     "district": "Nandpur",
     "pin_code": "841501",
-    "coordinates": { "lat": 25.35, "lng": 85.75 },
+    "coordinates": {
+      "lat": 25.35,
+      "lng": 85.75
+    },
     "radius_m": 150,
     "coordinate_confidence": "VERIFIED",
     "status": "ACTIVE",
@@ -36,6 +44,7 @@
   {
     "id": "018f5a00-0000-7000-8000-000000000103",
     "tenant_id": "eko",
+    "bank_id": "018f5a00-0000-7000-8000-000000000401",
     "type": "BRANCH",
     "parent_id": "018f5a00-0000-7000-8000-000000000102",
     "name": "Nandpur Bazar Branch",
@@ -44,7 +53,10 @@
     "state": "Bihar",
     "district": "Nandpur",
     "pin_code": "841501",
-    "coordinates": { "lat": 25.3548, "lng": 85.7552 },
+    "coordinates": {
+      "lat": 25.3548,
+      "lng": 85.7552
+    },
     "radius_m": 120,
     "coordinate_confidence": "VERIFIED",
     "status": "ACTIVE",
@@ -53,6 +65,7 @@
   {
     "id": "018f5a00-0000-7000-8000-000000000104",
     "tenant_id": "eko",
+    "bank_id": "018f5a00-0000-7000-8000-000000000401",
     "type": "BRANCH",
     "parent_id": "018f5a00-0000-7000-8000-000000000102",
     "name": "Nandpur Rural Branch",
@@ -61,7 +74,10 @@
     "state": "Bihar",
     "district": "Nandpur",
     "pin_code": "841502",
-    "coordinates": { "lat": 25.3002, "lng": 85.8005 },
+    "coordinates": {
+      "lat": 25.3002,
+      "lng": 85.8005
+    },
     "radius_m": 150,
     "coordinate_confidence": "FIELD_CAPTURED",
     "status": "ACTIVE",
@@ -70,6 +86,7 @@
   {
     "id": "018f5a00-0000-7000-8000-000000000105",
     "tenant_id": "eko",
+    "bank_id": "018f5a00-0000-7000-8000-000000000401",
     "type": "CSP",
     "parent_id": "018f5a00-0000-7000-8000-000000000103",
     "name": "CSP Kishanganj Chowk",
@@ -78,7 +95,10 @@
     "state": "Bihar",
     "district": "Nandpur",
     "pin_code": "841501",
-    "coordinates": { "lat": 25.3602, "lng": 85.7591 },
+    "coordinates": {
+      "lat": 25.3602,
+      "lng": 85.7591
+    },
     "radius_m": 100,
     "coordinate_confidence": "FIELD_CAPTURED",
     "status": "ACTIVE",
@@ -87,6 +107,7 @@
   {
     "id": "018f5a00-0000-7000-8000-000000000106",
     "tenant_id": "eko",
+    "bank_id": "018f5a00-0000-7000-8000-000000000401",
     "type": "CSP",
     "parent_id": "018f5a00-0000-7000-8000-000000000103",
     "name": "CSP Mahua Tola",
@@ -95,7 +116,10 @@
     "state": "Bihar",
     "district": "Nandpur",
     "pin_code": "841501",
-    "coordinates": { "lat": 25.3721, "lng": 85.7488 },
+    "coordinates": {
+      "lat": 25.3721,
+      "lng": 85.7488
+    },
     "radius_m": 120,
     "coordinate_confidence": "VERIFIED",
     "status": "ACTIVE",
@@ -104,6 +128,7 @@
   {
     "id": "018f5a00-0000-7000-8000-000000000107",
     "tenant_id": "eko",
+    "bank_id": "018f5a00-0000-7000-8000-000000000401",
     "type": "CSP",
     "parent_id": "018f5a00-0000-7000-8000-000000000104",
     "name": "CSP Baniya Ghat",
@@ -112,7 +137,10 @@
     "state": "Bihar",
     "district": "Nandpur",
     "pin_code": "841502",
-    "coordinates": { "lat": 25.2955, "lng": 85.8103 },
+    "coordinates": {
+      "lat": 25.2955,
+      "lng": 85.8103
+    },
     "radius_m": 150,
     "coordinate_confidence": "FIELD_CAPTURED",
     "status": "ACTIVE",
@@ -121,6 +149,7 @@
   {
     "id": "018f5a00-0000-7000-8000-000000000108",
     "tenant_id": "eko",
+    "bank_id": "018f5a00-0000-7000-8000-000000000401",
     "type": "CSP",
     "parent_id": "018f5a00-0000-7000-8000-000000000104",
     "name": "CSP Sonpur Diara",
@@ -129,7 +158,10 @@
     "state": "Bihar",
     "district": "Nandpur",
     "pin_code": "841502",
-    "coordinates": { "lat": 25.281, "lng": 85.8322 },
+    "coordinates": {
+      "lat": 25.281,
+      "lng": 85.8322
+    },
     "radius_m": 200,
     "coordinate_confidence": "VERIFIED",
     "status": "ACTIVE",
@@ -138,6 +170,7 @@
   {
     "id": "018f5a00-0000-7000-8000-000000000109",
     "tenant_id": "eko",
+    "bank_id": "018f5a00-0000-7000-8000-000000000401",
     "type": "CSP",
     "parent_id": "018f5a00-0000-7000-8000-000000000104",
     "name": "CSP Rampur Khajuria",
@@ -146,7 +179,10 @@
     "state": "Bihar",
     "district": "Nandpur",
     "pin_code": "841502",
-    "coordinates": { "lat": 25.2688, "lng": 85.8455 },
+    "coordinates": {
+      "lat": 25.2688,
+      "lng": 85.8455
+    },
     "radius_m": 120,
     "coordinate_confidence": "UNVERIFIED",
     "status": "ACTIVE",

@@ -12,7 +12,11 @@ import { parse as parseYaml } from "yaml";
 import {
   CONTRACTS_DIR,
   ajvErrorStrings,
+  validateBank,
   validateBeatPlan,
+  validateCircle,
+  validateCircleMembership,
+  validateCspAssignment,
   validateLocation,
   validateUser,
 } from "../src/validation/schemas.js";
@@ -30,10 +34,13 @@ const ok = (msg: string): void => console.log(`  ✓ ${msg}`);
 // ---- 1. fixtures vs C1 schemas ---------------------------------------------
 console.log("fixtures vs C1 schemas:");
 const fixtureValidators: Record<string, ValidateFunction | null> = {
+  "banks.json": validateBank,
   "locations.json": validateLocation,
   "users.json": validateUser,
   "beat-plans.json": validateBeatPlan,
-  "geo-assignments.json": null, // no C1 schema yet (fixture-defined; see domain/types.ts GeoAssignment)
+  "circles.json": validateCircle,
+  "circle-memberships.json": validateCircleMembership,
+  "csp-assignments.json": validateCspAssignment,
 };
 for (const file of readdirSync(FIXTURES_DIR).sort()) {
   const validator = fixtureValidators[file];

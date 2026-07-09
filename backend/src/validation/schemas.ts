@@ -30,6 +30,9 @@ for (const file of [
   "user-device.schema.json",
   "beat-plan.schema.json",
   "checkin-event.schema.json",
+  "bank.schema.json",
+  "circle.schema.json",
+  "csp-assignment.schema.json",
 ]) {
   ajv.addSchema(loadSchema(file));
 }
@@ -47,6 +50,10 @@ export const validateLocation = getValidator("location.schema.json");
 export const validateUser = getValidator("user-device.schema.json#/$defs/user");
 export const validateDevice = getValidator("user-device.schema.json#/$defs/device");
 export const validateBeatPlan = getValidator("beat-plan.schema.json");
+export const validateBank = getValidator("bank.schema.json");
+export const validateCircle = getValidator("circle.schema.json#/$defs/circle");
+export const validateCircleMembership = getValidator("circle.schema.json#/$defs/membership");
+export const validateCspAssignment = getValidator("csp-assignment.schema.json");
 
 export function ajvErrorStrings(v: ValidateFunction): string[] {
   return (v.errors ?? []).map((e) => `${e.instancePath || "/"} ${e.message ?? "invalid"}`);

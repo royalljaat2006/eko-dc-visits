@@ -8,7 +8,7 @@
 export type TenantId = string;
 
 export type LocationType = "LHO" | "RBO" | "BRANCH" | "CSP";
-export type Role = "DC" | "AM" | "RM" | "STATE_HEAD" | "CORPORATE_ADMIN" | "SBI_OFFICIAL";
+export type Role = "DC" | "CIRCLE_HEAD" | "NATIONAL_HEAD" | "HR_ADMIN" | "CORPORATE_ADMIN" | "BANK_OFFICIAL";
 export type CoordinateConfidence = "UNVERIFIED" | "FIELD_CAPTURED" | "VERIFIED";
 export type LocationStatus = "ACTIVE" | "SUSPENDED" | "CLOSED" | "RELOCATED";
 export type UserStatus = "INVITED" | "ACTIVE" | "SUSPENDED" | "EXITED";
@@ -37,10 +37,23 @@ export interface EvidenceTimestamps {
   server_received_at?: string; // server-set, never the client
 }
 
+/** c1-entities/bank.schema.json (design 0001 §8) */
+export interface Bank {
+  id: string;
+  tenant_id: TenantId;
+  name: string;
+  code: string;
+  license_no?: string;
+  license_obtained_on?: string;
+  status: "ONBOARDING" | "ACTIVE" | "SUSPENDED";
+  updated_at: string;
+}
+
 /** c1-entities/location.schema.json */
 export interface LocationNode {
   id: string;
   tenant_id: TenantId;
+  bank_id: string;
   type: LocationType;
   parent_id?: string | null;
   name: string;
@@ -107,6 +120,10 @@ export interface CheckInEvent {
   fix: GeoPoint;
   timestamps: EvidenceTimestamps;
   out_of_radius_reason?: OutOfRadiusReason;
+  /** design 0001 §4: AUTO_GEOFENCE = dwell-matcher-emitted; trigger mix is an analytics signal. */
+  trigger?: "MANUAL" | "AUTO_GEOFENCE";
+  /** Other assigned CSPs whose effective radius also contained the fix (dense-market overlap). */
+  nearby_candidates?: string[];
   remarks?: string;
 }
 
@@ -156,14 +173,39 @@ export interface VisitView {
   sync_state: SyncState;
 }
 
-/** Time-bounded AM→DC assignment (C6 scope semantics). No C1 schema yet — fixture-defined. */
-export interface GeoAssignment {
+/** c1-entities/circle.schema.json#/$defs/circle (design 0001 §3) */
+export interface Circle {
   id: string;
   tenant_id: TenantId;
-  am_user_id: string;
-  dc_user_id: string;
+  name: string;
+  description?: string;
+  status: "ACTIVE" | "RETIRED";
+  updated_at: string;
+}
+
+/** c1-entities/circle.schema.json#/$defs/membership — effective-dated, never deleted. */
+export interface CircleMembership {
+  id: string;
+  tenant_id: TenantId;
+  circle_id: string;
+  user_id: string;
+  role_in_circle: "DC" | "CIRCLE_HEAD";
   valid_from: string; // date
   valid_to: string | null;
+}
+
+/** c1-entities/csp-assignment.schema.json — CSP↔DC, Circle-Head-owned (design 0001 §3). */
+export interface CspAssignment {
+  id: string;
+  tenant_id: TenantId;
+  circle_id: string;
+  csp_location_id: string;
+  dc_user_id: string;
+  assigned_by_user_id: string;
+  reason: "INITIAL_ALLOCATION" | "TRANSFER" | "REBALANCE" | "COVERAGE_GAP";
+  valid_from: string; // date
+  valid_to: string | null;
+  updated_at: string;
 }
 
 export interface RefreshToken {

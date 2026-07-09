@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.eko-dc-visits/c1/bank.schema.json",
+  "title": "Bank (design 0001 §8 — first-class entity inside a tenant)",
+  "type": "object",
+  "required": ["id", "tenant_id", "name", "code", "status", "updated_at"],
+  "properties": {
+    "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "tenant_id": { "$ref": "common.schema.json#/$defs/tenantId" },
+    "name": { "type": "string", "minLength": 1 },
+    "code": { "type": "string", "description": "Short code, e.g. SBI. External identifier, never a key." },
+    "license_no": { "type": "string" },
+    "license_obtained_on": { "type": "string", "format": "date" },
+    "status": { "type": "string", "enum": ["ONBOARDING", "ACTIVE", "SUSPENDED"] },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

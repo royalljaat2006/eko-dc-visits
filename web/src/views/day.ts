@@ -34,8 +34,8 @@ export function renderDayView(root: HTMLElement, onLogout: () => void): () => vo
   root.innerHTML = `
     <main class="day">
       <header class="topbar">
-        <h1>AM Day View</h1>
-        <span class="who">${escapeHtml(user ? `${user.name} (${user.role})` : '')}</span>
+        <h1>Circle Day View</h1>
+        <span class="who">${escapeHtml(user ? `${user.name} (${user.role === 'CIRCLE_HEAD' ? 'Circle Head' : user.role})` : '')}</span>
         <label>Date (IST) <input id="date" type="date" /></label>
         <button id="logout" type="button">Log out</button>
       </header>

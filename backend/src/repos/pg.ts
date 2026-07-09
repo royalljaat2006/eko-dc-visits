@@ -11,10 +11,13 @@
  */
 import pg from "pg";
 import type {
+  Bank,
   BeatPlan,
   BindingState,
+  Circle,
+  CircleMembership,
+  CspAssignment,
   Device,
-  GeoAssignment,
   LocationNode,
   OpDisposition,
   QuarantinedOp,
@@ -47,6 +50,7 @@ function locationFromRow(r: Row): LocationNode {
   return {
     id: r.id as string,
     tenant_id: r.tenant_id as string,
+    bank_id: r.bank_id as string,
     type: r.type as LocationNode["type"],
     parent_id: r.parent_id as string | null,
     name: r.name as string,
@@ -144,13 +148,13 @@ export class PgRepos implements Repos {
   // --- locations
   async insertLocation(l: LocationNode): Promise<void> {
     await this.pool.query(
-      `INSERT INTO locations (id, tenant_id, type, parent_id, name, code, address, state, district, pin_code,
+      `INSERT INTO locations (id, tenant_id, bank_id, type, parent_id, name, code, address, state, district, pin_code,
                               coord_lat, coord_lng, coordinates, radius_m, coordinate_confidence, status, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-               ST_SetSRID(ST_MakePoint($12,$11),4326)::geography,$13,$14,$15,$16)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
+               ST_SetSRID(ST_MakePoint($13,$12),4326)::geography,$14,$15,$16,$17)
        ON CONFLICT (id) DO NOTHING`,
       [
-        l.id, l.tenant_id, l.type, l.parent_id ?? null, l.name, l.code, l.address ?? null, l.state ?? null,
+        l.id, l.tenant_id, l.bank_id, l.type, l.parent_id ?? null, l.name, l.code, l.address ?? null, l.state ?? null,
         l.district ?? null, l.pin_code ?? null, l.coordinates.lat, l.coordinates.lng, l.radius_m,
         l.coordinate_confidence, l.status ?? "ACTIVE", l.updated_at,
       ],
@@ -245,21 +249,79 @@ export class PgRepos implements Repos {
     return this.plansFromRows(rows as Row[]);
   }
 
-  // --- geo assignments
-  async insertGeoAssignment(a: GeoAssignment): Promise<void> {
+  // --- banks & circles (design 0001 — admin records)
+  async insertBank(b: Bank): Promise<void> {
     await this.pool.query(
-      `INSERT INTO geo_assignments (id, tenant_id, am_user_id, dc_user_id, valid_from, valid_to)
-       VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING`,
-      [a.id, a.tenant_id, a.am_user_id, a.dc_user_id, a.valid_from, a.valid_to],
+      `INSERT INTO banks (id, tenant_id, name, code, license_no, license_obtained_on, status, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
+      [b.id, b.tenant_id, b.name, b.code, b.license_no ?? null, b.license_obtained_on ?? null, b.status, b.updated_at],
     );
   }
-  async listAssignedDcIds(tenantId: TenantId, amUserId: string, asOfDate: string): Promise<string[]> {
-    const { rows } = await this.pool.query(
-      `SELECT dc_user_id FROM geo_assignments
-       WHERE tenant_id = $1 AND am_user_id = $2 AND valid_from <= $3 AND (valid_to IS NULL OR valid_to >= $3)`,
-      [tenantId, amUserId, asOfDate],
+  async insertCircle(c: Circle): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO circles (id, tenant_id, name, description, status, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING`,
+      [c.id, c.tenant_id, c.name, c.description ?? null, c.status, c.updated_at],
     );
-    return (rows as Row[]).map((r) => r.dc_user_id as string);
+  }
+  async insertCircleMembership(m: CircleMembership): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO circle_memberships (id, tenant_id, circle_id, user_id, role_in_circle, valid_from, valid_to)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING`,
+      [m.id, m.tenant_id, m.circle_id, m.user_id, m.role_in_circle, m.valid_from, m.valid_to],
+    );
+  }
+  async listCircleDcIds(tenantId: TenantId, headUserId: string, asOfDate: string): Promise<string[]> {
+    const { rows } = await this.pool.query(
+      `SELECT dc.user_id FROM circle_memberships dc
+       JOIN circle_memberships head
+         ON head.tenant_id = dc.tenant_id AND head.circle_id = dc.circle_id
+       WHERE dc.tenant_id = $1
+         AND head.user_id = $2 AND head.role_in_circle = 'CIRCLE_HEAD'
+         AND head.valid_from <= $3 AND (head.valid_to IS NULL OR head.valid_to >= $3)
+         AND dc.role_in_circle = 'DC'
+         AND dc.valid_from <= $3 AND (dc.valid_to IS NULL OR dc.valid_to >= $3)`,
+      [tenantId, headUserId, asOfDate],
+    );
+    return (rows as Row[]).map((r) => r.user_id as string);
+  }
+
+  // --- CSP assignments (design 0001 §3; effective-dated)
+  async insertCspAssignment(a: CspAssignment): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO csp_assignments (id, tenant_id, circle_id, csp_location_id, dc_user_id,
+                                    assigned_by_user_id, reason, valid_from, valid_to, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO NOTHING`,
+      [a.id, a.tenant_id, a.circle_id, a.csp_location_id, a.dc_user_id,
+       a.assigned_by_user_id, a.reason, a.valid_from, a.valid_to, a.updated_at],
+    );
+  }
+  async listActiveCspAssignments(
+    tenantId: TenantId,
+    dcUserIds: "ALL" | ReadonlySet<string>,
+    asOfDate: string,
+  ): Promise<CspAssignment[]> {
+    const values: unknown[] = [tenantId, asOfDate];
+    let sql = `SELECT * FROM csp_assignments
+               WHERE tenant_id = $1 AND valid_from <= $2 AND (valid_to IS NULL OR valid_to >= $2)`;
+    if (dcUserIds !== "ALL") {
+      values.push([...dcUserIds]);
+      sql += ` AND dc_user_id = ANY($${values.length}::uuid[])`;
+    }
+    sql += ` ORDER BY id`;
+    const { rows } = await this.pool.query(sql, values);
+    return (rows as Row[]).map((r) => ({
+      id: r.id as string,
+      tenant_id: r.tenant_id as string,
+      circle_id: r.circle_id as string,
+      csp_location_id: r.csp_location_id as string,
+      dc_user_id: r.dc_user_id as string,
+      assigned_by_user_id: r.assigned_by_user_id as string,
+      reason: r.reason as CspAssignment["reason"],
+      valid_from: typeof r.valid_from === "string" ? r.valid_from : (r.valid_from as Date).toISOString().slice(0, 10),
+      valid_to: r.valid_to === null ? null : typeof r.valid_to === "string" ? r.valid_to : (r.valid_to as Date).toISOString().slice(0, 10),
+      updated_at: (r.updated_at as Date).toISOString(),
+    }));
   }
 
   // --- evidence (append-only: INSERT ... ON CONFLICT DO NOTHING only)

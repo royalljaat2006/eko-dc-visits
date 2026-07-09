@@ -1,8 +1,11 @@
 import type {
+  Bank,
   BeatPlan,
   BindingState,
+  Circle,
+  CircleMembership,
+  CspAssignment,
   Device,
-  GeoAssignment,
   LocationNode,
   OpDisposition,
   QuarantinedOp,
@@ -63,9 +66,21 @@ export interface Repos {
   listBeatPlansForDcs(tenantId: TenantId, dcUserIds: "ALL" | ReadonlySet<string>): Promise<BeatPlan[]>;
   listBeatPlansFromDate(scope: Scope, fromDate: string): Promise<BeatPlan[]>;
 
-  // geo assignments (C6: AM scope = assigned-dcs, time-bounded)
-  insertGeoAssignment(a: GeoAssignment): Promise<void>;
-  listAssignedDcIds(tenantId: TenantId, amUserId: string, asOfDate: string): Promise<string[]>;
+  // banks & circles (design 0001 — admin records, server-authoritative)
+  insertBank(b: Bank): Promise<void>;
+  insertCircle(c: Circle): Promise<void>;
+  insertCircleMembership(m: CircleMembership): Promise<void>;
+  /** DCs in circles the given user heads, as of date (C6 CIRCLE_HEAD scope). */
+  listCircleDcIds(tenantId: TenantId, headUserId: string, asOfDate: string): Promise<string[]>;
+
+  // CSP assignments (design 0001 §3; effective-dated — transfers end+start, never delete)
+  insertCspAssignment(a: CspAssignment): Promise<void>;
+  /** Active assignments for the given DC set, as of date. Feeds DC scope + the dwell matcher list. */
+  listActiveCspAssignments(
+    tenantId: TenantId,
+    dcUserIds: "ALL" | ReadonlySet<string>,
+    asOfDate: string,
+  ): Promise<CspAssignment[]>;
 
   // evidence — append-only (no update methods, ever)
   insertCheckinEventIfAbsent(e: StoredCheckInEvent): Promise<void>;

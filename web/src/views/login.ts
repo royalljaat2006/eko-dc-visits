@@ -7,7 +7,7 @@ import { ApiError, requestOtp, verifyOtp } from '../api/client.ts';
 export function renderLogin(root: HTMLElement, onLoggedIn: () => void): () => void {
   root.innerHTML = `
     <main class="login">
-      <h1>Eko DC Visits — AM Dashboard</h1>
+      <h1>Eko DC Visits — Circle Dashboard</h1>
       <form id="login-form">
         <label>
           Phone

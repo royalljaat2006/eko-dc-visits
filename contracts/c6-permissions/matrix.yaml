@@ -1,4 +1,4 @@
-# C6 — Role/permission matrix (contracts v0.1.0, M0 scope: DC + AM + CORPORATE_ADMIN)
+# C6 — Role/permission matrix (contracts v0.2.0 — design 0001 circle hierarchy)
 # Machine-readable: backend generates middleware checks from this; web generates route guards.
 # Scope semantics: tenant is the outermost scope (ADR-0006); then role x node on the geo tree.
 # Historical queries resolve scope as-of-date (time-bounded GeoAssignments).
@@ -7,17 +7,39 @@ roles:
   DC:
     scope: self            # own assignments, own evidence, own metrics
     permissions:
-      - { resource: beat-plan,   actions: [read] }
-      - { resource: location,    actions: [read] }          # assigned territory only
-      - { resource: sync-batch,  actions: [create] }
-      - { resource: visit,       actions: [read] }          # own visits (self-view parity rule)
-  AM:
-    scope: assigned-dcs    # via GeoAssignment
+      - { resource: beat-plan,       actions: [read] }
+      - { resource: location,        actions: [read] }      # assigned CSPs + ancestors
+      - { resource: csp-assignment,  actions: [read] }      # own active assignments (drives auto check-in)
+      - { resource: sync-batch,      actions: [create] }
+      - { resource: visit,           actions: [read] }      # own visits (self-view parity rule)
+  CIRCLE_HEAD:
+    scope: circle          # all DCs + CSPs in circles this user heads (via CircleMembership)
     permissions:
-      - { resource: visit,       actions: [read] }
-      - { resource: location,    actions: [read] }
-      - { resource: beat-plan,   actions: [read, create, update] }
-      - { resource: anomaly-flag, actions: [read, review] }  # M2
+      - { resource: visit,           actions: [read] }
+      - { resource: location,        actions: [read] }
+      - { resource: beat-plan,       actions: [read, create, update] }
+      - { resource: csp-assignment,  actions: [read, create, transfer] }  # design 0001 §6 workbench (M2 endpoints)
+      - { resource: attendance,      actions: [read] }
+      - { resource: anomaly-flag,    actions: [read, review] }            # M2
+  NATIONAL_HEAD:
+    scope: tenant-root     # read-only real-time visibility (design 0001 §7)
+    permissions:
+      - { resource: visit,           actions: [read] }
+      - { resource: location,        actions: [read] }
+      - { resource: beat-plan,       actions: [read] }
+      - { resource: csp-assignment,  actions: [read] }
+      - { resource: attendance,      actions: [read] }
+      - { resource: circle,          actions: [read] }
+  HR_ADMIN:
+    scope: tenant-root     # attendance/leave ONLY — no visit evidence or photos (PII minimisation)
+    permissions:
+      - { resource: attendance,      actions: [read] }
+      - { resource: leave,           actions: [read, create, update] }    # M2
+  BANK_OFFICIAL:
+    scope: bank            # read-only, that bank's CSPs (design 0001 §2; deferrable)
+    permissions:
+      - { resource: visit,           actions: [read] }
+      - { resource: location,        actions: [read] }
   CORPORATE_ADMIN:
     scope: tenant-root
     permissions:
@@ -43,7 +65,7 @@ hard_gates:
   - id: HG6
     rule: "No check-in with location services fully off (some fix required, however poor)."
 explicit_non_gates:
-  - "Geofence distance (advisory; OUTSIDE_FLAGGED + reason + AM review)"
+  - "Geofence distance (advisory; OUTSIDE_FLAGGED + reason + Circle Head review)"
   - "Mock-location / integrity flags at action time (signals to the server, never client blocks)"
   - "Morning attendance location (logged, never gated)"
   - "Face-match score mid-day (feature vetoed entirely, ADR-0007)"

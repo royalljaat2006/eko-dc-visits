@@ -3,23 +3,99 @@
   "$id": "https://contracts.eko-dc-visits/c1/location.schema.json",
   "title": "LocationNode (LHO/RBO/Branch/CSP)",
   "type": "object",
-  "required": ["id", "tenant_id", "type", "name", "code", "state", "district", "coordinates", "radius_m", "coordinate_confidence", "updated_at"],
+  "required": [
+    "id",
+    "tenant_id",
+    "bank_id",
+    "type",
+    "name",
+    "code",
+    "state",
+    "district",
+    "coordinates",
+    "radius_m",
+    "coordinate_confidence",
+    "updated_at"
+  ],
   "properties": {
-    "id": { "$ref": "common.schema.json#/$defs/uuid" },
-    "tenant_id": { "$ref": "common.schema.json#/$defs/tenantId" },
-    "type": { "$ref": "common.schema.json#/$defs/locationType" },
-    "parent_id": { "oneOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }], "description": "null only for LHO. CSP→Branch→RBO→LHO." },
-    "name": { "type": "string", "minLength": 1 },
-    "code": { "type": "string", "description": "External (SBI-style) identifier. Never a primary key." },
-    "address": { "type": "string" },
-    "state": { "type": "string" },
-    "district": { "type": "string" },
-    "pin_code": { "type": "string", "pattern": "^[1-9][0-9]{5}$" },
-    "coordinates": { "$ref": "common.schema.json#/$defs/geoPoint" },
-    "radius_m": { "type": "number", "minimum": 10, "default": 150, "description": "Check-in radius. Advisory (ADR-0004): validation compares against radius_m + reported accuracy." },
-    "coordinate_confidence": { "type": "string", "enum": ["UNVERIFIED", "FIELD_CAPTURED", "VERIFIED"], "description": "No authoritative SBI feed exists; coordinates are bootstrapped via first-visit capture (BUILD_PLAN §7.7)." },
-    "status": { "type": "string", "enum": ["ACTIVE", "SUSPENDED", "CLOSED", "RELOCATED"], "default": "ACTIVE" },
-    "updated_at": { "type": "string", "format": "date-time", "description": "Server change cursor for delta pull." }
+    "id": {
+      "$ref": "common.schema.json#/$defs/uuid"
+    },
+    "tenant_id": {
+      "$ref": "common.schema.json#/$defs/tenantId"
+    },
+    "bank_id": {
+      "$ref": "common.schema.json#/$defs/uuid",
+      "description": "Owning bank (design 0001 §8). Banks live inside a tenant; a DC's day may mix banks."
+    },
+    "type": {
+      "$ref": "common.schema.json#/$defs/locationType"
+    },
+    "parent_id": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "null only for LHO. CSP→Branch→RBO→LHO."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "code": {
+      "type": "string",
+      "description": "External (SBI-style) identifier. Never a primary key."
+    },
+    "address": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string"
+    },
+    "district": {
+      "type": "string"
+    },
+    "pin_code": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{5}$"
+    },
+    "coordinates": {
+      "$ref": "common.schema.json#/$defs/geoPoint"
+    },
+    "radius_m": {
+      "type": "number",
+      "minimum": 10,
+      "default": 150,
+      "description": "Check-in radius. Advisory (ADR-0004): validation compares against radius_m + reported accuracy."
+    },
+    "coordinate_confidence": {
+      "type": "string",
+      "enum": [
+        "UNVERIFIED",
+        "FIELD_CAPTURED",
+        "VERIFIED"
+      ],
+      "description": "No authoritative SBI feed exists; coordinates are bootstrapped via first-visit capture (BUILD_PLAN §7.7)."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ACTIVE",
+        "SUSPENDED",
+        "CLOSED",
+        "RELOCATED"
+      ],
+      "default": "ACTIVE"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Server change cursor for delta pull."
+    }
   },
   "additionalProperties": false
 }
