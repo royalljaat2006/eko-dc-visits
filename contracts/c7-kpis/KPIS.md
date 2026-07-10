@@ -26,3 +26,11 @@ after one reconciled pilot month (ADR-0005).
 
 ## Event taxonomy (M0 subset)
 visit.checkin.accepted | visit.checkin.flagged | sync.batch.received | sync.op.quarantined
+
+## dc_score_v1  (gamification — design 0002; NEVER feeds pay/enforcement)
+points = visits_done × 50
+       + geo_verified_visits × 20     (geofence INSIDE only; flagged still earns visit points)
+       + on_time_start × 30           (attendance START ≤ 09:30 IST)
+       + min(streak_days, 7) × 10     (consecutive calendar days with a Start Day event)
+Badges: EARLY_BIRD (START ≤ 09:00 IST) · PERFECT_DAY (≥3 visits, all INSIDE) ·
+STREAK_3 · STREAK_7. Same numbers to the DC and their managers (parity rule).

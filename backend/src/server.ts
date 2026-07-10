@@ -11,6 +11,7 @@ import { resolveScope } from "./scope.js";
 import { applySyncBatch, type Clock } from "./sync/engine.js";
 import { DEV_TOKEN_CONFIG, newRefreshToken, signAccessToken, verifyAccessToken, type TokenConfig } from "./auth/tokens.js";
 import { istDateOf } from "./geo.js";
+import { computeScorecard } from "./scorecard.js";
 
 /** Route inventory consumed by contracts:check (paths relative to servers[0].url = /api/v1). */
 export const IMPLEMENTED_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
@@ -23,6 +24,7 @@ export const IMPLEMENTED_ROUTES: ReadonlyArray<{ method: string; path: string }>
   { method: "post", path: "/circle/csp-assignments/transfer" },
   { method: "get", path: "/dashboard/visits" },
   { method: "get", path: "/dashboard/attendance" },
+  { method: "get", path: "/dashboard/scorecard" },
 ];
 
 export const DEV_OTP = "000000"; // C2: M0 stub gateway always sends '000000' in dev
@@ -282,6 +284,34 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           }),
         );
         return reply.code(200).send({ items });
+      });
+
+      // ---- dashboard (C2 /dashboard/scorecard, design 0002 dc_score_v1) ------
+      api.get("/dashboard/scorecard", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
+        const principal = req.principal!;
+        const q = req.query as { date?: string };
+        if (!q.date || !DATE_PATTERN.test(q.date)) {
+          return problem(reply, 400, "Bad Request", "date (YYYY-MM-DD, IST calendar date) is required");
+        }
+        const scope = await resolveScope(repos, principal, clock());
+        const [dcs, visits] = await Promise.all([
+          repos.listDcUsers(scope.tenant_id, scope.dc_user_ids),
+          repos.listVisitsByIstDate(scope, q.date),
+        ]);
+
+        const minusDays = (istDate: string, days: number): string =>
+          new Date(new Date(`${istDate}T00:00:00Z`).getTime() - days * 86_400_000).toISOString().slice(0, 10);
+
+        const items = await Promise.all(
+          dcs.map(async (dc) => {
+            const week = await Promise.all(
+              Array.from({ length: 7 }, (_, i) => repos.getAttendanceDay(scope.tenant_id, dc.id, minusDays(q.date!, i))),
+            );
+            const daysWithStart = week.map((d) => d?.started_at != null);
+            return computeScorecard({ id: dc.id, name: dc.name }, visits, week[0] ?? null, daysWithStart);
+          }),
+        );
+        return reply.code(200).send({ formula_version: "dc_score_v1", items });
       });
 
       // ---- dashboard (C2 /dashboard/visits) ----------------------------------

@@ -1,107 +1,267 @@
-/* M0 walking skeleton — ugly is fine; correct is mandatory. */
+/* Eko design system (web) — brand tokens + component styles.
+   Palette anchored on the Eko wordmark orange; WCAG-checked text pairs. */
+
+:root {
+  --eko-orange: #f5a21b;
+  --eko-orange-deep: #d9860a;
+  --eko-orange-soft: #fef3df;
+  --eko-ink: #201a12;
+  --eko-slate: #5d564a;
+  --eko-paper: #fffdf9;
+  --eko-card: #ffffff;
+  --eko-line: #eee4d2;
+  --eko-green: #1d7a3a;
+  --eko-green-soft: #ddf3e2;
+  --eko-amber-soft: #fdeec0;
+  --eko-amber-ink: #7a5300;
+  --eko-red: #8f1d1d;
+  --eko-red-soft: #fde2e2;
+  --radius: 14px;
+  --shadow: 0 1px 2px rgba(32, 26, 18, 0.06), 0 4px 16px rgba(32, 26, 18, 0.07);
+}
+
+* {
+  box-sizing: border-box;
+}
 body {
-  font-family: system-ui, sans-serif;
+  font-family: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
   margin: 0;
-  color: #1a1a1a;
+  color: var(--eko-ink);
+  background: var(--eko-paper);
 }
 main {
-  padding: 1rem;
+  padding: 1.25rem 1.5rem 2.5rem;
   max-width: 1100px;
   margin: 0 auto;
 }
+h1 {
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
+  margin: 0.5rem 0;
+}
+button {
+  font: inherit;
+  border: 1px solid var(--eko-line);
+  background: var(--eko-card);
+  color: var(--eko-ink);
+  border-radius: 10px;
+  padding: 0.45rem 1rem;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.05s ease;
+}
+button:hover {
+  box-shadow: var(--shadow);
+}
+button:active {
+  transform: translateY(1px);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+input,
+select {
+  font: inherit;
+  border: 1px solid var(--eko-line);
+  border-radius: 10px;
+  padding: 0.45rem 0.7rem;
+  background: var(--eko-card);
+}
+input:focus,
+select:focus,
+button:focus-visible {
+  outline: 2px solid var(--eko-orange);
+  outline-offset: 1px;
+}
 
-/* Login */
+/* ---- Login ---------------------------------------------------------- */
+.login {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(1100px 500px at 85% -10%, var(--eko-orange-soft), transparent 65%),
+    var(--eko-paper);
+}
+.login-card {
+  background: var(--eko-card);
+  border: 1px solid var(--eko-line);
+  border-radius: calc(var(--radius) + 6px);
+  box-shadow: var(--shadow);
+  padding: 2.25rem 2.5rem 2rem;
+  width: min(400px, 92vw);
+  text-align: center;
+}
+.login-logo {
+  height: 56px;
+  margin-bottom: 0.4rem;
+}
+.login-sub {
+  color: var(--eko-slate);
+  margin: 0 0 1.5rem;
+  font-size: 0.95rem;
+}
 .login form {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  max-width: 320px;
+  gap: 0.8rem;
+  text-align: left;
 }
 .login label {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--eko-slate);
+}
+.btn-primary {
+  background: var(--eko-orange);
+  border-color: var(--eko-orange);
+  color: #fff;
+  font-weight: 700;
+}
+.btn-primary:hover {
+  background: var(--eko-orange-deep);
 }
 .hint {
-  color: #555;
-  font-size: 0.85rem;
+  color: var(--eko-slate);
+  font-size: 0.8rem;
   margin: 0;
 }
 
-/* Day view */
+/* ---- App shell ------------------------------------------------------- */
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.6rem 1.5rem;
+  border-bottom: 1px solid var(--eko-line);
+  background: var(--eko-card);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+.nav-logo {
+  height: 30px;
+  margin-right: 1rem;
+}
+.tab {
+  padding: 0.4rem 1rem;
+  text-decoration: none;
+  color: var(--eko-slate);
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.tab:hover {
+  background: var(--eko-orange-soft);
+  color: var(--eko-ink);
+}
+.tab-active {
+  background: var(--eko-orange);
+  color: #fff;
+}
+.tab-active:hover {
+  background: var(--eko-orange-deep);
+  color: #fff;
+}
+.tabs-who {
+  margin-left: auto;
+  color: var(--eko-slate);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.tab-logout {
+  margin-left: 0.75rem;
+}
+
+/* ---- Data surfaces ---------------------------------------------------- */
 .topbar {
   display: flex;
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
 }
-.topbar h1 {
-  font-size: 1.25rem;
-  margin: 0.5rem 0;
-}
-.who {
-  color: #555;
-}
 .map {
   height: 360px;
   margin: 0.75rem 0;
-  border: 1px solid #ccc;
+  border: 1px solid var(--eko-line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 table.visits {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   width: 100%;
+  background: var(--eko-card);
+  border: 1px solid var(--eko-line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
 }
 table.visits th,
 table.visits td {
-  border: 1px solid #ddd;
-  padding: 0.4rem 0.6rem;
+  padding: 0.6rem 0.85rem;
   text-align: left;
   font-size: 0.9rem;
+  border-bottom: 1px solid var(--eko-line);
+}
+table.visits tr:last-child td {
+  border-bottom: none;
 }
 table.visits th {
-  background: #f4f4f4;
+  background: var(--eko-orange-soft);
+  color: var(--eko-ink);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+table.visits tbody tr:hover td {
+  background: #fffaf1;
 }
 
-/* Chips */
+/* ---- Chips ------------------------------------------------------------ */
 .chip {
   display: inline-block;
-  padding: 0.1rem 0.5rem;
+  padding: 0.12rem 0.6rem;
   border-radius: 999px;
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: 0.78rem;
+  font-weight: 700;
   white-space: nowrap;
 }
 .chip-green {
-  background: #d7f5dd;
-  color: #135723;
+  background: var(--eko-green-soft);
+  color: var(--eko-green);
 }
 .chip-amber {
-  background: #fdeec0;
-  color: #7a5300;
+  background: var(--eko-amber-soft);
+  color: var(--eko-amber-ink);
 }
 .chip-neutral {
-  background: #e8e8e8;
-  color: #333;
+  background: #efece6;
+  color: #4b463d;
 }
 
-/* States */
+/* ---- States ------------------------------------------------------------ */
 .status {
-  color: #555;
+  color: var(--eko-slate);
   font-size: 0.85rem;
   min-height: 1em;
-  margin: 0.25rem 0;
+  margin: 0.3rem 0;
 }
 .error,
 .error-box {
-  color: #8f1d1d;
+  color: var(--eko-red);
 }
 .error-box[hidden] {
   /* author display:flex would otherwise defeat the hidden attribute */
   display: none;
 }
 .error-box {
-  background: #fde2e2;
+  background: var(--eko-red-soft);
   border: 1px solid #e8a0a0;
+  border-radius: 10px;
   padding: 0.5rem 0.75rem;
   display: flex;
   align-items: center;
@@ -109,38 +269,94 @@ table.visits th {
   margin: 0.5rem 0;
 }
 .empty {
-  color: #555;
+  color: var(--eko-slate);
   font-style: italic;
   padding: 1rem 0;
 }
 
-/* App-shell tab nav (main.ts) */
-.tabs {
+/* ---- Scorecard (design 0002) ------------------------------------------- */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+.score-card {
+  background: var(--eko-card);
+  border: 1px solid var(--eko-line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.score-head {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.5rem 1.75rem 0;
-  border-bottom: 1px solid #d8d8d8;
-  background: #fafafa;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
-.tab {
-  padding: 0.4rem 0.9rem;
-  text-decoration: none;
-  color: #333;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
+.score-name {
+  font-weight: 700;
+  font-size: 1.02rem;
 }
-.tab-active {
-  background: #fff;
-  border-color: #d8d8d8;
+.score-streak {
+  font-weight: 700;
+  color: var(--eko-orange-deep);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+.score-points-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+.score-points {
+  font-size: 2.3rem;
+  font-weight: 800;
+  color: var(--eko-orange-deep);
+  line-height: 1;
+}
+.score-points-label {
+  color: var(--eko-slate);
+  font-size: 0.85rem;
   font-weight: 600;
-  margin-bottom: -1px;
 }
-.tabs-who {
-  margin-left: auto;
-  color: #555;
+.score-meter {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--eko-orange-soft);
+  overflow: hidden;
 }
-.tab-logout {
-  margin-left: 0.75rem;
+.score-meter > div {
+  height: 100%;
+  background: linear-gradient(90deg, var(--eko-orange), var(--eko-orange-deep));
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.score-breakdown {
+  color: var(--eko-slate);
+  font-size: 0.83rem;
+  margin: 0;
+}
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-height: 1.6rem;
+}
+.badge {
+  background: var(--eko-orange-soft);
+  color: var(--eko-orange-deep);
+  border: 1px solid #f3d9a8;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.12rem 0.6rem;
+}
+.formula-note {
+  color: var(--eko-slate);
+  font-size: 0.78rem;
+  margin-top: 1rem;
 }

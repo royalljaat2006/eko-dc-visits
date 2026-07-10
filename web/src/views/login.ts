@@ -3,28 +3,32 @@
  * Dev gateway stub always sends OTP 000000 (C2 requestOtp summary).
  */
 import { ApiError, requestOtp, verifyOtp } from '../api/client.ts';
+import ekoLogo from '../assets/eko-logo.svg';
 
 export function renderLogin(root: HTMLElement, onLoggedIn: () => void): () => void {
   root.innerHTML = `
     <main class="login">
-      <h1>Eko DC Visits — Circle Dashboard</h1>
-      <form id="login-form">
-        <label>
-          Phone
-          <input id="phone" name="phone" type="tel" inputmode="numeric"
-                 pattern="[6-9][0-9]{9}" maxlength="10" placeholder="10-digit mobile" required />
-        </label>
-        <button id="send-otp" type="button">Send OTP</button>
-        <label>
-          OTP
-          <input id="otp" name="otp" type="text" inputmode="numeric" maxlength="6"
-                 placeholder="6-digit OTP" autocomplete="one-time-code" required />
-        </label>
-        <p class="hint">Dev environments: the OTP is always <code>000000</code>.</p>
-        <button id="verify-otp" type="submit">Verify &amp; sign in</button>
-        <p id="login-status" class="status" role="status"></p>
-        <p id="login-error" class="error" role="alert"></p>
-      </form>
+      <div class="login-card">
+        <img class="login-logo" src="${ekoLogo}" alt="Eko" />
+        <p class="login-sub">DC Visit Management</p>
+        <form id="login-form">
+          <label>
+            Phone
+            <input id="phone" name="phone" type="tel" inputmode="numeric"
+                   pattern="[6-9][0-9]{9}" maxlength="10" placeholder="10-digit mobile" required />
+          </label>
+          <button id="send-otp" type="button">Send OTP</button>
+          <label>
+            OTP
+            <input id="otp" name="otp" type="text" inputmode="numeric" maxlength="6"
+                   placeholder="6-digit OTP" autocomplete="one-time-code" required />
+          </label>
+          <p class="hint">Dev environments: the OTP is always <code>000000</code>.</p>
+          <button id="verify-otp" type="submit" class="btn-primary">Verify &amp; sign in</button>
+          <p id="login-status" class="status" role="status"></p>
+          <p id="login-error" class="error" role="alert"></p>
+        </form>
+      </div>
     </main>
   `;
 

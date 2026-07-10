@@ -31,3 +31,8 @@
 - C3: op types now visit.checkin | attendance.start | attendance.end; unknown types quarantine.
 - Note: check-in↔attendance correlation is deliberately NOT judged at ingest (order-dependent
   flags would break the C3 §3 convergence invariant); it is an M2 server-side analytics rule.
+
+## v0.4.0 — gamification (design 0002)
+- C2: + GET /dashboard/scorecard (dc_score_v1 cards; DC self / CH circle / NH tenant).
+- C7: + dc_score_v1 published formula + badge definitions. Scores never feed
+  pay or enforcement (BUILD_PLAN kill-list #2 stands: no opaque scores).

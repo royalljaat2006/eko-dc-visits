@@ -13,8 +13,10 @@ import { renderLogin } from './views/login.ts';
 import { renderDayView } from './views/day.ts';
 import { renderAttendanceView } from './views/attendance.ts';
 import { renderWorkbenchView } from './views/workbench.ts';
+import { renderScorecardView } from './views/scorecard.ts';
+import ekoLogo from './assets/eko-logo.svg';
 
-type Route = '#/login' | '#/day' | '#/attendance' | '#/csps';
+type Route = '#/login' | '#/day' | '#/attendance' | '#/csps' | '#/scorecard';
 
 const app = document.querySelector<HTMLElement>('#app')!;
 let teardown: (() => void) | null = null;
@@ -23,14 +25,15 @@ function tabsFor(role: Role): Array<{ hash: Route; label: string }> {
   const visits = { hash: '#/day' as const, label: 'Visits' };
   const attendance = { hash: '#/attendance' as const, label: 'Attendance' };
   const csps = { hash: '#/csps' as const, label: 'CSP Workbench' };
+  const scorecard = { hash: '#/scorecard' as const, label: 'Scorecard' };
   switch (role) {
     case 'HR_ADMIN':
       return [attendance]; // C6: attendance-only visibility
     case 'CIRCLE_HEAD':
     case 'CORPORATE_ADMIN':
-      return [visits, attendance, csps];
+      return [visits, attendance, csps, scorecard];
     default:
-      return [visits, attendance];
+      return [visits, attendance, scorecard];
   }
 }
 
@@ -65,6 +68,7 @@ function route(): void {
   // Shell: tab nav + logout, then the active view below.
   app.innerHTML = `
     <nav class="tabs">
+      <img class="nav-logo" src="${ekoLogo}" alt="Eko" />
       ${tabs
         .map(
           (t) =>
@@ -86,6 +90,8 @@ function route(): void {
     teardown = renderAttendanceView(view);
   } else if (active === '#/csps') {
     teardown = renderWorkbenchView(view);
+  } else if (active === '#/scorecard') {
+    teardown = renderScorecardView(view);
   } else {
     teardown = renderDayView(view);
   }

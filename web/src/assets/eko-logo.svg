@@ -1,0 +1,20 @@
+<!-- Eko wordmark — vector recreation for dev use. Swap with the official
+     brand asset before any external release. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 264 120" role="img" aria-label="Eko">
+  <g fill="none" stroke="#F5A21B" stroke-linecap="round">
+    <!-- open-bowl 'o' -->
+    <path d="M 173 56 A 34 34 0 1 0 237 56" stroke-width="15"/>
+    <!-- sunburst rays -->
+    <g stroke-width="9">
+      <line x1="243" y1="46" x2="257" y2="38"/>
+      <line x1="230" y1="32" x2="239" y2="19"/>
+      <line x1="216" y1="26"  x2="221" y2="10"/>
+      <line x1="205" y1="24"  x2="205" y2="8"/>
+      <line x1="194" y1="26"  x2="189" y2="10"/>
+      <line x1="180" y1="32" x2="171" y2="19"/>
+      <line x1="167" y1="46" x2="153" y2="38"/>
+    </g>
+  </g>
+  <text x="6" y="101" fill="#F5A21B" font-size="108" font-weight="700" letter-spacing="-3"
+        font-family="'Arial Rounded MT Bold','Nunito','Quicksand',system-ui,sans-serif">ek</text>
+</svg>

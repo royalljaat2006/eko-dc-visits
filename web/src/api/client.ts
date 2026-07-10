@@ -342,6 +342,35 @@ export async function listAttendance(date: string, signal?: AbortSignal): Promis
   })) as AttendanceResponse;
 }
 
+/** C2 GET /dashboard/scorecard (v0.4.0, design 0002 — dc_score_v1). */
+export type Badge = 'EARLY_BIRD' | 'PERFECT_DAY' | 'STREAK_3' | 'STREAK_7';
+export interface ScorecardRow {
+  dc_user_id: string;
+  dc_name: string;
+  points: number;
+  visits_done: number;
+  geo_verified_visits: number;
+  on_time_start: boolean;
+  started_at?: string | null;
+  streak_days: number;
+  badges: Badge[];
+}
+export interface ScorecardResponse {
+  formula_version: 'dc_score_v1';
+  items: ScorecardRow[];
+}
+
+/** GET /dashboard/scorecard?date= (C2 v0.4.0). DC self, CH circle, NH tenant — scoped server-side. */
+export async function listScorecards(date: string, signal?: AbortSignal): Promise<ScorecardResponse> {
+  const qs = new URLSearchParams({ date });
+  return (await request({
+    method: 'GET',
+    path: `/dashboard/scorecard?${qs.toString()}`,
+    auth: true,
+    signal,
+  })) as ScorecardResponse;
+}
+
 /** GET /master-data/csp-assignments (C2 v0.2.0). DC own; Circle Head circle's. */
 export async function listCspAssignments(signal?: AbortSignal): Promise<CspAssignmentsResponse> {
   return (await request({
