@@ -36,3 +36,7 @@
 - C2: + GET /dashboard/scorecard (dc_score_v1 cards; DC self / CH circle / NH tenant).
 - C7: + dc_score_v1 published formula + badge definitions. Scores never feed
   pay or enforcement (BUILD_PLAN kill-list #2 stands: no opaque scores).
+
+## v0.5.0 — admin overview
+- C2: + GET /dashboard/overview (CORPORATE_ADMIN + NATIONAL_HEAD): tenant-wide
+  attendance/visit/CSP-coverage rollups, per-circle and per-DC tables, per-bank counts.

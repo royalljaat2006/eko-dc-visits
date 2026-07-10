@@ -25,9 +25,16 @@ export const IMPLEMENTED_ROUTES: ReadonlyArray<{ method: string; path: string }>
   { method: "get", path: "/dashboard/visits" },
   { method: "get", path: "/dashboard/attendance" },
   { method: "get", path: "/dashboard/scorecard" },
+  { method: "get", path: "/dashboard/overview" },
 ];
 
 export const DEV_OTP = "000000"; // C2: M0 stub gateway always sends '000000' in dev
+/**
+ * Pilot hardening: on public deployments PILOT_OTP overrides the dev stub —
+ * a per-deployment secret distributed to enrolled pilot users out-of-band.
+ * The real SMS-OTP gateway replaces this in M1 (BUILD_PLAN watch list).
+ */
+const OTP_CODE = process.env.PILOT_OTP ?? DEV_OTP;
 const PHONE_PATTERN = /^[6-9][0-9]{9}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -101,7 +108,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           return problem(reply, 400, "Bad Request", "phone, otp and device are required");
         }
         const user = await repos.findUserByPhone(body.phone);
-        if (!user || user.status !== "ACTIVE" || body.otp !== DEV_OTP) {
+        if (!user || user.status !== "ACTIVE" || body.otp !== OTP_CODE) {
           return problem(reply, 401, "Unauthorized", "OTP verification failed");
         }
 
@@ -284,6 +291,108 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           }),
         );
         return reply.code(200).send({ items });
+      });
+
+      // ---- dashboard (C2 /dashboard/overview — the admin cockpit) ------------
+      api.get("/dashboard/overview", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
+        const principal = req.principal!;
+        // C6: tenant-root cockpit — CORPORATE_ADMIN and NATIONAL_HEAD only.
+        if (principal.role !== "CORPORATE_ADMIN" && principal.role !== "NATIONAL_HEAD") {
+          return problem(reply, 403, "Forbidden", "Overview is a tenant-root view");
+        }
+        const q = req.query as { date?: string };
+        if (!q.date || !DATE_PATTERN.test(q.date)) {
+          return problem(reply, 400, "Bad Request", "date (YYYY-MM-DD, IST calendar date) is required");
+        }
+        const scope = await resolveScope(repos, principal, clock());
+
+        const [dcs, visits, banks, circles, memberships, assignments, locations] = await Promise.all([
+          repos.listDcUsers(scope.tenant_id, "ALL"),
+          repos.listVisitsByIstDate(scope, q.date),
+          repos.listBanks(scope.tenant_id),
+          repos.listCircles(scope.tenant_id),
+          repos.listActiveCircleMemberships(scope.tenant_id, q.date),
+          repos.listActiveCspAssignments(scope.tenant_id, "ALL", q.date),
+          repos.listAllLocations(scope.tenant_id),
+        ]);
+
+        const attendanceByDc = new Map(
+          await Promise.all(
+            dcs.map(async (dc) => [dc.id, await repos.getAttendanceDay(scope.tenant_id, dc.id, q.date!)] as const),
+          ),
+        );
+        const statusOf = (dcId: string): "NOT_STARTED" | "ON_DUTY" | "ENDED" => {
+          const day = attendanceByDc.get(dcId);
+          return day?.ended_at ? "ENDED" : day?.started_at ? "ON_DUTY" : "NOT_STARTED";
+        };
+
+        const csps = locations.filter((l) => l.type === "CSP");
+        const assignedCspIds = new Set(assignments.map((a) => a.csp_location_id));
+        const dcById = new Map(dcs.map((d) => [d.id, d]));
+        const circleOfDc = new Map(
+          memberships.filter((m) => m.role_in_circle === "DC").map((m) => [m.user_id, m.circle_id]),
+        );
+        const headOfCircle = new Map(
+          memberships.filter((m) => m.role_in_circle === "CIRCLE_HEAD").map((m) => [m.circle_id, m.user_id]),
+        );
+        const usersById = dcById; // heads resolved separately below
+
+        const circleRollups = await Promise.all(
+          circles.map(async (c) => {
+            const circleDcs = [...circleOfDc.entries()].filter(([, cid]) => cid === c.id).map(([dcId]) => dcId);
+            const headId = headOfCircle.get(c.id) ?? null;
+            const head = headId ? await repos.getUserById(scope.tenant_id, headId) : null;
+            return {
+              circle_id: c.id,
+              circle_name: c.name,
+              circle_head: head?.name ?? null,
+              dc_count: circleDcs.length,
+              on_duty: circleDcs.filter((id) => statusOf(id) === "ON_DUTY").length,
+              csp_count: assignments.filter((a) => a.circle_id === c.id).length,
+              visits_today: visits.filter((v) => circleDcs.includes(v.dc_user_id)).length,
+              flagged_today: visits.filter(
+                (v) => circleDcs.includes(v.dc_user_id) && v.geofence_result === "OUTSIDE_FLAGGED",
+              ).length,
+            };
+          }),
+        );
+
+        return reply.code(200).send({
+          date: q.date,
+          attendance: {
+            total_dcs: dcs.length,
+            on_duty: dcs.filter((d) => statusOf(d.id) === "ON_DUTY").length,
+            ended: dcs.filter((d) => statusOf(d.id) === "ENDED").length,
+            not_started: dcs.filter((d) => statusOf(d.id) === "NOT_STARTED").length,
+          },
+          visits: {
+            total: visits.length,
+            geo_verified: visits.filter((v) => v.geofence_result === "INSIDE").length,
+            flagged: visits.filter((v) => v.geofence_result === "OUTSIDE_FLAGGED").length,
+            late_sync: visits.filter((v) => v.sync_state === "LATE_SYNC").length,
+            unplanned: visits.filter((v) => !v.planned).length,
+          },
+          csps: {
+            total: csps.length,
+            assigned: csps.filter((c) => assignedCspIds.has(c.id)).length,
+            unassigned: csps.filter((c) => !assignedCspIds.has(c.id)).length,
+            coordinates_unverified: csps.filter((c) => c.coordinate_confidence === "UNVERIFIED").length,
+          },
+          circles: circleRollups,
+          banks: banks.map((b) => ({
+            name: b.name,
+            code: b.code,
+            status: b.status,
+            csp_count: csps.filter((c) => c.bank_id === b.id).length,
+          })),
+          assignments_by_dc: [...usersById.values()].map((dc) => ({
+            dc_user_id: dc.id,
+            dc_name: dc.name,
+            csp_count: assignments.filter((a) => a.dc_user_id === dc.id).length,
+            attendance: statusOf(dc.id),
+            visits_today: visits.filter((v) => v.dc_user_id === dc.id).length,
+          })),
+        });
       });
 
       // ---- dashboard (C2 /dashboard/scorecard, design 0002 dc_score_v1) ------

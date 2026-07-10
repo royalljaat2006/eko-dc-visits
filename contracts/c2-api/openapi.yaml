@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Eko DC Visit Management API
-  version: 0.4.0
+  version: 0.5.0
   description: >
     Contract-first spec (M0 scope). Hand-written; code conforms to this, never the reverse.
     Server validates its own responses against this spec in test mode. All endpoints are
@@ -243,6 +243,79 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/Visit' }
+  /dashboard/overview:
+    get:
+      tags: [dashboard]
+      operationId: getOverview
+      summary: Admin cockpit — every headline data point in one payload (CORPORATE_ADMIN + NATIONAL_HEAD only)
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: date, in: query, required: true, schema: { type: string, format: date }, description: IST calendar date }
+      responses:
+        '200':
+          description: Tenant-wide rollups (attendance, visits, CSP coverage, circles, banks, per-DC)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [date, attendance, visits, csps, circles, banks, assignments_by_dc]
+                properties:
+                  date: { type: string, format: date }
+                  attendance:
+                    type: object
+                    properties:
+                      total_dcs: { type: integer }
+                      on_duty: { type: integer }
+                      ended: { type: integer }
+                      not_started: { type: integer }
+                  visits:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      geo_verified: { type: integer }
+                      flagged: { type: integer }
+                      late_sync: { type: integer }
+                      unplanned: { type: integer }
+                  csps:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      assigned: { type: integer }
+                      unassigned: { type: integer }
+                      coordinates_unverified: { type: integer }
+                  circles:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        circle_id: { type: string, format: uuid }
+                        circle_name: { type: string }
+                        circle_head: { type: [string, 'null'] }
+                        dc_count: { type: integer }
+                        on_duty: { type: integer }
+                        csp_count: { type: integer }
+                        visits_today: { type: integer }
+                        flagged_today: { type: integer }
+                  banks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        code: { type: string }
+                        status: { type: string }
+                        csp_count: { type: integer }
+                  assignments_by_dc:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        dc_user_id: { type: string, format: uuid }
+                        dc_name: { type: string }
+                        csp_count: { type: integer }
+                        attendance: { type: string, enum: [NOT_STARTED, ON_DUTY, ENDED] }
+                        visits_today: { type: integer }
+        '403': { $ref: '#/components/responses/Problem' }
   /dashboard/scorecard:
     get:
       tags: [dashboard]

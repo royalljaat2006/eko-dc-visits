@@ -72,6 +72,10 @@ export interface Repos {
   insertBank(b: Bank): Promise<void>;
   insertCircle(c: Circle): Promise<void>;
   insertCircleMembership(m: CircleMembership): Promise<void>;
+  listBanks(tenantId: TenantId): Promise<Bank[]>;
+  listCircles(tenantId: TenantId): Promise<Circle[]>;
+  /** All memberships active as of date (admin overview rollups). */
+  listActiveCircleMemberships(tenantId: TenantId, asOfDate: string): Promise<CircleMembership[]>;
   /** DCs in circles the given user heads, as of date (C6 CIRCLE_HEAD scope). */
   listCircleDcIds(tenantId: TenantId, headUserId: string, asOfDate: string): Promise<string[]>;
   /** The circle a DC actively belongs to, as of date (design 0001: exactly one). */

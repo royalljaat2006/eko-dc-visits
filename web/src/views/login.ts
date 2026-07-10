@@ -3,7 +3,7 @@
  * Dev gateway stub always sends OTP 000000 (C2 requestOtp summary).
  */
 import { ApiError, requestOtp, verifyOtp } from '../api/client.ts';
-import ekoLogo from '../assets/eko-logo.svg';
+import ekoLogo from '../assets/eko-logo.jpeg';
 
 export function renderLogin(root: HTMLElement, onLoggedIn: () => void): () => void {
   root.innerHTML = `

@@ -14,7 +14,7 @@
 import { randomUUID } from "node:crypto";
 
 const BASE = process.env.BASE_URL ?? "http://127.0.0.1:3000/api/v1";
-const OTP = "000000";
+const OTP = process.env.PILOT_OTP ?? "000000";
 
 let failures = 0;
 function check(cond: boolean, msg: string): void {

@@ -14,9 +14,10 @@ import { renderDayView } from './views/day.ts';
 import { renderAttendanceView } from './views/attendance.ts';
 import { renderWorkbenchView } from './views/workbench.ts';
 import { renderScorecardView } from './views/scorecard.ts';
-import ekoLogo from './assets/eko-logo.svg';
+import { renderOverviewView } from './views/overview.ts';
+import ekoLogo from './assets/eko-logo.jpeg';
 
-type Route = '#/login' | '#/day' | '#/attendance' | '#/csps' | '#/scorecard';
+type Route = '#/login' | '#/day' | '#/attendance' | '#/csps' | '#/scorecard' | '#/overview';
 
 const app = document.querySelector<HTMLElement>('#app')!;
 let teardown: (() => void) | null = null;
@@ -26,11 +27,15 @@ function tabsFor(role: Role): Array<{ hash: Route; label: string }> {
   const attendance = { hash: '#/attendance' as const, label: 'Attendance' };
   const csps = { hash: '#/csps' as const, label: 'CSP Workbench' };
   const scorecard = { hash: '#/scorecard' as const, label: 'Scorecard' };
+  const overview = { hash: '#/overview' as const, label: 'Overview' };
   switch (role) {
     case 'HR_ADMIN':
       return [attendance]; // C6: attendance-only visibility
-    case 'CIRCLE_HEAD':
     case 'CORPORATE_ADMIN':
+      return [overview, visits, attendance, csps, scorecard];
+    case 'NATIONAL_HEAD':
+      return [overview, visits, attendance, scorecard];
+    case 'CIRCLE_HEAD':
       return [visits, attendance, csps, scorecard];
     default:
       return [visits, attendance, scorecard];
@@ -38,7 +43,8 @@ function tabsFor(role: Role): Array<{ hash: Route; label: string }> {
 }
 
 function defaultRoute(role: Role): Route {
-  return role === 'NATIONAL_HEAD' || role === 'HR_ADMIN' ? '#/attendance' : '#/day';
+  if (role === 'CORPORATE_ADMIN' || role === 'NATIONAL_HEAD') return '#/overview';
+  return role === 'HR_ADMIN' ? '#/attendance' : '#/day';
 }
 
 function navigate(hash: Route): void {
@@ -92,6 +98,8 @@ function route(): void {
     teardown = renderWorkbenchView(view);
   } else if (active === '#/scorecard') {
     teardown = renderScorecardView(view);
+  } else if (active === '#/overview') {
+    teardown = renderOverviewView(view);
   } else {
     teardown = renderDayView(view);
   }

@@ -371,3 +371,60 @@ test("DC self-view parity (BUILD_PLAN §7.9): DC reads own visits from the same 
   assert.equal(own.statusCode, 200);
   assert.equal((own.json() as { items: unknown[] }).items.length, 1);
 });
+
+test("admin overview (C2 v0.5.0): tenant-wide rollups for CORPORATE_ADMIN; Circle Head gets 403", async () => {
+  const { app } = await makeApp();
+  const asha = await login(app, PHONES.asha);
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/sync/batches",
+    headers: { authorization: `Bearer ${asha.token}` },
+    payload: syncBatch(asha.user_id, asha.device_id, CSP_KISHANGANJ),
+  });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/sync/batches",
+    headers: { authorization: `Bearer ${asha.token}` },
+    payload: attendanceBatch(asha.user_id, asha.device_id, "START", NOW.toISOString()),
+  });
+
+  const admin = await login(app, PHONES.admin);
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/dashboard/overview?date=${TODAY_IST}`,
+    headers: { authorization: `Bearer ${admin.token}` },
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as {
+    attendance: { total_dcs: number; on_duty: number; not_started: number };
+    visits: { total: number; geo_verified: number };
+    csps: { total: number; assigned: number; unassigned: number; coordinates_unverified: number };
+    circles: Array<{ circle_name: string; circle_head: string | null; dc_count: number; csp_count: number }>;
+    banks: Array<{ code: string; csp_count: number }>;
+    assignments_by_dc: Array<{ dc_name: string; csp_count: number; attendance: string }>;
+  };
+  assert.equal(body.attendance.total_dcs, 3);
+  assert.equal(body.attendance.on_duty, 1, "asha started her day");
+  assert.equal(body.visits.total, 1);
+  assert.equal(body.visits.geo_verified, 1);
+  assert.equal(body.csps.total, 5);
+  assert.equal(body.csps.assigned, 5);
+  assert.equal(body.csps.coordinates_unverified, 1, "Rampur Khajuria bootstrap case");
+  const nandpur = body.circles.find((c) => c.circle_name === "Nandpur Circle")!;
+  assert.equal(nandpur.circle_head, "Priya Sharma");
+  assert.equal(nandpur.dc_count, 2, "asha + manoj");
+  assert.equal(nandpur.csp_count, 5);
+  assert.equal(body.banks.find((b) => b.code === "SBI")!.csp_count, 5);
+  const ashaRow = body.assignments_by_dc.find((d) => d.dc_name === "Asha Kumari")!;
+  assert.equal(ashaRow.csp_count, 5);
+  assert.equal(ashaRow.attendance, "ON_DUTY");
+
+  // C6: overview is tenant-root only
+  const ch = await login(app, PHONES.amPriya);
+  const forbidden = await app.inject({
+    method: "GET",
+    url: `/api/v1/dashboard/overview?date=${TODAY_IST}`,
+    headers: { authorization: `Bearer ${ch.token}` },
+  });
+  assert.equal(forbidden.statusCode, 403);
+});

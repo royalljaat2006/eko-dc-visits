@@ -1,0 +1,12 @@
+{
+  "name": "eko-dc-visits-site",
+  "private": true,
+  "description": "Deploy shell (Vercel): static web + prebundled API function. Real packages live in backend/ and web/. Regenerate the function bundle with `npm run bundle:function` after backend changes.",
+  "scripts": {
+    "bundle:function": "esbuild api/_src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=api/index.js --external:pg-native --log-level=warning",
+    "build:web": "cd web && npm install && npm run build"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

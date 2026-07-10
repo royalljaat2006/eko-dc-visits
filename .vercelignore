@@ -1,0 +1,6 @@
+android
+backend/node_modules
+web/node_modules
+infra
+docs
+*.log

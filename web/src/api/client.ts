@@ -371,6 +371,43 @@ export async function listScorecards(date: string, signal?: AbortSignal): Promis
   })) as ScorecardResponse;
 }
 
+/** C2 GET /dashboard/overview (v0.5.0) — admin cockpit. */
+export interface OverviewResponse {
+  date: string;
+  attendance: { total_dcs: number; on_duty: number; ended: number; not_started: number };
+  visits: { total: number; geo_verified: number; flagged: number; late_sync: number; unplanned: number };
+  csps: { total: number; assigned: number; unassigned: number; coordinates_unverified: number };
+  circles: Array<{
+    circle_id: string;
+    circle_name: string;
+    circle_head: string | null;
+    dc_count: number;
+    on_duty: number;
+    csp_count: number;
+    visits_today: number;
+    flagged_today: number;
+  }>;
+  banks: Array<{ name: string; code: string; status: string; csp_count: number }>;
+  assignments_by_dc: Array<{
+    dc_user_id: string;
+    dc_name: string;
+    csp_count: number;
+    attendance: AttendanceStatus;
+    visits_today: number;
+  }>;
+}
+
+/** GET /dashboard/overview?date= (CORPORATE_ADMIN + NATIONAL_HEAD only, enforced server-side). */
+export async function getOverview(date: string, signal?: AbortSignal): Promise<OverviewResponse> {
+  const qs = new URLSearchParams({ date });
+  return (await request({
+    method: 'GET',
+    path: `/dashboard/overview?${qs.toString()}`,
+    auth: true,
+    signal,
+  })) as OverviewResponse;
+}
+
 /** GET /master-data/csp-assignments (C2 v0.2.0). DC own; Circle Head circle's. */
 export async function listCspAssignments(signal?: AbortSignal): Promise<CspAssignmentsResponse> {
   return (await request({

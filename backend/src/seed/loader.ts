@@ -7,19 +7,29 @@
  * walking skeleton always has a plan for the current day (C3 §6: plans for
  * date D pullable from D-1 evening; M0 seeds D itself).
  */
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import banksJson from "../../../fixtures/nandpur/banks.json" with { type: "json" };
+import locationsJson from "../../../fixtures/nandpur/locations.json" with { type: "json" };
+import usersJson from "../../../fixtures/nandpur/users.json" with { type: "json" };
+import circlesJson from "../../../fixtures/nandpur/circles.json" with { type: "json" };
+import membershipsJson from "../../../fixtures/nandpur/circle-memberships.json" with { type: "json" };
+import cspAssignmentsJson from "../../../fixtures/nandpur/csp-assignments.json" with { type: "json" };
+import beatPlansJson from "../../../fixtures/nandpur/beat-plans.json" with { type: "json" };
 import type { Bank, BeatPlan, Circle, CircleMembership, CspAssignment, LocationNode, User } from "../domain/types.js";
 import type { Repos } from "../repos/types.js";
 import { istDateOf } from "../geo.js";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
+// Guarded for CJS bundles (import.meta is empty there; the path is only used
+// by local tooling like contracts-check, never by the serverless runtime).
+const HERE = (() => {
+  try {
+    return path.dirname(fileURLToPath(import.meta.url));
+  } catch {
+    return process.cwd();
+  }
+})();
 export const FIXTURES_DIR = path.resolve(HERE, "../../../fixtures/nandpur");
-
-function readJson<T>(file: string): T {
-  return JSON.parse(readFileSync(path.join(FIXTURES_DIR, file), "utf8")) as T;
-}
 
 export interface SeedOptions {
   /** "Today" used to date the beat plan; defaults to the real clock. */
@@ -41,13 +51,13 @@ export async function seedFixtures(repos: Repos, opts: SeedOptions = {}): Promis
   const now = opts.now ?? new Date();
   const today = istDateOf(now);
 
-  const banks = readJson<Bank[]>("banks.json");
-  const locations = readJson<LocationNode[]>("locations.json");
-  const users = readJson<User[]>("users.json");
-  const circles = readJson<Circle[]>("circles.json");
-  const circleMemberships = readJson<CircleMembership[]>("circle-memberships.json");
-  const cspAssignments = readJson<CspAssignment[]>("csp-assignments.json");
-  const beatPlans = readJson<BeatPlan[]>("beat-plans.json").map((p) => ({
+  const banks = banksJson as Bank[];
+  const locations = locationsJson as LocationNode[];
+  const users = usersJson as User[];
+  const circles = circlesJson as Circle[];
+  const circleMemberships = membershipsJson as CircleMembership[];
+  const cspAssignments = cspAssignmentsJson as unknown as CspAssignment[];
+  const beatPlans = (beatPlansJson as unknown as BeatPlan[]).map((p) => ({
     ...p,
     plan_date: today, // generated at seed time
     updated_at: now.toISOString(),

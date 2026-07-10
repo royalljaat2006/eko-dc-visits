@@ -1,41 +1,54 @@
 /**
  * Compiles the C1 entity schemas (contracts/c1-entities) with ajv 2020-12.
- * The schema files are the source of truth — loaded from contracts/, never copied.
+ * The schema files are the source of truth — statically imported (JSON import
+ * attributes) so serverless bundles carry them with zero runtime filesystem
+ * dependency; tsx/Node 22 and esbuild both inline them.
  */
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type { ValidateFunction } from "ajv";
 import addFormatsModule from "ajv-formats";
+import commonSchema from "../../../contracts/c1-entities/common.schema.json" with { type: "json" };
+import locationSchema from "../../../contracts/c1-entities/location.schema.json" with { type: "json" };
+import userDeviceSchema from "../../../contracts/c1-entities/user-device.schema.json" with { type: "json" };
+import beatPlanSchema from "../../../contracts/c1-entities/beat-plan.schema.json" with { type: "json" };
+import checkinEventSchema from "../../../contracts/c1-entities/checkin-event.schema.json" with { type: "json" };
+import attendanceEventSchema from "../../../contracts/c1-entities/attendance-event.schema.json" with { type: "json" };
+import bankSchema from "../../../contracts/c1-entities/bank.schema.json" with { type: "json" };
+import circleSchema from "../../../contracts/c1-entities/circle.schema.json" with { type: "json" };
+import cspAssignmentSchema from "../../../contracts/c1-entities/csp-assignment.schema.json" with { type: "json" };
 
 // NodeNext/CJS interop: ajv-formats ships `module.exports.default = fn`.
 type AddFormats = (ajv: InstanceType<typeof Ajv2020>) => void;
 const addFormats: AddFormats = (((addFormatsModule as { default?: unknown }).default ?? addFormatsModule) as AddFormats);
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
+// Guarded for CJS bundles (import.meta empty there; path used by local tooling only).
+const HERE = (() => {
+  try {
+    return path.dirname(fileURLToPath(import.meta.url));
+  } catch {
+    return process.cwd();
+  }
+})();
+/** Filesystem path for local-only tooling (contracts-check); unused in serverless bundles. */
 export const CONTRACTS_DIR = path.resolve(HERE, "../../../contracts");
-const C1_DIR = path.join(CONTRACTS_DIR, "c1-entities");
-
-function loadSchema(file: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(path.join(C1_DIR, file), "utf8")) as Record<string, unknown>;
-}
 
 export const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
 
-for (const file of [
-  "common.schema.json",
-  "location.schema.json",
-  "user-device.schema.json",
-  "beat-plan.schema.json",
-  "checkin-event.schema.json",
-  "attendance-event.schema.json",
-  "bank.schema.json",
-  "circle.schema.json",
-  "csp-assignment.schema.json",
+for (const schema of [
+  commonSchema,
+  locationSchema,
+  userDeviceSchema,
+  beatPlanSchema,
+  checkinEventSchema,
+  attendanceEventSchema,
+  bankSchema,
+  circleSchema,
+  cspAssignmentSchema,
 ]) {
-  ajv.addSchema(loadSchema(file));
+  ajv.addSchema(schema as Record<string, unknown>);
 }
 
 const BASE = "https://contracts.eko-dc-visits/c1/";

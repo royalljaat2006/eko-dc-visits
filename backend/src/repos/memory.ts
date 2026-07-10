@@ -148,6 +148,17 @@ export class MemoryRepos implements Repos {
   private activeAsOf(valid_from: string, valid_to: string | null, asOfDate: string): boolean {
     return valid_from <= asOfDate && (valid_to === null || valid_to >= asOfDate);
   }
+  async listBanks(tenantId: TenantId): Promise<Bank[]> {
+    return [...this.banks.values()].filter((b) => b.tenant_id === tenantId).sort((a, b) => a.name.localeCompare(b.name));
+  }
+  async listCircles(tenantId: TenantId): Promise<Circle[]> {
+    return [...this.circles.values()].filter((c) => c.tenant_id === tenantId).sort((a, b) => a.name.localeCompare(b.name));
+  }
+  async listActiveCircleMemberships(tenantId: TenantId, asOfDate: string): Promise<CircleMembership[]> {
+    return [...this.circleMemberships.values()]
+      .filter((m) => m.tenant_id === tenantId)
+      .filter((m) => this.activeAsOf(m.valid_from, m.valid_to, asOfDate));
+  }
   async listCircleDcIds(tenantId: TenantId, headUserId: string, asOfDate: string): Promise<string[]> {
     const all = [...this.circleMemberships.values()].filter((m) => m.tenant_id === tenantId);
     const headedCircles = new Set(

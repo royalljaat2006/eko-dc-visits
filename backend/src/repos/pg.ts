@@ -288,6 +288,51 @@ export class PgRepos implements Repos {
     return (rows as Row[]).map((r) => r.user_id as string);
   }
 
+  async listBanks(tenantId: TenantId): Promise<Bank[]> {
+    const { rows } = await this.pool.query(`SELECT * FROM banks WHERE tenant_id = $1 ORDER BY name`, [tenantId]);
+    return (rows as Row[]).map((r) => ({
+      id: r.id as string,
+      tenant_id: r.tenant_id as string,
+      name: r.name as string,
+      code: r.code as string,
+      license_no: (r.license_no as string | null) ?? undefined,
+      license_obtained_on: r.license_obtained_on
+        ? typeof r.license_obtained_on === "string"
+          ? r.license_obtained_on
+          : (r.license_obtained_on as Date).toISOString().slice(0, 10)
+        : undefined,
+      status: r.status as Bank["status"],
+      updated_at: (r.updated_at as Date).toISOString(),
+    }));
+  }
+  async listCircles(tenantId: TenantId): Promise<Circle[]> {
+    const { rows } = await this.pool.query(`SELECT * FROM circles WHERE tenant_id = $1 ORDER BY name`, [tenantId]);
+    return (rows as Row[]).map((r) => ({
+      id: r.id as string,
+      tenant_id: r.tenant_id as string,
+      name: r.name as string,
+      description: (r.description as string | null) ?? undefined,
+      status: r.status as Circle["status"],
+      updated_at: (r.updated_at as Date).toISOString(),
+    }));
+  }
+  async listActiveCircleMemberships(tenantId: TenantId, asOfDate: string): Promise<CircleMembership[]> {
+    const { rows } = await this.pool.query(
+      `SELECT * FROM circle_memberships
+       WHERE tenant_id = $1 AND valid_from <= $2 AND (valid_to IS NULL OR valid_to >= $2)`,
+      [tenantId, asOfDate],
+    );
+    return (rows as Row[]).map((r) => ({
+      id: r.id as string,
+      tenant_id: r.tenant_id as string,
+      circle_id: r.circle_id as string,
+      user_id: r.user_id as string,
+      role_in_circle: r.role_in_circle as CircleMembership["role_in_circle"],
+      valid_from: typeof r.valid_from === "string" ? r.valid_from : (r.valid_from as Date).toISOString().slice(0, 10),
+      valid_to: r.valid_to === null ? null : typeof r.valid_to === "string" ? r.valid_to : (r.valid_to as Date).toISOString().slice(0, 10),
+    }));
+  }
+
   async getActiveDcCircleId(tenantId: TenantId, dcUserId: string, asOfDate: string): Promise<string | null> {
     const { rows } = await this.pool.query(
       `SELECT circle_id FROM circle_memberships

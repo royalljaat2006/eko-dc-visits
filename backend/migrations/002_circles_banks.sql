@@ -59,3 +59,8 @@ CREATE UNIQUE INDEX csp_assignments_one_active_per_csp
   ON csp_assignments (tenant_id, csp_location_id) WHERE valid_to IS NULL;
 
 DROP TABLE geo_assignments;
+
+-- Role enum change (contracts v0.2.0): 001's CHECK predates the circle hierarchy.
+ALTER TABLE users DROP CONSTRAINT users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check
+  CHECK (role IN ('DC','CIRCLE_HEAD','NATIONAL_HEAD','HR_ADMIN','CORPORATE_ADMIN','BANK_OFFICIAL'));
