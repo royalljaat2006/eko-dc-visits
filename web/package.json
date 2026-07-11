@@ -11,7 +11,8 @@
     "test": "node --test src/lib/format.test.ts src/lib/chips.test.ts"
   },
   "dependencies": {
-    "leaflet": "^1.9.4"
+    "leaflet": "^1.9.4",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/leaflet": "^1.9.12",

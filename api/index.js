@@ -40938,6 +40938,13 @@ var init_pg = __esm({
         const { rows } = await this.pool.query(`SELECT * FROM locations WHERE tenant_id = $1 AND id = $2`, [tenantId, id]);
         return rows[0] ? locationFromRow(rows[0]) : null;
       }
+      async findLocationByCode(tenantId, code) {
+        const { rows } = await this.pool.query(`SELECT * FROM locations WHERE tenant_id = $1 AND code = $2 LIMIT 1`, [
+          tenantId,
+          code
+        ]);
+        return rows[0] ? locationFromRow(rows[0]) : null;
+      }
       async listAllLocations(tenantId) {
         const { rows } = await this.pool.query(`SELECT * FROM locations WHERE tenant_id = $1`, [tenantId]);
         return rows.map(locationFromRow);
@@ -43508,6 +43515,89 @@ function buildServer(deps) {
         );
         return reply.code(200).send({ items });
       });
+      api.post("/circle/csp-assignments/import", { preHandler: requireAuth }, async (req, reply) => {
+        const principal = req.principal;
+        if (principal.role !== "CIRCLE_HEAD" && principal.role !== "CORPORATE_ADMIN") {
+          return problem(reply, 403, "Forbidden", "Only a Circle Head (or admin) may bulk-assign CSPs");
+        }
+        const body = req.body ?? {};
+        if (!Array.isArray(body.rows) || body.rows.length === 0 || body.rows.length > 500) {
+          return problem(reply, 400, "Bad Request", "rows[] (1\u2013500 of {csp_code, dc_phone}) is required");
+        }
+        const today = istDateOf(clock());
+        const yesterday = istDateOf(new Date(clock().getTime() - 24 * 3600 * 1e3));
+        const scope = await resolveScope(repos, principal, clock());
+        const activeByCsp = new Map(
+          (await repos.listActiveCspAssignments(principal.tenant_id, "ALL", today)).map((a) => [a.csp_location_id, a])
+        );
+        const results = [];
+        for (const [i, raw] of body.rows.entries()) {
+          const r = raw ?? {};
+          const cspCode = String(r.csp_code ?? "").trim();
+          const dcPhone = String(r.dc_phone ?? "").trim();
+          const reject = (reason) => {
+            results.push({ row: i + 1, csp_code: cspCode, dc_phone: dcPhone, result: "rejected", reason });
+          };
+          if (!cspCode || !dcPhone) {
+            reject("csp_code and dc_phone are required");
+            continue;
+          }
+          const csp = await repos.findLocationByCode(principal.tenant_id, cspCode);
+          if (!csp || csp.type !== "CSP") {
+            reject(`unknown CSP code "${cspCode}"`);
+            continue;
+          }
+          const dc = await repos.findUserByPhone(dcPhone);
+          if (!dc || dc.tenant_id !== principal.tenant_id || dc.role !== "DC" || dc.status !== "ACTIVE") {
+            reject(`no active DC with phone ${dcPhone}`);
+            continue;
+          }
+          if (scope.dc_user_ids !== "ALL" && !scope.dc_user_ids.has(dc.id)) {
+            reject(`${dc.name} is not in your circle`);
+            continue;
+          }
+          const circleId = await repos.getActiveDcCircleId(principal.tenant_id, dc.id, today);
+          if (!circleId) {
+            reject(`${dc.name} has no active circle membership`);
+            continue;
+          }
+          const current = activeByCsp.get(csp.id);
+          if (current?.dc_user_id === dc.id) {
+            results.push({ row: i + 1, csp_code: cspCode, dc_phone: dcPhone, result: "unchanged", dc_name: dc.name });
+            continue;
+          }
+          if (current) await repos.endActiveCspAssignment(principal.tenant_id, csp.id, yesterday);
+          const assignment = {
+            id: (0, import_node_crypto7.randomUUID)(),
+            tenant_id: principal.tenant_id,
+            circle_id: circleId,
+            csp_location_id: csp.id,
+            dc_user_id: dc.id,
+            assigned_by_user_id: principal.user_id,
+            reason: current ? "TRANSFER" : "INITIAL_ALLOCATION",
+            valid_from: today,
+            valid_to: null,
+            updated_at: clock().toISOString()
+          };
+          await repos.insertCspAssignment(assignment);
+          activeByCsp.set(csp.id, assignment);
+          results.push({
+            row: i + 1,
+            csp_code: cspCode,
+            dc_phone: dcPhone,
+            result: current ? "transferred" : "assigned",
+            dc_name: dc.name
+          });
+        }
+        const summary = {
+          total: results.length,
+          assigned: results.filter((x) => x.result === "assigned").length,
+          transferred: results.filter((x) => x.result === "transferred").length,
+          unchanged: results.filter((x) => x.result === "unchanged").length,
+          rejected: results.filter((x) => x.result === "rejected").length
+        };
+        return reply.code(200).send({ summary, results });
+      });
       api.get("/dashboard/overview", { preHandler: requireAuth }, async (req, reply) => {
         const principal = req.principal;
         if (principal.role !== "CORPORATE_ADMIN" && principal.role !== "NATIONAL_HEAD") {
@@ -43711,6 +43801,12 @@ var MemoryRepos = class {
   }
   async getLocationById(tenantId, id) {
     return this.locations.get(this.key(tenantId, id)) ?? null;
+  }
+  async findLocationByCode(tenantId, code) {
+    for (const l of this.locations.values()) {
+      if (l.tenant_id === tenantId && l.code === code) return l;
+    }
+    return null;
   }
   async listAllLocations(tenantId) {
     return [...this.locations.values()].filter((l) => l.tenant_id === tenantId);

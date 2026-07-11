@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Eko DC Visit Management API
-  version: 0.5.0
+  version: 0.6.0
   description: >
     Contract-first spec (M0 scope). Hand-written; code conforms to this, never the reverse.
     Server validates its own responses against this spec in test mode. All endpoints are
@@ -243,6 +243,60 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/Visit' }
+  /circle/csp-assignments/import:
+    post:
+      tags: [master-data]
+      operationId: importCspAssignments
+      summary: Bulk-assign CSPs to DCs from a spreadsheet (client parses xlsx/csv; rows of csp_code + dc_phone; staged — every row returns accepted or rejected-with-reason)
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rows]
+              properties:
+                rows:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  items:
+                    type: object
+                    required: [csp_code, dc_phone]
+                    properties:
+                      csp_code: { type: string, description: External CSP code, e.g. CSP-ND-1001 }
+                      dc_phone: { type: string, description: Registered DC mobile (10 digits) }
+      responses:
+        '200':
+          description: Per-row dispositions + summary (rows are never silently dropped)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [summary, results]
+                properties:
+                  summary:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      assigned: { type: integer }
+                      transferred: { type: integer }
+                      unchanged: { type: integer }
+                      rejected: { type: integer }
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [row, csp_code, dc_phone, result]
+                      properties:
+                        row: { type: integer }
+                        csp_code: { type: string }
+                        dc_phone: { type: string }
+                        result: { type: string, enum: [assigned, transferred, unchanged, rejected] }
+                        reason: { type: string }
+                        dc_name: { type: string }
+        '403': { $ref: '#/components/responses/Problem' }
   /dashboard/overview:
     get:
       tags: [dashboard]

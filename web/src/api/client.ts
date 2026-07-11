@@ -418,6 +418,29 @@ export async function listCspAssignments(signal?: AbortSignal): Promise<CspAssig
   })) as CspAssignmentsResponse;
 }
 
+/** C2 POST /circle/csp-assignments/import (v0.6.0) — bulk spreadsheet assignment. */
+export interface ImportResultRow {
+  row: number;
+  csp_code: string;
+  dc_phone: string;
+  result: 'assigned' | 'transferred' | 'unchanged' | 'rejected';
+  reason?: string;
+  dc_name?: string;
+}
+export interface ImportResponse {
+  summary: { total: number; assigned: number; transferred: number; unchanged: number; rejected: number };
+  results: ImportResultRow[];
+}
+
+export async function importCspAssignments(rows: Array<{ csp_code: string; dc_phone: string }>): Promise<ImportResponse> {
+  return (await request({
+    method: 'POST',
+    path: '/circle/csp-assignments/import',
+    body: { rows },
+    auth: true,
+  })) as ImportResponse;
+}
+
 /** GET /master-data/locations (C2). Single page is sufficient for a circle-sized territory. */
 export async function listLocations(signal?: AbortSignal): Promise<LocationsResponse> {
   return (await request({

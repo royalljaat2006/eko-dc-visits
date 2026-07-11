@@ -166,6 +166,13 @@ export class PgRepos implements Repos {
     const { rows } = await this.pool.query(`SELECT * FROM locations WHERE tenant_id = $1 AND id = $2`, [tenantId, id]);
     return rows[0] ? locationFromRow(rows[0] as Row) : null;
   }
+  async findLocationByCode(tenantId: TenantId, code: string): Promise<LocationNode | null> {
+    const { rows } = await this.pool.query(`SELECT * FROM locations WHERE tenant_id = $1 AND code = $2 LIMIT 1`, [
+      tenantId,
+      code,
+    ]);
+    return rows[0] ? locationFromRow(rows[0] as Row) : null;
+  }
   async listAllLocations(tenantId: TenantId): Promise<LocationNode[]> {
     const { rows } = await this.pool.query(`SELECT * FROM locations WHERE tenant_id = $1`, [tenantId]);
     return (rows as Row[]).map(locationFromRow);

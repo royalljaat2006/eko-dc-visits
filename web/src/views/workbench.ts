@@ -11,8 +11,10 @@
  * every guardrail (role, in-circle target) — this UI never pre-filters beyond
  * what the API returned.
  */
+import * as XLSX from 'xlsx';
 import {
   ApiError,
+  importCspAssignments,
   listAttendance,
   listCspAssignments,
   listLocations,
@@ -20,7 +22,10 @@ import {
   type CspAssignment,
   type Location,
 } from '../api/client.ts';
+import { rowsFromSheetObjects } from '../lib/importRows.ts';
 import { todayIstDate } from '../lib/format.ts';
+
+const TEMPLATE_CSV = 'csp_code,dc_phone\nCSP-ND-1001,9800000001\nCSP-ND-1002,9800000006\n';
 
 interface Roster {
   dc_user_id: string;
@@ -33,7 +38,11 @@ export function renderWorkbenchView(root: HTMLElement): () => void {
       <header class="topbar">
         <h1>CSP Workbench</h1>
         <button id="wb-refresh" type="button">Refresh</button>
+        <button id="wb-upload" type="button" class="btn-primary">Upload Excel</button>
+        <a id="wb-template" download="csp-assignments-template.csv">Download template</a>
+        <input id="wb-file" type="file" accept=".xlsx,.xls,.csv" hidden />
       </header>
+      <p id="wb-import-report" class="status"></p>
       <p id="wb-status" class="status" role="status"></p>
       <div id="wb-error" class="error-box" role="alert" hidden>
         <span id="wb-error-msg"></span>
@@ -158,6 +167,54 @@ export function renderWorkbenchView(root: HTMLElement): () => void {
 
   root.querySelector<HTMLButtonElement>('#wb-refresh')!.addEventListener('click', () => void refresh(true));
   root.querySelector<HTMLButtonElement>('#wb-retry')!.addEventListener('click', () => void refresh(true));
+
+  // ---- Bulk upload (C2 v0.6.0): sheet parsed in-browser, rows applied via
+  // the audited transfer path; every row comes back accepted or rejected.
+  const importReport = root.querySelector<HTMLElement>('#wb-import-report')!;
+  const fileInput = root.querySelector<HTMLInputElement>('#wb-file')!;
+  root.querySelector<HTMLAnchorElement>('#wb-template')!.href =
+    `data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE_CSV)}`;
+  root.querySelector<HTMLButtonElement>('#wb-upload')!.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    fileInput.value = ''; // allow re-selecting the same file
+    if (!file) return;
+    void (async () => {
+      try {
+        const workbook = XLSX.read(await file.arrayBuffer());
+        const sheetName = workbook.SheetNames[0];
+        const sheet = sheetName ? workbook.Sheets[sheetName] : undefined;
+        if (!sheet) throw new Error('The file has no sheets');
+        const { rows, errors } = rowsFromSheetObjects(
+          XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' }),
+        );
+        if (rows.length === 0) throw new Error(errors.join(' · ') || 'No valid rows found');
+        const skipped = errors.length > 0 ? ` (${errors.length} unreadable row${errors.length === 1 ? '' : 's'} skipped)` : '';
+        if (!window.confirm(`Apply ${rows.length} assignment${rows.length === 1 ? '' : 's'} from "${file.name}"${skipped}?`)) return;
+
+        const res = await importCspAssignments(rows);
+        const s = res.summary;
+        importReport.textContent =
+          `Import: ${s.assigned} assigned · ${s.transferred} transferred · ${s.unchanged} unchanged · ${s.rejected} rejected` +
+          (errors.length ? ` · ${errors.length} skipped before upload` : '');
+        await refresh(false); // the server's answer is the truth
+        // After refresh (which clears the error box on success), surface the
+        // per-row rejections so they aren't lost.
+        const rejected = res.results.filter((r) => r.result === 'rejected');
+        if (rejected.length > 0 || errors.length > 0) {
+          errorBox.hidden = false;
+          errorMsg.textContent = [
+            ...rejected.map((r) => `Row ${r.row} (${r.csp_code}): ${r.reason}`),
+            ...errors,
+          ].join(' — ');
+        }
+      } catch (err) {
+        importReport.textContent = '';
+        showError(err);
+      }
+    })();
+  });
+
   void refresh(true);
 
   return () => {

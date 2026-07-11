@@ -60,6 +60,8 @@ export interface Repos {
   // locations (server→client master data, C3 §6)
   insertLocation(l: LocationNode): Promise<void>;
   getLocationById(tenantId: TenantId, id: string): Promise<LocationNode | null>;
+  /** Lookup by external code (bulk import rows reference CSPs by code, not uuid). */
+  findLocationByCode(tenantId: TenantId, code: string): Promise<LocationNode | null>;
   listAllLocations(tenantId: TenantId): Promise<LocationNode[]>;
   listLocationsUpdatedSince(scope: Scope, updatedSince: string | null, limit: number): Promise<LocationPage>;
 

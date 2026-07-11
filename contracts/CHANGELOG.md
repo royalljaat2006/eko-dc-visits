@@ -40,3 +40,8 @@
 ## v0.5.0 — admin overview
 - C2: + GET /dashboard/overview (CORPORATE_ADMIN + NATIONAL_HEAD): tenant-wide
   attendance/visit/CSP-coverage rollups, per-circle and per-DC tables, per-bank counts.
+
+## v0.6.0 — bulk CSP assignment import
+- C2: + POST /circle/csp-assignments/import (Circle Head/admin): spreadsheet rows
+  (csp_code, dc_phone) applied via the audited end-old + start-new path; per-row
+  accepted/rejected-with-reason results (staged-import doctrine, design 0001 §8).

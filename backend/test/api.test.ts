@@ -268,7 +268,7 @@ test("attendance board (design 0001 §7): NH + HR see tenant-wide incl. NOT_STAR
     method: "POST",
     url: "/api/v1/sync/batches",
     headers: { authorization: `Bearer ${asha.token}` },
-    payload: attendanceBatch(asha.user_id, asha.device_id, "END", new Date(NOW.getTime() + 8 * 3600e3).toISOString()),
+    payload: attendanceBatch(asha.user_id, asha.device_id, "END", new Date(NOW.getTime() + 60_000).toISOString()),
   });
   const hr = await login(app, PHONES.hr);
   const hrBoard = await app.inject({
@@ -425,6 +425,57 @@ test("admin overview (C2 v0.5.0): tenant-wide rollups for CORPORATE_ADMIN; Circl
     method: "GET",
     url: `/api/v1/dashboard/overview?date=${TODAY_IST}`,
     headers: { authorization: `Bearer ${ch.token}` },
+  });
+  assert.equal(forbidden.statusCode, 403);
+});
+
+test("bulk import (C2 v0.6.0): per-row dispositions via the audited transfer path", async () => {
+  const { app } = await makeApp();
+  const ch = await login(app, PHONES.amPriya);
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/v1/circle/csp-assignments/import",
+    headers: { authorization: `Bearer ${ch.token}` },
+    payload: {
+      rows: [
+        { csp_code: "CSP-ND-1005", dc_phone: "9800000006" }, // transfer asha -> manoj
+        { csp_code: "CSP-ND-1001", dc_phone: "9800000001" }, // already asha's -> unchanged
+        { csp_code: "CSP-XX-9999", dc_phone: "9800000006" }, // unknown code
+        { csp_code: "CSP-ND-1002", dc_phone: "9800000002" }, // vikram: not in Priya's circle
+        { csp_code: "CSP-ND-1003", dc_phone: "" },            // missing phone
+      ],
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as {
+    summary: { total: number; transferred: number; unchanged: number; rejected: number };
+    results: Array<{ row: number; result: string; reason?: string; dc_name?: string }>;
+  };
+  assert.deepEqual(
+    body.results.map((r) => r.result),
+    ["transferred", "unchanged", "rejected", "rejected", "rejected"],
+  );
+  assert.equal(body.results[0]!.dc_name, "Manoj Kumar");
+  assert.match(body.results[2]!.reason!, /unknown CSP code/);
+  assert.match(body.results[3]!.reason!, /not in your circle/);
+  assert.equal(body.summary.rejected, 3);
+
+  // The transfer actually landed: manoj now holds Rampur Khajuria
+  const manoj = await login(app, "9800000006");
+  const pull = await app.inject({
+    method: "GET",
+    url: "/api/v1/master-data/csp-assignments",
+    headers: { authorization: `Bearer ${manoj.token}` },
+  });
+  assert.equal((pull.json() as { items: unknown[] }).items.length, 1);
+
+  // DCs cannot bulk-import
+  const asha = await login(app, PHONES.asha);
+  const forbidden = await app.inject({
+    method: "POST",
+    url: "/api/v1/circle/csp-assignments/import",
+    headers: { authorization: `Bearer ${asha.token}` },
+    payload: { rows: [{ csp_code: "CSP-ND-1001", dc_phone: "9800000001" }] },
   });
   assert.equal(forbidden.statusCode, 403);
 });

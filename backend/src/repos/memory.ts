@@ -102,6 +102,12 @@ export class MemoryRepos implements Repos {
   async getLocationById(tenantId: TenantId, id: string): Promise<LocationNode | null> {
     return this.locations.get(this.key(tenantId, id)) ?? null;
   }
+  async findLocationByCode(tenantId: TenantId, code: string): Promise<LocationNode | null> {
+    for (const l of this.locations.values()) {
+      if (l.tenant_id === tenantId && l.code === code) return l;
+    }
+    return null;
+  }
   async listAllLocations(tenantId: TenantId): Promise<LocationNode[]> {
     return [...this.locations.values()].filter((l) => l.tenant_id === tenantId);
   }
