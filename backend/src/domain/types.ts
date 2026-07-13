@@ -149,6 +149,28 @@ export interface StoredAttendanceEvent extends AttendanceEvent {
   timestamps: EvidenceTimestamps & { server_received_at: string };
 }
 
+/** c1-entities/track-chunk.schema.json — append-only evidence (v0.7.0). */
+export interface TrackPoint {
+  lat: number;
+  lng: number;
+  t: string; // device wall time of the fix
+  accuracy_m?: number;
+  is_mock?: boolean;
+}
+
+export interface TrackChunk {
+  id: string;
+  dc_user_id: string;
+  device_id: string;
+  points: TrackPoint[];
+  timestamps: EvidenceTimestamps;
+}
+
+export interface StoredTrackChunk extends TrackChunk {
+  tenant_id: TenantId;
+  timestamps: EvidenceTimestamps & { server_received_at: string };
+}
+
 /**
  * Derived per (dc, IST date) via COMMUTATIVE merges — earliest START, latest
  * END — so any sync order converges (C3 §3). Status is computed at read time.
@@ -255,7 +277,7 @@ export interface RefreshToken {
   expires_at: string;
 }
 
-export type SyncOpType = "visit.checkin" | "attendance.start" | "attendance.end";
+export type SyncOpType = "visit.checkin" | "attendance.start" | "attendance.end" | "track.chunk";
 
 /** C3 §2 batch envelope (subset typing; ajv on op payloads is the gate). */
 export interface SyncOp {

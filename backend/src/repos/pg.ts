@@ -21,6 +21,8 @@ import type {
   Device,
   LocationNode,
   StoredAttendanceEvent,
+  StoredTrackChunk,
+  TrackPoint,
   OpDisposition,
   QuarantinedOp,
   RefreshToken,
@@ -439,6 +441,28 @@ export class PgRepos implements Repos {
       started_at: r.started_at ? (r.started_at as Date).toISOString() : null,
       ended_at: r.ended_at ? (r.ended_at as Date).toISOString() : null,
     };
+  }
+
+  // --- GPS track (v0.7.0; append-only jsonb chunks — row-per-point partitioning is the M2 scale step)
+  async insertTrackChunkIfAbsent(c: StoredTrackChunk): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO track_chunks (id, tenant_id, dc_user_id, device_id, points,
+                                 device_wall_time, monotonic_ms, server_received_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
+      [c.id, c.tenant_id, c.dc_user_id, c.device_id, JSON.stringify(c.points),
+       c.timestamps.device_wall_time, c.timestamps.monotonic_ms, c.timestamps.server_received_at],
+    );
+  }
+  async listTrackPointsForDcDate(tenantId: TenantId, dcUserId: string, istDate: string): Promise<TrackPoint[]> {
+    const { rows } = await this.pool.query(
+      `SELECT p.point FROM track_chunks c,
+              LATERAL jsonb_array_elements(c.points) AS p(point)
+       WHERE c.tenant_id = $1 AND c.dc_user_id = $2
+         AND ((p.point->>'t')::timestamptz AT TIME ZONE 'Asia/Kolkata')::date = $3::date
+       ORDER BY p.point->>'t'`,
+      [tenantId, dcUserId, istDate],
+    );
+    return (rows as Row[]).map((r) => r.point as TrackPoint);
   }
 
   // --- CSP assignment mutations (design 0001 §6; effective-dating, not history edits)

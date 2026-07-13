@@ -23,13 +23,15 @@ import type {
   OpDisposition,
   Principal,
   StoredAttendanceEvent,
+  StoredTrackChunk,
+  TrackChunk,
   StoredCheckInEvent,
   SyncBatch,
   Visit,
 } from "../domain/types.js";
 import type { Repos } from "../repos/types.js";
 import { haversineMeters, istDateOf } from "../geo.js";
-import { ajvErrorStrings, validateAttendanceEvent, validateCheckinEvent } from "../validation/schemas.js";
+import { ajvErrorStrings, validateAttendanceEvent, validateCheckinEvent, validateTrackChunk } from "../validation/schemas.js";
 
 export type Clock = () => Date;
 
@@ -108,6 +110,21 @@ async function applyNewOp(
   // Dispatch by op type (C3 v0.3.0). Unknown types quarantine, never drop.
   if (opType === "attendance.start" || opType === "attendance.end") {
     return applyAttendanceOp(repos, principal, opId, opType, payload, clock, quarantine);
+  }
+  if (opType === "track.chunk") {
+    if (!validateTrackChunk(payload)) {
+      return quarantine("SCHEMA_INVALID", ajvErrorStrings(validateTrackChunk));
+    }
+    const chunk = payload as TrackChunk;
+    const stored: StoredTrackChunk = {
+      ...chunk,
+      tenant_id: tenant,
+      timestamps: { ...chunk.timestamps, server_received_at: clock().toISOString() },
+    };
+    // Append-only raw evidence; daily km is derived at READ time from the full
+    // sorted point set (src/distance.ts), so chunk arrival order is irrelevant.
+    await repos.insertTrackChunkIfAbsent(stored);
+    return { op_id: opId, result: "accepted" };
   }
   if (opType !== "visit.checkin") {
     return quarantine("UNSUPPORTED_TYPE", [`unknown op type "${opType}"`]);

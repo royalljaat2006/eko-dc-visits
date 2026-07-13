@@ -126,11 +126,49 @@ async function main(): Promise<void> {
     },
   });
 
+  // Duty-session GPS track: interpolated route home-ish -> CSP1 -> CSP2 -> CSP3
+  // (track_straightline_v0 demo data; ~17 km given the fixture geography).
+  const trackPoints: Array<{ lat: number; lng: number; t: string; accuracy_m: number }> = [];
+  const waypoints = [
+    { lat: l1.coordinates.lat - 0.02, lng: l1.coordinates.lng - 0.02 }, // start of day, en route
+    l1.coordinates,
+    l2.coordinates,
+    l3.coordinates,
+  ];
+  let minuteCursor = 9 * 60 + 30; // 09:30 IST
+  for (let leg = 1; leg < waypoints.length; leg++) {
+    const a = waypoints[leg - 1]!;
+    const b = waypoints[leg]!;
+    for (let i = 0; i <= 5; i++) {
+      const f = i / 5;
+      const total = minuteCursor + i * 12;
+      trackPoints.push({
+        lat: a.lat + (b.lat - a.lat) * f,
+        lng: a.lng + (b.lng - a.lng) * f,
+        t: wall(Math.floor(total / 60), total % 60),
+        accuracy_m: 15,
+      });
+    }
+    minuteCursor += 75;
+  }
+  const trackOp = {
+    op_id: randomUUID(),
+    seq: 5,
+    type: "track.chunk" as const,
+    payload: {
+      id: randomUUID(),
+      dc_user_id: dc.user_id,
+      device_id: dc.device_id,
+      points: trackPoints,
+      timestamps: { device_wall_time: wall(18, 1), monotonic_ms: 5_000 },
+    },
+  };
+
   const batch = {
     batch_id: randomUUID(),
     device_id: dc.device_id,
     seq_from: 1,
-    seq_to: 5,
+    seq_to: 6,
     client_time: new Date().toISOString(),
     app_version: "0.1.0-sim",
     contract_version: "0.3.0",
@@ -148,6 +186,8 @@ async function main(): Promise<void> {
       mkOp(3, l3, stop3.id, { lat: l3.coordinates.lat, lng: l3.coordinates.lng, accuracy_m: 35, provider: "fused" }),
       // End Day at 18:00 IST — tracking hard stop (DPDP)
       mkAttendance(4, "END", wall(18, 0)),
+      // The day's GPS track (tier T3 in the real client; one chunk here)
+      trackOp,
     ],
   };
 
@@ -166,6 +206,7 @@ async function main(): Promise<void> {
   );
   check(first.body.results[3]!.result === "accepted", `checkin 3 → ${first.body.results[3]!.result} (expected accepted)`);
   check(first.body.results[4]!.result === "accepted", `attendance.end → ${first.body.results[4]!.result}`);
+  check(first.body.results[5]!.result === "accepted", `track.chunk (${trackPoints.length} pts) → ${first.body.results[5]!.result}`);
 
   console.log(`\nre-submitting the SAME batch (lost-ack replay)…`);
   const second = await api<{ results: Array<{ result: string }> }>(`/sync/batches`, { method: "POST", body: JSON.stringify(batch) }, dc.token);
@@ -192,7 +233,7 @@ async function main(): Promise<void> {
   // ---- National Head: attendance board (design 0001 §7) --------------------
   console.log(`\nNational Head attendance board…`);
   const nh = await login("9800000005"); // national head Arjun
-  const board = await api<{ items: Array<{ dc_name: string; status: string; started_at: string | null; ended_at: string | null }> }>(
+  const board = await api<{ items: Array<{ dc_name: string; status: string; started_at: string | null; ended_at: string | null; km_today: number }> }>(
     `/dashboard/attendance?date=${today}`,
     {},
     nh.token,
@@ -201,9 +242,11 @@ async function main(): Promise<void> {
   const statuses = new Map(board.body.items.map((r) => [r.dc_name, r.status]));
   check(statuses.get("Asha Kumari") === "ENDED", `Asha Kumari → ${statuses.get("Asha Kumari")} (expected ENDED)`);
   check(statuses.get("Vikram Singh") === "NOT_STARTED", `Vikram Singh → ${statuses.get("Vikram Singh")} (expected NOT_STARTED)`);
-  console.log(`\n  DC             STATUS        START(UTC)             END(UTC)`);
+  const ashaKm = board.body.items.find((r) => r.dc_name === "Asha Kumari")?.km_today ?? 0;
+  check(ashaKm > 5, `Asha's provisional km_today = ${ashaKm} (expected > 5 from the simulated route)`);
+  console.log(`\n  DC             STATUS        KM(prov)   START(UTC)             END(UTC)`);
   for (const r of board.body.items) {
-    console.log(`  ${r.dc_name.padEnd(15)}${r.status.padEnd(14)}${(r.started_at ?? "—").padEnd(23)}${r.ended_at ?? "—"}`);
+    console.log(`  ${r.dc_name.padEnd(15)}${r.status.padEnd(14)}${String(r.km_today).padEnd(11)}${(r.started_at ?? "—").padEnd(23)}${r.ended_at ?? "—"}`);
   }
 
   if (failures > 0) {

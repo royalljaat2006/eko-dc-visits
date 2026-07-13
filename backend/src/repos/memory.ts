@@ -9,6 +9,8 @@ import type {
   Device,
   LocationNode,
   StoredAttendanceEvent,
+  StoredTrackChunk,
+  TrackPoint,
   OpDisposition,
   QuarantinedOp,
   RefreshToken,
@@ -44,6 +46,7 @@ export class MemoryRepos implements Repos {
   private cspAssignments = new Map<string, CspAssignment>();
   private checkinEvents = new Map<string, StoredCheckInEvent>();
   private attendanceEvents = new Map<string, StoredAttendanceEvent>();
+  private trackChunks = new Map<string, StoredTrackChunk>();
   private attendanceDays = new Map<string, AttendanceDay>(); // key tenant:dc:istDate
   private visits = new Map<string, Visit>();
   private opDispositions = new Map<string, OpDisposition>();
@@ -222,6 +225,21 @@ export class MemoryRepos implements Repos {
   }
   async getAttendanceDay(tenantId: TenantId, dcUserId: string, istDate: string): Promise<AttendanceDay | null> {
     return this.attendanceDays.get(`${tenantId}:${dcUserId}:${istDate}`) ?? null;
+  }
+
+  // --- GPS track (v0.7.0; append-only; km derived at read time)
+  async insertTrackChunkIfAbsent(c: StoredTrackChunk): Promise<void> {
+    const k = this.key(c.tenant_id, c.id);
+    if (!this.trackChunks.has(k)) this.trackChunks.set(k, c);
+  }
+  async listTrackPointsForDcDate(tenantId: TenantId, dcUserId: string, istDate: string): Promise<TrackPoint[]> {
+    const IST_OFFSET_MS = 5.5 * 3600 * 1000;
+    const istDateOf = (iso: string) => new Date(new Date(iso).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+    return [...this.trackChunks.values()]
+      .filter((c) => c.tenant_id === tenantId && c.dc_user_id === dcUserId)
+      .flatMap((c) => c.points)
+      .filter((p) => istDateOf(p.t) === istDate)
+      .sort((a, b) => a.t.localeCompare(b.t));
   }
 
   // --- CSP assignment mutations (design 0001 §6)

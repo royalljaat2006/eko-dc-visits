@@ -41214,6 +41214,35 @@ var init_pg = __esm({
           ended_at: r.ended_at ? r.ended_at.toISOString() : null
         };
       }
+      // --- GPS track (v0.7.0; append-only jsonb chunks — row-per-point partitioning is the M2 scale step)
+      async insertTrackChunkIfAbsent(c) {
+        await this.pool.query(
+          `INSERT INTO track_chunks (id, tenant_id, dc_user_id, device_id, points,
+                                 device_wall_time, monotonic_ms, server_received_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
+          [
+            c.id,
+            c.tenant_id,
+            c.dc_user_id,
+            c.device_id,
+            JSON.stringify(c.points),
+            c.timestamps.device_wall_time,
+            c.timestamps.monotonic_ms,
+            c.timestamps.server_received_at
+          ]
+        );
+      }
+      async listTrackPointsForDcDate(tenantId, dcUserId, istDate) {
+        const { rows } = await this.pool.query(
+          `SELECT p.point FROM track_chunks c,
+              LATERAL jsonb_array_elements(c.points) AS p(point)
+       WHERE c.tenant_id = $1 AND c.dc_user_id = $2
+         AND ((p.point->>'t')::timestamptz AT TIME ZONE 'Asia/Kolkata')::date = $3::date
+       ORDER BY p.point->>'t'`,
+          [tenantId, dcUserId, istDate]
+        );
+        return rows.map((r) => r.point);
+      }
       // --- CSP assignment mutations (design 0001 §6; effective-dating, not history edits)
       async endActiveCspAssignment(tenantId, cspLocationId, validTo) {
         const { rows } = await this.pool.query(
@@ -41877,6 +41906,40 @@ var csp_assignment_schema_default = {
   additionalProperties: false
 };
 
+// contracts/c1-entities/track-chunk.schema.json
+var track_chunk_schema_default = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://contracts.eko-dc-visits/c1/track-chunk.schema.json",
+  title: "TrackChunk (evidence; append-only; sync op track.chunk, tier T3)",
+  type: "object",
+  required: ["id", "dc_user_id", "device_id", "points", "timestamps"],
+  properties: {
+    id: { $ref: "common.schema.json#/$defs/uuid" },
+    dc_user_id: { $ref: "common.schema.json#/$defs/uuid" },
+    device_id: { $ref: "common.schema.json#/$defs/uuid" },
+    points: {
+      type: "array",
+      minItems: 1,
+      maxItems: 500,
+      items: {
+        type: "object",
+        required: ["lat", "lng", "t"],
+        properties: {
+          lat: { type: "number", minimum: -90, maximum: 90 },
+          lng: { type: "number", minimum: -180, maximum: 180 },
+          t: { type: "string", format: "date-time", description: "Device wall time of the fix" },
+          accuracy_m: { type: "number", minimum: 0 },
+          is_mock: { type: "boolean" }
+        },
+        additionalProperties: false
+      }
+    },
+    timestamps: { $ref: "common.schema.json#/$defs/evidenceTimestamps" }
+  },
+  additionalProperties: false,
+  description: "Raw duty-session GPS points from the adaptive tracker (Start\u2192End Day only, DPDP). Stored append-only; daily km is DERIVED at read time from all points sorted by t (order-independent, preserving C3 \xA73 convergence) using distance algorithm track_straightline_v0 \u2014 PROVISIONAL, not for reimbursement (C7 distance rules; OSRM map-matching + dispute workflow are the M2 financial layer). Wire compaction (delta encoding) is an M2 optimization."
+};
+
 // backend/src/validation/schemas.ts
 var import_meta = {};
 var addFormats = import_ajv_formats.default.default ?? import_ajv_formats.default;
@@ -41899,7 +41962,8 @@ for (const schema of [
   attendance_event_schema_default,
   bank_schema_default,
   circle_schema_default,
-  csp_assignment_schema_default
+  csp_assignment_schema_default,
+  track_chunk_schema_default
 ]) {
   ajv.addSchema(schema);
 }
@@ -41911,6 +41975,7 @@ function getValidator(ref) {
 }
 var validateCheckinEvent = getValidator("checkin-event.schema.json");
 var validateAttendanceEvent = getValidator("attendance-event.schema.json");
+var validateTrackChunk = getValidator("track-chunk.schema.json");
 var validateLocation = getValidator("location.schema.json");
 var validateUser = getValidator("user-device.schema.json#/$defs/user");
 var validateDevice = getValidator("user-device.schema.json#/$defs/device");
@@ -41967,6 +42032,19 @@ async function applyNewOp(repos, principal, batch, opId, opType, payload, clock)
   };
   if (opType === "attendance.start" || opType === "attendance.end") {
     return applyAttendanceOp(repos, principal, opId, opType, payload, clock, quarantine);
+  }
+  if (opType === "track.chunk") {
+    if (!validateTrackChunk(payload)) {
+      return quarantine("SCHEMA_INVALID", ajvErrorStrings(validateTrackChunk));
+    }
+    const chunk = payload;
+    const stored2 = {
+      ...chunk,
+      tenant_id: tenant,
+      timestamps: { ...chunk.timestamps, server_received_at: clock().toISOString() }
+    };
+    await repos.insertTrackChunkIfAbsent(stored2);
+    return { op_id: opId, result: "accepted" };
   }
   if (opType !== "visit.checkin") {
     return quarantine("UNSUPPORTED_TYPE", [`unknown op type "${opType}"`]);
@@ -43326,6 +43404,25 @@ function computeScorecard(dc, visits, attendanceToday, daysWithStart) {
   };
 }
 
+// backend/src/distance.ts
+init_geo();
+var MAX_PLAUSIBLE_KMH = 800;
+function kmForPoints(points) {
+  if (points.length < 2) return 0;
+  const sorted = [...points].sort((a, b) => a.t.localeCompare(b.t));
+  let meters = 0;
+  for (let i = 1; i < sorted.length; i++) {
+    const a = sorted[i - 1];
+    const b = sorted[i];
+    const d = haversineMeters(a, b);
+    const dtH = (new Date(b.t).getTime() - new Date(a.t).getTime()) / 36e5;
+    if (dtH <= 0) continue;
+    if (d / 1e3 / dtH > MAX_PLAUSIBLE_KMH) continue;
+    meters += d;
+  }
+  return Math.round(meters / 100) / 10;
+}
+
 // backend/src/server.ts
 var DEV_OTP = "000000";
 var OTP_CODE = process.env.PILOT_OTP ?? DEV_OTP;
@@ -43502,14 +43599,19 @@ function buildServer(deps) {
         const dcs = await repos.listDcUsers(scope.tenant_id, dcScope);
         const items = await Promise.all(
           dcs.map(async (dc) => {
-            const day2 = await repos.getAttendanceDay(scope.tenant_id, dc.id, q.date);
+            const [day2, points] = await Promise.all([
+              repos.getAttendanceDay(scope.tenant_id, dc.id, q.date),
+              repos.listTrackPointsForDcDate(scope.tenant_id, dc.id, q.date)
+            ]);
             const status = day2?.ended_at ? "ENDED" : day2?.started_at ? "ON_DUTY" : "NOT_STARTED";
             return {
               dc_user_id: dc.id,
               dc_name: dc.name,
               status,
               started_at: day2?.started_at ?? null,
-              ended_at: day2?.ended_at ?? null
+              ended_at: day2?.ended_at ?? null,
+              km_today: kmForPoints(points)
+              // track_straightline_v0 — PROVISIONAL (C7)
             };
           })
         );
@@ -43683,13 +43785,16 @@ function buildServer(deps) {
             status: b.status,
             csp_count: csps.filter((c) => c.bank_id === b.id).length
           })),
-          assignments_by_dc: [...usersById.values()].map((dc) => ({
-            dc_user_id: dc.id,
-            dc_name: dc.name,
-            csp_count: assignments.filter((a) => a.dc_user_id === dc.id).length,
-            attendance: statusOf(dc.id),
-            visits_today: visits.filter((v) => v.dc_user_id === dc.id).length
-          }))
+          assignments_by_dc: await Promise.all(
+            [...usersById.values()].map(async (dc) => ({
+              dc_user_id: dc.id,
+              dc_name: dc.name,
+              csp_count: assignments.filter((a) => a.dc_user_id === dc.id).length,
+              attendance: statusOf(dc.id),
+              visits_today: visits.filter((v) => v.dc_user_id === dc.id).length,
+              km_today: kmForPoints(await repos.listTrackPointsForDcDate(scope.tenant_id, dc.id, q.date))
+            }))
+          )
         });
       });
       api.get("/dashboard/scorecard", { preHandler: requireAuth }, async (req, reply) => {
@@ -43751,6 +43856,7 @@ var MemoryRepos = class {
   cspAssignments = /* @__PURE__ */ new Map();
   checkinEvents = /* @__PURE__ */ new Map();
   attendanceEvents = /* @__PURE__ */ new Map();
+  trackChunks = /* @__PURE__ */ new Map();
   attendanceDays = /* @__PURE__ */ new Map();
   // key tenant:dc:istDate
   visits = /* @__PURE__ */ new Map();
@@ -43892,6 +43998,16 @@ var MemoryRepos = class {
   }
   async getAttendanceDay(tenantId, dcUserId, istDate) {
     return this.attendanceDays.get(`${tenantId}:${dcUserId}:${istDate}`) ?? null;
+  }
+  // --- GPS track (v0.7.0; append-only; km derived at read time)
+  async insertTrackChunkIfAbsent(c) {
+    const k = this.key(c.tenant_id, c.id);
+    if (!this.trackChunks.has(k)) this.trackChunks.set(k, c);
+  }
+  async listTrackPointsForDcDate(tenantId, dcUserId, istDate) {
+    const IST_OFFSET_MS3 = 5.5 * 3600 * 1e3;
+    const istDateOf2 = (iso) => new Date(new Date(iso).getTime() + IST_OFFSET_MS3).toISOString().slice(0, 10);
+    return [...this.trackChunks.values()].filter((c) => c.tenant_id === tenantId && c.dc_user_id === dcUserId).flatMap((c) => c.points).filter((p) => istDateOf2(p.t) === istDate).sort((a, b) => a.t.localeCompare(b.t));
   }
   // --- CSP assignment mutations (design 0001 §6)
   async endActiveCspAssignment(tenantId, cspLocationId, validTo) {

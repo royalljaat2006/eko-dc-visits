@@ -27,7 +27,7 @@ export function renderAttendanceView(root: HTMLElement): () => void {
       <p id="att-summary" class="status"></p>
       <table class="visits">
         <thead>
-          <tr><th>DC</th><th>Status</th><th>Start (IST)</th><th>End (IST)</th></tr>
+          <tr><th>DC</th><th>Status</th><th title="Provisional — GPS straight-line estimate, not for reimbursement">KM today</th><th>Start (IST)</th><th>End (IST)</th></tr>
         </thead>
         <tbody id="att-body"></tbody>
       </table>
@@ -56,13 +56,13 @@ export function renderAttendanceView(root: HTMLElement): () => void {
     const counts = { ON_DUTY: 0, ENDED: 0, NOT_STARTED: 0 };
     for (const r of rows) counts[r.status] += 1;
     summaryEl.textContent =
-      rows.length === 0 ? '' : `${rows.length} DCs — ${counts.ON_DUTY} on duty · ${counts.ENDED} ended · ${counts.NOT_STARTED} not started`;
+      rows.length === 0 ? '' : `${rows.length} DCs — ${counts.ON_DUTY} on duty · ${counts.ENDED} ended · ${counts.NOT_STARTED} not started · ${Math.round(rows.reduce((s, r) => s + (r.km_today ?? 0), 0) * 10) / 10} km covered (provisional)`;
 
     tbody.replaceChildren(
       ...rows.map((r) => {
         const tr = document.createElement('tr');
         const chip = attendanceChip(r.status);
-        tr.append(td(r.dc_name), tdChip(chip.label, chip.className, chip.title), td(formatIstDateTime(r.started_at)), td(formatIstDateTime(r.ended_at)));
+        tr.append(td(r.dc_name), tdChip(chip.label, chip.className, chip.title), td(r.km_today === undefined ? '—' : `${r.km_today} km`), td(formatIstDateTime(r.started_at)), td(formatIstDateTime(r.ended_at)));
         return tr;
       }),
     );

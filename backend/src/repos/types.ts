@@ -9,6 +9,8 @@ import type {
   Device,
   LocationNode,
   StoredAttendanceEvent,
+  StoredTrackChunk,
+  TrackPoint,
   OpDisposition,
   QuarantinedOp,
   RefreshToken,
@@ -109,6 +111,12 @@ export interface Repos {
   // CSP assignment mutations (design 0001 §6 — end-old + start-new, never edit)
   /** Ends the active assignment for a CSP (sets valid_to). Returns the ended assignment's id, or null if none was active. */
   endActiveCspAssignment(tenantId: TenantId, cspLocationId: string, validTo: string): Promise<string | null>;
+
+  // GPS track (v0.7.0; evidence append-only; km derived at READ time so
+  // ingest order never matters — C3 §3 convergence)
+  insertTrackChunkIfAbsent(c: StoredTrackChunk): Promise<void>;
+  /** All points for a DC whose fix time falls on the IST date, sorted by t. */
+  listTrackPointsForDcDate(tenantId: TenantId, dcUserId: string, istDate: string): Promise<TrackPoint[]>;
 
   // evidence — append-only (no update methods, ever)
   insertCheckinEventIfAbsent(e: StoredCheckInEvent): Promise<void>;

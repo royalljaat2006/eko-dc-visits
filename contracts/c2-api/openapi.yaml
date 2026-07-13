@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Eko DC Visit Management API
-  version: 0.6.0
+  version: 0.7.0
   description: >
     Contract-first spec (M0 scope). Hand-written; code conforms to this, never the reverse.
     Server validates its own responses against this spec in test mode. All endpoints are
@@ -223,6 +223,7 @@ paths:
                         status: { type: string, enum: [NOT_STARTED, ON_DUTY, ENDED] }
                         started_at: { type: [string, 'null'], format: date-time }
                         ended_at: { type: [string, 'null'], format: date-time }
+                        km_today: { type: number, description: Daily distance from GPS track, track_straightline_v0 — PROVISIONAL, never for reimbursement (C7) }
   /dashboard/visits:
     get:
       tags: [dashboard]
@@ -369,6 +370,7 @@ paths:
                         csp_count: { type: integer }
                         attendance: { type: string, enum: [NOT_STARTED, ON_DUTY, ENDED] }
                         visits_today: { type: integer }
+                        km_today: { type: number, description: PROVISIONAL daily km (track_straightline_v0) }
         '403': { $ref: '#/components/responses/Problem' }
   /dashboard/scorecard:
     get:

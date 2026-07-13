@@ -12,6 +12,7 @@ import { applySyncBatch, type Clock } from "./sync/engine.js";
 import { DEV_TOKEN_CONFIG, newRefreshToken, signAccessToken, verifyAccessToken, type TokenConfig } from "./auth/tokens.js";
 import { istDateOf } from "./geo.js";
 import { computeScorecard } from "./scorecard.js";
+import { kmForPoints } from "./distance.js";
 
 /** Route inventory consumed by contracts:check (paths relative to servers[0].url = /api/v1). */
 export const IMPLEMENTED_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
@@ -280,7 +281,10 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         const dcs = await repos.listDcUsers(scope.tenant_id, dcScope);
         const items = await Promise.all(
           dcs.map(async (dc) => {
-            const day = await repos.getAttendanceDay(scope.tenant_id, dc.id, q.date!);
+            const [day, points] = await Promise.all([
+              repos.getAttendanceDay(scope.tenant_id, dc.id, q.date!),
+              repos.listTrackPointsForDcDate(scope.tenant_id, dc.id, q.date!),
+            ]);
             const status = day?.ended_at ? "ENDED" : day?.started_at ? "ON_DUTY" : "NOT_STARTED";
             return {
               dc_user_id: dc.id,
@@ -288,6 +292,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
               status,
               started_at: day?.started_at ?? null,
               ended_at: day?.ended_at ?? null,
+              km_today: kmForPoints(points), // track_straightline_v0 — PROVISIONAL (C7)
             };
           }),
         );
@@ -490,13 +495,16 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
             status: b.status,
             csp_count: csps.filter((c) => c.bank_id === b.id).length,
           })),
-          assignments_by_dc: [...usersById.values()].map((dc) => ({
-            dc_user_id: dc.id,
-            dc_name: dc.name,
-            csp_count: assignments.filter((a) => a.dc_user_id === dc.id).length,
-            attendance: statusOf(dc.id),
-            visits_today: visits.filter((v) => v.dc_user_id === dc.id).length,
-          })),
+          assignments_by_dc: await Promise.all(
+            [...usersById.values()].map(async (dc) => ({
+              dc_user_id: dc.id,
+              dc_name: dc.name,
+              csp_count: assignments.filter((a) => a.dc_user_id === dc.id).length,
+              attendance: statusOf(dc.id),
+              visits_today: visits.filter((v) => v.dc_user_id === dc.id).length,
+              km_today: kmForPoints(await repos.listTrackPointsForDcDate(scope.tenant_id, dc.id, q.date!)),
+            })),
+          ),
         });
       });
 

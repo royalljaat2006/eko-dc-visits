@@ -45,3 +45,10 @@
 - C2: + POST /circle/csp-assignments/import (Circle Head/admin): spreadsheet rows
   (csp_code, dc_phone) applied via the audited end-old + start-new path; per-row
   accepted/rejected-with-reason results (staged-import doctrine, design 0001 §8).
+
+## v0.7.0 — GPS track chunks + daily km visibility
+- C1: + track-chunk.schema.json (raw duty-session points; append-only; daily km
+  derived at read time — order-independent, convergence-preserving).
+- C3: + track.chunk op type (tier T3).
+- C2: attendance board rows + overview per-DC rows gain km_today
+  (track_straightline_v0 — PROVISIONAL, never for reimbursement per C7/ADR-0005).

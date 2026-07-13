@@ -32,7 +32,7 @@ export function renderOverviewView(root: HTMLElement): () => void {
 
       <h2 class="section-title">DCs</h2>
       <table class="visits">
-        <thead><tr><th>DC</th><th>Attendance</th><th>CSPs assigned</th><th>Visits today</th></tr></thead>
+        <thead><tr><th>DC</th><th>Attendance</th><th>CSPs assigned</th><th>Visits today</th><th title="Provisional — GPS straight-line estimate, not for reimbursement">KM today</th></tr></thead>
         <tbody id="ov-dcs"></tbody>
       </table>
 
@@ -104,7 +104,7 @@ export function renderOverviewView(root: HTMLElement): () => void {
       ...d.assignments_by_dc.map((r) => {
         const tr = document.createElement('tr');
         const chip = attendanceChip(r.attendance);
-        tr.append(td(r.dc_name), tdChip(chip.label, chip.className, chip.title), td(String(r.csp_count)), td(String(r.visits_today)));
+        tr.append(td(r.dc_name), tdChip(chip.label, chip.className, chip.title), td(String(r.csp_count)), td(String(r.visits_today)), td(r.km_today === undefined ? '—' : `${r.km_today} km`));
         return tr;
       }),
     );

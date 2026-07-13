@@ -18,6 +18,7 @@ import attendanceEventSchema from "../../../contracts/c1-entities/attendance-eve
 import bankSchema from "../../../contracts/c1-entities/bank.schema.json" with { type: "json" };
 import circleSchema from "../../../contracts/c1-entities/circle.schema.json" with { type: "json" };
 import cspAssignmentSchema from "../../../contracts/c1-entities/csp-assignment.schema.json" with { type: "json" };
+import trackChunkSchema from "../../../contracts/c1-entities/track-chunk.schema.json" with { type: "json" };
 
 // NodeNext/CJS interop: ajv-formats ships `module.exports.default = fn`.
 type AddFormats = (ajv: InstanceType<typeof Ajv2020>) => void;
@@ -47,6 +48,7 @@ for (const schema of [
   bankSchema,
   circleSchema,
   cspAssignmentSchema,
+  trackChunkSchema,
 ]) {
   ajv.addSchema(schema as Record<string, unknown>);
 }
@@ -61,6 +63,7 @@ function getValidator(ref: string): ValidateFunction {
 
 export const validateCheckinEvent = getValidator("checkin-event.schema.json");
 export const validateAttendanceEvent = getValidator("attendance-event.schema.json");
+export const validateTrackChunk = getValidator("track-chunk.schema.json");
 export const validateLocation = getValidator("location.schema.json");
 export const validateUser = getValidator("user-device.schema.json#/$defs/user");
 export const validateDevice = getValidator("user-device.schema.json#/$defs/device");

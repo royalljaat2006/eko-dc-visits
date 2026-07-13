@@ -107,6 +107,8 @@ export interface AttendanceRow {
   status: AttendanceStatus;
   started_at?: string | null;
   ended_at?: string | null;
+  /** track_straightline_v0 — PROVISIONAL, never for reimbursement (C7). */
+  km_today?: number;
 }
 export interface AttendanceResponse {
   items: AttendanceRow[];
@@ -394,6 +396,7 @@ export interface OverviewResponse {
     csp_count: number;
     attendance: AttendanceStatus;
     visits_today: number;
+    km_today?: number;
   }>;
 }
 

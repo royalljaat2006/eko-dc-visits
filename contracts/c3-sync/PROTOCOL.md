@@ -31,7 +31,7 @@ Breaking changes after M1 require an ADR + adoption tickets for all impacted lan
 }
 ```
 
-Op types (v0.3.0): `visit.checkin`, `attendance.start`, `attendance.end`. (M1 adds: `visit.checkout`,
+Op types (v0.7.0): `visit.checkin`, `attendance.start`, `attendance.end`, `track.chunk` (T3). (M1 adds: `visit.checkout`,
 `visit.photo_meta`, `visit.outcome`, `form.submission`, `track.chunk`, `complaint.*`.)
 Unknown op types are QUARANTINED, never dropped.
 
