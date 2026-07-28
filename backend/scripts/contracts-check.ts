@@ -34,6 +34,7 @@ const ok = (msg: string): void => console.log(`  ✓ ${msg}`);
 // ---- 1. fixtures vs C1 schemas ---------------------------------------------
 console.log("fixtures vs C1 schemas:");
 const fixtureValidators: Record<string, ValidateFunction | null> = {
+  "../circle-1a85-roster.json": null,
   "banks.json": validateBank,
   "locations.json": validateLocation,
   "users.json": validateUser,

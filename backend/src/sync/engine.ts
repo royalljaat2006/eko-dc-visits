@@ -107,6 +107,17 @@ async function applyNewOp(
     return { op_id: opId, result: "quarantined" };
   };
 
+  // Spec §4 (v0.8.0): a Circle Head may submit only their OWN attendance.
+  if (principal.role === "CIRCLE_HEAD" && !opType.startsWith("attendance.")) {
+    return quarantine("UNSUPPORTED_TYPE", [`role CIRCLE_HEAD may only submit attendance evidence (got "${opType}")`]);
+  }
+  // Impersonation hardening (v0.8.0): every evidence payload must carry the
+  // submitting principal's own dc_user_id. Deterministic per op → convergence-safe.
+  const claimedDc = (payload as { dc_user_id?: unknown } | null)?.dc_user_id;
+  if (typeof claimedDc === "string" && claimedDc !== principal.user_id) {
+    return quarantine("UNKNOWN_REFERENCE", [`payload dc_user_id ${claimedDc} does not match the authenticated user`]);
+  }
+
   // Dispatch by op type (C3 v0.3.0). Unknown types quarantine, never drop.
   if (opType === "attendance.start" || opType === "attendance.end") {
     return applyAttendanceOp(repos, principal, opId, opType, payload, clock, quarantine);

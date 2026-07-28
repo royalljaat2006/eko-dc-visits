@@ -40811,7 +40811,10 @@ function userFromRow(r) {
     employee_code: r.employee_code ?? void 0,
     role: r.role,
     scope_location_id: r.scope_location_id,
-    status: r.status
+    status: r.status,
+    dashboard_url: r.dashboard_url ?? void 0,
+    home_lat: r.home_lat ?? void 0,
+    home_lng: r.home_lng ?? void 0
   };
 }
 function locationFromRow(r) {
@@ -40830,6 +40833,7 @@ function locationFromRow(r) {
     coordinates: { lat: r.coord_lat, lng: r.coord_lng },
     radius_m: r.radius_m,
     coordinate_confidence: r.coordinate_confidence,
+    csp_profile: r.csp_profile ?? void 0,
     status: r.status,
     updated_at: r.updated_at.toISOString()
   };
@@ -40851,9 +40855,21 @@ var init_pg = __esm({
       // --- users
       async insertUser(u) {
         await this.pool.query(
-          `INSERT INTO users (id, tenant_id, name, phone, employee_code, role, scope_location_id, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
-          [u.id, u.tenant_id, u.name, u.phone, u.employee_code ?? null, u.role, u.scope_location_id ?? null, u.status]
+          `INSERT INTO users (id, tenant_id, name, phone, employee_code, role, scope_location_id, status, dashboard_url, home_lat, home_lng)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (id) DO NOTHING`,
+          [
+            u.id,
+            u.tenant_id,
+            u.name,
+            u.phone,
+            u.employee_code ?? null,
+            u.role,
+            u.scope_location_id ?? null,
+            u.status,
+            u.dashboard_url ?? null,
+            u.home_lat ?? null,
+            u.home_lng ?? null
+          ]
         );
       }
       async getUserById(tenantId, id) {
@@ -41213,6 +41229,91 @@ var init_pg = __esm({
           started_at: r.started_at ? r.started_at.toISOString() : null,
           ended_at: r.ended_at ? r.ended_at.toISOString() : null
         };
+      }
+      // --- CSP change requests (v0.8.0 — admin records)
+      async insertCspChangeRequest(r) {
+        await this.pool.query(
+          `INSERT INTO csp_change_requests (id, tenant_id, csp_location_id, requested_by_user_id, changes, status, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING`,
+          [r.id, r.tenant_id, r.csp_location_id, r.requested_by_user_id, JSON.stringify(r.changes), r.status, r.created_at]
+        );
+      }
+      crFromRow(r) {
+        return {
+          id: r.id,
+          tenant_id: r.tenant_id,
+          csp_location_id: r.csp_location_id,
+          requested_by_user_id: r.requested_by_user_id,
+          changes: r.changes,
+          status: r.status,
+          rejection_reason: r.rejection_reason ?? void 0,
+          decided_by_user_id: r.decided_by_user_id ?? void 0,
+          decided_at: r.decided_at ? r.decided_at.toISOString() : void 0,
+          created_at: r.created_at.toISOString()
+        };
+      }
+      async getCspChangeRequest(tenantId, id) {
+        const { rows } = await this.pool.query(`SELECT * FROM csp_change_requests WHERE tenant_id = $1 AND id = $2`, [tenantId, id]);
+        return rows[0] ? this.crFromRow(rows[0]) : null;
+      }
+      async listCspChangeRequests(tenantId, requesterIds, status) {
+        const values = [tenantId];
+        let sql = `SELECT * FROM csp_change_requests WHERE tenant_id = $1`;
+        if (requesterIds !== "ALL") {
+          values.push([...requesterIds]);
+          sql += ` AND requested_by_user_id = ANY($${values.length}::uuid[])`;
+        }
+        if (status !== void 0) {
+          values.push(status);
+          sql += ` AND status = $${values.length}`;
+        }
+        sql += ` ORDER BY created_at DESC`;
+        const { rows } = await this.pool.query(sql, values);
+        return rows.map((r) => this.crFromRow(r));
+      }
+      async decideCspChangeRequest(tenantId, d) {
+        await this.pool.query(
+          `UPDATE csp_change_requests SET status = $3, rejection_reason = $4, decided_by_user_id = $5, decided_at = $6
+       WHERE tenant_id = $1 AND id = $2 AND status = 'PENDING'`,
+          [tenantId, d.id, d.status, d.rejection_reason ?? null, d.decided_by_user_id ?? null, d.decided_at ?? null]
+        );
+      }
+      async updateLocationFields(tenantId, locationId, patch) {
+        const coordsChanged = patch.lat !== void 0 || patch.lng !== void 0;
+        await this.pool.query(
+          `UPDATE locations SET
+         name = COALESCE($3, name),
+         address = COALESCE($4, address),
+         coord_lat = COALESCE($5, coord_lat),
+         coord_lng = COALESCE($6, coord_lng),
+         coordinates = CASE WHEN $7 THEN ST_SetSRID(ST_MakePoint(COALESCE($6, coord_lng), COALESCE($5, coord_lat)),4326)::geography ELSE coordinates END,
+         coordinate_confidence = CASE WHEN $7 THEN 'FIELD_CAPTURED' ELSE coordinate_confidence END,
+         csp_profile = COALESCE(csp_profile, '{}'::jsonb) || COALESCE($8::jsonb, '{}'::jsonb),
+         updated_at = $9
+       WHERE tenant_id = $1 AND id = $2`,
+          [
+            tenantId,
+            locationId,
+            patch.name ?? null,
+            patch.address ?? null,
+            patch.lat ?? null,
+            patch.lng ?? null,
+            coordsChanged,
+            patch.profile ? JSON.stringify(patch.profile) : null,
+            patch.updated_at
+          ]
+        );
+      }
+      async lastVisitDatesForDc(tenantId, dcUserId) {
+        const { rows } = await this.pool.query(
+          `SELECT location_id, MAX(occurred_ist_date) AS d FROM visits
+       WHERE tenant_id = $1 AND dc_user_id = $2 GROUP BY location_id`,
+          [tenantId, dcUserId]
+        );
+        return new Map(rows.map((r) => [
+          r.location_id,
+          typeof r.d === "string" ? r.d : r.d.toISOString().slice(0, 10)
+        ]));
       }
       // --- GPS track (v0.7.0; append-only jsonb chunks — row-per-point partitioning is the M2 scale step)
       async insertTrackChunkIfAbsent(c) {
@@ -41638,6 +41739,13 @@ var location_schema_default = {
       type: "string",
       format: "date-time",
       description: "Server change cursor for delta pull."
+    },
+    csp_profile: {
+      type: "object",
+      description: "CSP master template (spec \xA73.1): gender, csp_mail_id, mobile_number, alternative_mobile_number, relationship_manager, ao, ao_email, branch_email, rbo_email, lho_mail_id, population, etc. Free-form string map so template growth never needs a schema bump.",
+      additionalProperties: {
+        type: "string"
+      }
     }
   },
   additionalProperties: false
@@ -41651,29 +41759,117 @@ var user_device_schema_default = {
   $defs: {
     user: {
       type: "object",
-      required: ["id", "tenant_id", "name", "phone", "role", "status"],
+      required: [
+        "id",
+        "tenant_id",
+        "name",
+        "phone",
+        "role",
+        "status"
+      ],
       properties: {
-        id: { $ref: "common.schema.json#/$defs/uuid" },
-        tenant_id: { $ref: "common.schema.json#/$defs/tenantId" },
-        name: { type: "string" },
-        phone: { type: "string", pattern: "^[6-9][0-9]{9}$", description: "Login identity. PII: field-encrypted at rest." },
-        employee_code: { type: "string" },
-        role: { $ref: "common.schema.json#/$defs/role" },
-        scope_location_id: { oneOf: [{ $ref: "common.schema.json#/$defs/uuid" }, { type: "null" }], description: "Authorization scope node (C6). DC: null (self-scoped via assignments)." },
-        status: { type: "string", enum: ["INVITED", "ACTIVE", "SUSPENDED", "EXITED"], description: "EXITED users are redacted-in-place, never deleted." }
+        id: {
+          $ref: "common.schema.json#/$defs/uuid"
+        },
+        tenant_id: {
+          $ref: "common.schema.json#/$defs/tenantId"
+        },
+        name: {
+          type: "string"
+        },
+        phone: {
+          type: "string",
+          pattern: "^[6-9][0-9]{9}$",
+          description: "Login identity. PII: field-encrypted at rest."
+        },
+        employee_code: {
+          type: "string"
+        },
+        role: {
+          $ref: "common.schema.json#/$defs/role"
+        },
+        scope_location_id: {
+          oneOf: [
+            {
+              $ref: "common.schema.json#/$defs/uuid"
+            },
+            {
+              type: "null"
+            }
+          ],
+          description: "Authorization scope node (C6). DC: null (self-scoped via assignments)."
+        },
+        status: {
+          type: "string",
+          enum: [
+            "INVITED",
+            "ACTIVE",
+            "SUSPENDED",
+            "EXITED"
+          ],
+          description: "EXITED users are redacted-in-place, never deleted."
+        },
+        dashboard_url: {
+          type: "string",
+          description: "Per-user 'My Dashboard' link (spec \xA73): shown ONLY to the logged-in user on their Scorecard; stored on the record, never hardcoded."
+        },
+        home_lat: {
+          type: "number",
+          description: "Reference home location (spec: Excel-loaded). Attendance location is LOGGED against it, never gated (ADR-0004; spec leaves geofencing as an open question)."
+        },
+        home_lng: {
+          type: "number"
+        }
       },
       additionalProperties: false
     },
     device: {
       type: "object",
-      required: ["id", "tenant_id", "user_id", "binding_state"],
+      required: [
+        "id",
+        "tenant_id",
+        "user_id",
+        "binding_state"
+      ],
       properties: {
-        id: { $ref: "common.schema.json#/$defs/uuid" },
-        tenant_id: { $ref: "common.schema.json#/$defs/tenantId" },
-        user_id: { $ref: "common.schema.json#/$defs/uuid" },
-        hardware: { type: "object", properties: { manufacturer: { type: "string" }, model: { type: "string" }, os_version: { type: "string" } }, additionalProperties: false },
-        public_key: { type: "string", description: "Base64 device Keystore public key; verifies envelope signatures. M0: recorded, not yet enforced." },
-        binding_state: { type: "string", enum: ["PENDING", "BOUND", "REPLACED", "REVOKED"], description: "One BOUND device per DC. REVOKED \u2192 no session (hard gate #3)." }
+        id: {
+          $ref: "common.schema.json#/$defs/uuid"
+        },
+        tenant_id: {
+          $ref: "common.schema.json#/$defs/tenantId"
+        },
+        user_id: {
+          $ref: "common.schema.json#/$defs/uuid"
+        },
+        hardware: {
+          type: "object",
+          properties: {
+            manufacturer: {
+              type: "string"
+            },
+            model: {
+              type: "string"
+            },
+            os_version: {
+              type: "string"
+            }
+          },
+          additionalProperties: false
+        },
+        public_key: {
+          type: "string",
+          description: "Base64 device Keystore public key; verifies envelope signatures. M0: recorded, not yet enforced."
+        },
+        binding_state: {
+          type: "string",
+          enum: [
+            "PENDING",
+            "BOUND",
+            "REPLACED",
+            "REVOKED"
+          ],
+          description: "One BOUND device per DC. REVOKED \u2192 no session (hard gate #3)."
+        }
       },
       additionalProperties: false
     }
@@ -41940,6 +42136,39 @@ var track_chunk_schema_default = {
   description: "Raw duty-session GPS points from the adaptive tracker (Start\u2192End Day only, DPDP). Stored append-only; daily km is DERIVED at read time from all points sorted by t (order-independent, preserving C3 \xA73 convergence) using distance algorithm track_straightline_v0 \u2014 PROVISIONAL, not for reimbursement (C7 distance rules; OSRM map-matching + dispute workflow are the M2 financial layer). Wire compaction (delta encoding) is an M2 optimization."
 };
 
+// contracts/c1-entities/csp-change-request.schema.json
+var csp_change_request_schema_default = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://contracts.eko-dc-visits/c1/csp-change-request.schema.json",
+  title: "CspChangeRequest (spec: docs/specs/csp-visit-mobile-app-draft.md \xA73/\xA74)",
+  type: "object",
+  description: "DC-proposed edit to an assigned CSP's details. Never applied directly: PENDING until the Circle Head (or Admin) approves \u2014 approval updates the location master (admin data, updatable); rejection carries a reason back to the DC. The request itself is append-only history of who proposed/decided what.",
+  required: ["id", "tenant_id", "csp_location_id", "requested_by_user_id", "changes", "status", "created_at"],
+  properties: {
+    id: { $ref: "common.schema.json#/$defs/uuid" },
+    tenant_id: { $ref: "common.schema.json#/$defs/tenantId" },
+    csp_location_id: { $ref: "common.schema.json#/$defs/uuid" },
+    requested_by_user_id: { $ref: "common.schema.json#/$defs/uuid" },
+    changes: {
+      type: "object",
+      description: "field -> { old, new }. Whitelisted fields only (name, address, lat, lng + csp_profile keys).",
+      minProperties: 1,
+      additionalProperties: {
+        type: "object",
+        required: ["old", "new"],
+        properties: { old: { type: ["string", "number", "null"] }, new: { type: ["string", "number"] } },
+        additionalProperties: false
+      }
+    },
+    status: { type: "string", enum: ["PENDING", "APPROVED", "REJECTED"] },
+    rejection_reason: { type: "string" },
+    decided_by_user_id: { $ref: "common.schema.json#/$defs/uuid" },
+    decided_at: { type: "string", format: "date-time" },
+    created_at: { type: "string", format: "date-time" }
+  },
+  additionalProperties: false
+};
+
 // backend/src/validation/schemas.ts
 var import_meta = {};
 var addFormats = import_ajv_formats.default.default ?? import_ajv_formats.default;
@@ -41963,7 +42192,8 @@ for (const schema of [
   bank_schema_default,
   circle_schema_default,
   csp_assignment_schema_default,
-  track_chunk_schema_default
+  track_chunk_schema_default,
+  csp_change_request_schema_default
 ]) {
   ajv.addSchema(schema);
 }
@@ -42030,6 +42260,13 @@ async function applyNewOp(repos, principal, batch, opId, opType, payload, clock)
     });
     return { op_id: opId, result: "quarantined" };
   };
+  if (principal.role === "CIRCLE_HEAD" && !opType.startsWith("attendance.")) {
+    return quarantine("UNSUPPORTED_TYPE", [`role CIRCLE_HEAD may only submit attendance evidence (got "${opType}")`]);
+  }
+  const claimedDc = payload?.dc_user_id;
+  if (typeof claimedDc === "string" && claimedDc !== principal.user_id) {
+    return quarantine("UNKNOWN_REFERENCE", [`payload dc_user_id ${claimedDc} does not match the authenticated user`]);
+  }
   if (opType === "attendance.start" || opType === "attendance.end") {
     return applyAttendanceOp(repos, principal, opId, opType, payload, clock, quarantine);
   }
@@ -43423,6 +43660,23 @@ function kmForPoints(points) {
   return Math.round(meters / 100) / 10;
 }
 
+// backend/src/attendance.ts
+function autoCloseCutoffIso(istDate) {
+  return `${istDate}T15:30:00.000Z`;
+}
+function deriveAttendance(day2, istDate, now) {
+  const started = day2?.started_at ?? null;
+  const ended = day2?.ended_at ?? null;
+  const hours = (from, to) => Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 36e5 * 10) / 10);
+  if (!started) return { status: "NOT_STARTED", started_at: null, ended_at: null, auto_closed: false, hours_worked: null };
+  if (ended) return { status: "ENDED", started_at: started, ended_at: ended, auto_closed: false, hours_worked: hours(started, ended) };
+  const cutoff = autoCloseCutoffIso(istDate);
+  if (now.getTime() >= new Date(cutoff).getTime()) {
+    return { status: "AUTO_CLOSED", started_at: started, ended_at: cutoff, auto_closed: true, hours_worked: hours(started, cutoff) };
+  }
+  return { status: "ON_DUTY", started_at: started, ended_at: null, auto_closed: false, hours_worked: null };
+}
+
 // backend/src/server.ts
 var DEV_OTP = "000000";
 var OTP_CODE = process.env.PILOT_OTP ?? DEV_OTP;
@@ -43536,8 +43790,8 @@ function buildServer(deps) {
       });
       api.post("/sync/batches", { preHandler: requireAuth }, async (req, reply) => {
         const principal = req.principal;
-        if (principal.role !== "DC") {
-          return problem(reply, 403, "Forbidden", "Only DC devices submit evidence batches");
+        if (principal.role !== "DC" && principal.role !== "CIRCLE_HEAD") {
+          return problem(reply, 403, "Forbidden", "Only DC and Circle Head devices submit evidence batches");
         }
         const batch = req.body;
         if (!batch || typeof batch.batch_id !== "string" || typeof batch.device_id !== "string" || !Array.isArray(batch.ops) || batch.ops.length < 1) {
@@ -43596,20 +43850,26 @@ function buildServer(deps) {
         }
         const scope = await resolveScope(repos, principal, clock());
         const dcScope = principal.role === "HR_ADMIN" ? "ALL" : scope.dc_user_ids;
-        const dcs = await repos.listDcUsers(scope.tenant_id, dcScope);
+        const people = await repos.listDcUsers(scope.tenant_id, dcScope);
+        if (principal.role === "CIRCLE_HEAD") {
+          const self = await repos.getUserById(scope.tenant_id, principal.user_id);
+          if (self) people.unshift(self);
+        }
         const items = await Promise.all(
-          dcs.map(async (dc) => {
+          people.map(async (person) => {
             const [day2, points] = await Promise.all([
-              repos.getAttendanceDay(scope.tenant_id, dc.id, q.date),
-              repos.listTrackPointsForDcDate(scope.tenant_id, dc.id, q.date)
+              repos.getAttendanceDay(scope.tenant_id, person.id, q.date),
+              repos.listTrackPointsForDcDate(scope.tenant_id, person.id, q.date)
             ]);
-            const status = day2?.ended_at ? "ENDED" : day2?.started_at ? "ON_DUTY" : "NOT_STARTED";
+            const d = deriveAttendance(day2, q.date, clock());
             return {
-              dc_user_id: dc.id,
-              dc_name: dc.name,
-              status,
-              started_at: day2?.started_at ?? null,
-              ended_at: day2?.ended_at ?? null,
+              dc_user_id: person.id,
+              dc_name: person.name,
+              status: d.status,
+              started_at: d.started_at,
+              ended_at: d.ended_at,
+              auto_closed: d.auto_closed,
+              hours_worked: d.hours_worked,
               km_today: kmForPoints(points)
               // track_straightline_v0 — PROVISIONAL (C7)
             };
@@ -43699,6 +43959,151 @@ function buildServer(deps) {
           rejected: results.filter((x) => x.result === "rejected").length
         };
         return reply.code(200).send({ summary, results });
+      });
+      api.get("/dc/csp-details", { preHandler: requireAuth }, async (req, reply) => {
+        const principal = req.principal;
+        if (principal.role !== "DC") {
+          return problem(reply, 403, "Forbidden", "CSP Details is the DC's own assigned list");
+        }
+        const today = istDateOf(clock());
+        const [assignments, lastVisits] = await Promise.all([
+          repos.listActiveCspAssignments(principal.tenant_id, /* @__PURE__ */ new Set([principal.user_id]), today),
+          repos.lastVisitDatesForDc(principal.tenant_id, principal.user_id)
+        ]);
+        const items = (await Promise.all(
+          assignments.map(async (a) => {
+            const loc = await repos.getLocationById(principal.tenant_id, a.csp_location_id);
+            if (!loc) return null;
+            return {
+              csp_location_id: loc.id,
+              code: loc.code,
+              name: loc.name,
+              address: loc.address ?? "",
+              lat: loc.coordinates.lat,
+              lng: loc.coordinates.lng,
+              coordinate_confidence: loc.coordinate_confidence,
+              last_visit_date: lastVisits.get(loc.id) ?? null,
+              csp_profile: loc.csp_profile ?? {}
+            };
+          })
+        )).filter((x) => x !== null);
+        return reply.code(200).send({ items });
+      });
+      const CR_CORE_FIELDS = ["name", "address", "lat", "lng"];
+      const CR_PROFILE_FIELDS = [
+        "gender",
+        "csp_mail_id",
+        "mobile_number",
+        "alternative_mobile_number",
+        "relationship_manager",
+        "district",
+        "ao",
+        "ao_email",
+        "branch_email",
+        "rbo_email",
+        "population"
+      ];
+      api.post("/dc/csp-change-requests", { preHandler: requireAuth }, async (req, reply) => {
+        const principal = req.principal;
+        if (principal.role !== "DC") {
+          return problem(reply, 403, "Forbidden", "Only DCs propose CSP edits");
+        }
+        const body = req.body ?? {};
+        if (typeof body.csp_location_id !== "string" || typeof body.changes !== "object" || body.changes === null) {
+          return problem(reply, 400, "Bad Request", "csp_location_id and changes{} are required");
+        }
+        const today = istDateOf(clock());
+        const assigned = await repos.listActiveCspAssignments(principal.tenant_id, /* @__PURE__ */ new Set([principal.user_id]), today);
+        if (!assigned.some((a) => a.csp_location_id === body.csp_location_id)) {
+          return problem(reply, 422, "Unprocessable", "You may only propose edits to CSPs assigned to you");
+        }
+        const loc = await repos.getLocationById(principal.tenant_id, body.csp_location_id);
+        if (!loc) return problem(reply, 422, "Unprocessable", "Unknown CSP");
+        const changes = {};
+        for (const [field, value] of Object.entries(body.changes)) {
+          if (typeof value !== "string" && typeof value !== "number") continue;
+          if (CR_CORE_FIELDS.includes(field)) {
+            const old = field === "name" ? loc.name : field === "address" ? loc.address ?? null : field === "lat" ? loc.coordinates.lat : loc.coordinates.lng;
+            if (String(old ?? "") !== String(value)) changes[field] = { old, new: value };
+          } else if (CR_PROFILE_FIELDS.includes(field)) {
+            const old = loc.csp_profile?.[field] ?? null;
+            if (String(old ?? "") !== String(value)) changes[field] = { old, new: value };
+          }
+        }
+        if (Object.keys(changes).length === 0) {
+          return problem(reply, 422, "Unprocessable", "No whitelisted field actually changes value");
+        }
+        const request = {
+          id: (0, import_node_crypto7.randomUUID)(),
+          tenant_id: principal.tenant_id,
+          csp_location_id: loc.id,
+          requested_by_user_id: principal.user_id,
+          changes,
+          status: "PENDING",
+          created_at: clock().toISOString()
+        };
+        await repos.insertCspChangeRequest(request);
+        return reply.code(200).send({ request });
+      });
+      api.get("/circle/csp-change-requests", { preHandler: requireAuth }, async (req, reply) => {
+        const principal = req.principal;
+        if (principal.role !== "CIRCLE_HEAD" && principal.role !== "CORPORATE_ADMIN") {
+          return problem(reply, 403, "Forbidden", "Approval queue is for Circle Heads and Admin");
+        }
+        const q = req.query;
+        const status = q.status === "PENDING" || q.status === "APPROVED" || q.status === "REJECTED" ? q.status : void 0;
+        const scope = await resolveScope(repos, principal, clock());
+        const requests = await repos.listCspChangeRequests(scope.tenant_id, scope.dc_user_ids, status);
+        const items = await Promise.all(
+          requests.map(async (r) => {
+            const [loc, requester] = await Promise.all([
+              repos.getLocationById(scope.tenant_id, r.csp_location_id),
+              repos.getUserById(scope.tenant_id, r.requested_by_user_id)
+            ]);
+            return { ...r, csp_code: loc?.code ?? "", csp_name: loc?.name ?? "", requested_by_name: requester?.name ?? "" };
+          })
+        );
+        return reply.code(200).send({ items });
+      });
+      api.post("/circle/csp-change-requests/decide", { preHandler: requireAuth }, async (req, reply) => {
+        const principal = req.principal;
+        if (principal.role !== "CIRCLE_HEAD" && principal.role !== "CORPORATE_ADMIN") {
+          return problem(reply, 403, "Forbidden", "Only Circle Heads and Admin decide change requests");
+        }
+        const body = req.body ?? {};
+        if (typeof body.id !== "string" || body.decision !== "APPROVED" && body.decision !== "REJECTED") {
+          return problem(reply, 400, "Bad Request", "id and decision (APPROVED|REJECTED) are required");
+        }
+        const request = await repos.getCspChangeRequest(principal.tenant_id, body.id);
+        if (!request || request.status !== "PENDING") {
+          return problem(reply, 422, "Unprocessable", "No pending request with that id");
+        }
+        const scope = await resolveScope(repos, principal, clock());
+        if (scope.dc_user_ids !== "ALL" && !scope.dc_user_ids.has(request.requested_by_user_id)) {
+          return problem(reply, 422, "Unprocessable", "Request belongs to another circle");
+        }
+        if (body.decision === "APPROVED") {
+          const patch = {
+            updated_at: clock().toISOString()
+          };
+          for (const [field, ch] of Object.entries(request.changes)) {
+            if (field === "name") patch.name = String(ch.new);
+            else if (field === "address") patch.address = String(ch.new);
+            else if (field === "lat") patch.lat = Number(ch.new);
+            else if (field === "lng") patch.lng = Number(ch.new);
+            else (patch.profile ??= {})[field] = String(ch.new);
+          }
+          await repos.updateLocationFields(principal.tenant_id, request.csp_location_id, patch);
+        }
+        const decided = {
+          ...request,
+          status: body.decision,
+          rejection_reason: body.decision === "REJECTED" && typeof body.rejection_reason === "string" && body.rejection_reason.length > 0 ? body.rejection_reason : void 0,
+          decided_by_user_id: principal.user_id,
+          decided_at: clock().toISOString()
+        };
+        await repos.decideCspChangeRequest(principal.tenant_id, decided);
+        return reply.code(200).send({ request: decided });
       });
       api.get("/dashboard/overview", { preHandler: requireAuth }, async (req, reply) => {
         const principal = req.principal;
@@ -43857,6 +44262,7 @@ var MemoryRepos = class {
   checkinEvents = /* @__PURE__ */ new Map();
   attendanceEvents = /* @__PURE__ */ new Map();
   trackChunks = /* @__PURE__ */ new Map();
+  cspChangeRequests = /* @__PURE__ */ new Map();
   attendanceDays = /* @__PURE__ */ new Map();
   // key tenant:dc:istDate
   visits = /* @__PURE__ */ new Map();
@@ -43998,6 +44404,46 @@ var MemoryRepos = class {
   }
   async getAttendanceDay(tenantId, dcUserId, istDate) {
     return this.attendanceDays.get(`${tenantId}:${dcUserId}:${istDate}`) ?? null;
+  }
+  // --- CSP change requests (v0.8.0 — admin records)
+  async insertCspChangeRequest(r) {
+    this.cspChangeRequests.set(this.key(r.tenant_id, r.id), r);
+  }
+  async getCspChangeRequest(tenantId, id) {
+    return this.cspChangeRequests.get(this.key(tenantId, id)) ?? null;
+  }
+  async listCspChangeRequests(tenantId, requesterIds, status) {
+    return [...this.cspChangeRequests.values()].filter((r) => r.tenant_id === tenantId).filter((r) => requesterIds === "ALL" || requesterIds.has(r.requested_by_user_id)).filter((r) => status === void 0 || r.status === status).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+  async decideCspChangeRequest(tenantId, decided) {
+    this.cspChangeRequests.set(this.key(tenantId, decided.id), decided);
+  }
+  async updateLocationFields(tenantId, locationId, patch) {
+    const k = this.key(tenantId, locationId);
+    const cur = this.locations.get(k);
+    if (!cur) return;
+    const coordsChanged = patch.lat !== void 0 || patch.lng !== void 0;
+    this.locations.set(k, {
+      ...cur,
+      name: patch.name ?? cur.name,
+      address: patch.address ?? cur.address,
+      coordinates: coordsChanged ? { ...cur.coordinates, lat: patch.lat ?? cur.coordinates.lat, lng: patch.lng ?? cur.coordinates.lng } : cur.coordinates,
+      coordinate_confidence: coordsChanged ? "FIELD_CAPTURED" : cur.coordinate_confidence,
+      csp_profile: patch.profile ? { ...cur.csp_profile, ...patch.profile } : cur.csp_profile,
+      updated_at: patch.updated_at
+    });
+  }
+  async lastVisitDatesForDc(tenantId, dcUserId) {
+    const IST_OFFSET_MS3 = 5.5 * 3600 * 1e3;
+    const istDateOf2 = (iso) => new Date(new Date(iso).getTime() + IST_OFFSET_MS3).toISOString().slice(0, 10);
+    const out = /* @__PURE__ */ new Map();
+    for (const v of this.visits.values()) {
+      if (v.tenant_id !== tenantId || v.dc_user_id !== dcUserId) continue;
+      const d = istDateOf2(v.occurred_at);
+      const cur = out.get(v.location_id);
+      if (!cur || d > cur) out.set(v.location_id, d);
+    }
+    return out;
   }
   // --- GPS track (v0.7.0; append-only; km derived at read time)
   async insertTrackChunkIfAbsent(c) {
@@ -44306,7 +44752,8 @@ var users_default = [
     employee_code: "EKO-DC-001",
     role: "DC",
     scope_location_id: null,
-    status: "ACTIVE"
+    status: "ACTIVE",
+    dashboard_url: "https://eko-dc-visits-eko-kiosk-visit-app.vercel.app/#/scorecard"
   },
   {
     id: "018f5a00-0000-7000-8000-000000000202",

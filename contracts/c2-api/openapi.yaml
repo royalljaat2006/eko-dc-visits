@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Eko DC Visit Management API
-  version: 0.7.0
+  version: 0.8.0
   description: >
     Contract-first spec (M0 scope). Hand-written; code conforms to this, never the reverse.
     Server validates its own responses against this spec in test mode. All endpoints are
@@ -220,9 +220,11 @@ paths:
                       properties:
                         dc_user_id: { type: string, format: uuid }
                         dc_name: { type: string }
-                        status: { type: string, enum: [NOT_STARTED, ON_DUTY, ENDED] }
+                        status: { type: string, enum: [NOT_STARTED, ON_DUTY, ENDED, AUTO_CLOSED], description: AUTO_CLOSED = no End Day by the 21:00 IST cutoff — "Auto-closed, not confirmed by user" (spec FINALIZED decision) }
                         started_at: { type: [string, 'null'], format: date-time }
-                        ended_at: { type: [string, 'null'], format: date-time }
+                        ended_at: { type: [string, 'null'], format: date-time, description: For AUTO_CLOSED, the 21:00 IST cutoff }
+                        auto_closed: { type: boolean }
+                        hours_worked: { type: [number, 'null'], description: Check-out − check-in (cutoff-capped when auto-closed), 0.1h resolution }
                         km_today: { type: number, description: Daily distance from GPS track, track_straightline_v0 — PROVISIONAL, never for reimbursement (C7) }
   /dashboard/visits:
     get:
@@ -298,6 +300,125 @@ paths:
                         reason: { type: string }
                         dc_name: { type: string }
         '403': { $ref: '#/components/responses/Problem' }
+  /dc/csp-details:
+    get:
+      tags: [master-data]
+      operationId: getDcCspDetails
+      summary: DC's assigned CSPs with full details + last-visit date (spec §3 "CSP Details"; Get Directions uses the returned lat/lng)
+      security: [{ bearer: [] }]
+      responses:
+        '200':
+          description: One card per assigned CSP, from the same master source as the CSP Workbench
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [csp_location_id, code, name, lat, lng]
+                      properties:
+                        csp_location_id: { type: string, format: uuid }
+                        code: { type: string }
+                        name: { type: string }
+                        address: { type: string }
+                        lat: { type: number }
+                        lng: { type: number }
+                        coordinate_confidence: { type: string }
+                        last_visit_date: { type: [string, 'null'], format: date, description: IST date of this DC's most recent check-in here }
+                        csp_profile: { type: object, additionalProperties: { type: string } }
+        '403': { $ref: '#/components/responses/Problem' }
+  /dc/csp-change-requests:
+    post:
+      tags: [master-data]
+      operationId: createCspChangeRequest
+      summary: DC proposes edits to an assigned CSP (pending until Circle Head/Admin approval — spec §3)
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [csp_location_id, changes]
+              properties:
+                csp_location_id: { type: string, format: uuid }
+                changes:
+                  type: object
+                  minProperties: 1
+                  description: field -> proposed value; whitelisted fields only
+                  additionalProperties: { type: [string, number] }
+      responses:
+        '200':
+          description: Pending request recorded with old-value snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [request]
+                properties:
+                  request: { $ref: '#/components/schemas/CspChangeRequest' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+  /circle/csp-change-requests:
+    get:
+      tags: [master-data]
+      operationId: listCspChangeRequests
+      summary: Circle Head approval queue (own circle's DCs; Admin tenant-wide) — old vs proposed side-by-side
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [PENDING, APPROVED, REJECTED] } }
+      responses:
+        '200':
+          description: Change requests joined with CSP + requester names
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      allOf:
+                        - { $ref: '#/components/schemas/CspChangeRequest' }
+                        - type: object
+                          properties:
+                            csp_code: { type: string }
+                            csp_name: { type: string }
+                            requested_by_name: { type: string }
+  /circle/csp-change-requests/decide:
+    post:
+      tags: [master-data]
+      operationId: decideCspChangeRequest
+      summary: Approve (applies the edit to the CSP master) or reject with a reason sent back to the DC
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, decision]
+              properties:
+                id: { type: string, format: uuid }
+                decision: { type: string, enum: [APPROVED, REJECTED] }
+                rejection_reason: { type: string }
+      responses:
+        '200':
+          description: Decided request (approval has already updated the location master)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [request]
+                properties:
+                  request: { $ref: '#/components/schemas/CspChangeRequest' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
   /dashboard/overview:
     get:
       tags: [dashboard]
@@ -432,6 +553,7 @@ components:
         detail: { type: string }
     User: { $ref: '../c1-entities/user-device.schema.json#/$defs/user' }
     CspAssignment: { $ref: '../c1-entities/csp-assignment.schema.json' }
+    CspChangeRequest: { $ref: '../c1-entities/csp-change-request.schema.json' }
     Location: { $ref: '../c1-entities/location.schema.json' }
     BeatPlan: { $ref: '../c1-entities/beat-plan.schema.json' }
     CheckInEvent: { $ref: '../c1-entities/checkin-event.schema.json' }

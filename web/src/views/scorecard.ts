@@ -6,7 +6,7 @@
  *
  * Scoping is SERVER-SIDE (C6): DC self, Circle Head circle, NH tenant-wide.
  */
-import { ApiError, listScorecards, type ScorecardRow } from '../api/client.ts';
+import { ApiError, getSession, listScorecards, type ScorecardRow } from '../api/client.ts';
 import { todayIstDate } from '../lib/format.ts';
 
 const POLL_MS = 30_000;
@@ -102,6 +102,18 @@ export function renderScorecardView(root: HTMLElement): () => void {
     }
 
     el.append(head, pointsRow, meter, breakdown, badges);
+    // Spec §3: "My Dashboard" — only on the logged-in user's OWN card, from
+    // their user record (never another DC's link).
+    const session = getSession();
+    if (session && row.dc_user_id === session.user.id && session.user.dashboard_url) {
+      const link = document.createElement('a');
+      link.href = session.user.dashboard_url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.className = 'badge';
+      link.textContent = '📊 My Dashboard';
+      el.appendChild(link);
+    }
     return el;
   }
 

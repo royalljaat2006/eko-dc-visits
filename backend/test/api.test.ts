@@ -166,14 +166,16 @@ test("C6 scoping over HTTP: Circle Head sees own circle DCs only; tenant-root se
   });
   assert.equal(nhSync.statusCode, 403, "National Head visibility is read-only for evidence");
 
-  // C6: sync-batch create is DC-only (Circle Head gets 403)
+  // v0.8.0 (spec §4): Circle Heads may submit OWN attendance; anything else
+  // they send is quarantined by the engine, never silently accepted.
   const amSync = await app.inject({
     method: "POST",
     url: "/api/v1/sync/batches",
     headers: { authorization: `Bearer ${am.token}` },
     payload: syncBatch(am.user_id, am.device_id, CSP_KISHANGANJ),
   });
-  assert.equal(amSync.statusCode, 403);
+  assert.equal(amSync.statusCode, 200);
+  assert.equal((amSync.json() as { results: Array<{ result: string }> }).results[0]!.result, "quarantined");
 });
 
 test("csp-assignments delta pull (design 0001 §5): DC gets own; Circle Head gets circle's; scoped in the query layer", async () => {
@@ -296,7 +298,7 @@ test("attendance board (design 0001 §7): NH + HR see tenant-wide incl. NOT_STAR
     headers: { authorization: `Bearer ${ch.token}` },
   });
   const chNames = (chBoard.json() as { items: Array<{ dc_name: string }> }).items.map((r) => r.dc_name).sort();
-  assert.deepEqual(chNames, ["Asha Kumari", "Manoj Kumar"]);
+  assert.deepEqual(chNames, ["Asha Kumari", "Manoj Kumar", "Priya Sharma"], "circle DCs + the head's own row (spec §4)");
 });
 
 test("CSP transfer (design 0001 §6): end-old + start-new, circle guardrails, DC pull reflects it", async () => {

@@ -54,5 +54,7 @@ export function attendanceChip(status: AttendanceStatus): Chip {
       return { label: 'ENDED', className: 'chip chip-neutral', title: '' };
     case 'NOT_STARTED':
       return { label: 'NOT STARTED', className: 'chip chip-amber', title: 'No Start Day event synced for this date' };
+    case 'AUTO_CLOSED':
+      return { label: 'AUTO-CLOSED', className: 'chip chip-amber', title: 'Auto-closed at 21:00 IST — not confirmed by user' };
   }
 }

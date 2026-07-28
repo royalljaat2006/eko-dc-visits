@@ -52,3 +52,15 @@
 - C3: + track.chunk op type (tier T3).
 - C2: attendance board rows + overview per-DC rows gain km_today
   (track_straightline_v0 — PROVISIONAL, never for reimbursement per C7/ADR-0005).
+
+## v0.8.0 — CSP Visit Mobile App spec (docs/specs/csp-visit-mobile-app-draft.md)
+- C1: user + dashboard_url (per-user "My Dashboard", self-only) + home_lat/home_lng
+  (logged reference, never a gate — ADR-0004; spec's geofence question stays open);
+  location + csp_profile (master template §3.1); + csp-change-request schema.
+- C2: attendance rows gain AUTO_CLOSED status (21:00 IST cutoff, "not confirmed by
+  user"), auto_closed flag, hours_worked; + GET /dc/csp-details (with last-visit
+  date); + DC change-request create, CH approval queue list + decide endpoints.
+- Sync: CIRCLE_HEAD may submit OWN attendance ops (spec §4); all evidence payloads
+  must carry the submitter's own dc_user_id (impersonation hardening).
+- Already satisfied by construction: locked back-dated records (append-only
+  evidence, no edit paths); Circle→CH→DC→CSP single mapping source (C6 + choke point).

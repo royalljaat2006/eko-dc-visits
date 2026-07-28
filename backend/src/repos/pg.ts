@@ -18,6 +18,7 @@ import type {
   Circle,
   CircleMembership,
   CspAssignment,
+  CspChangeRequest,
   Device,
   LocationNode,
   StoredAttendanceEvent,
@@ -47,6 +48,9 @@ function userFromRow(r: Row): User {
     role: r.role as User["role"],
     scope_location_id: r.scope_location_id as string | null,
     status: r.status as User["status"],
+    dashboard_url: (r.dashboard_url as string | null) ?? undefined,
+    home_lat: (r.home_lat as number | null) ?? undefined,
+    home_lng: (r.home_lng as number | null) ?? undefined,
   };
 }
 
@@ -66,6 +70,7 @@ function locationFromRow(r: Row): LocationNode {
     coordinates: { lat: r.coord_lat as number, lng: r.coord_lng as number },
     radius_m: r.radius_m as number,
     coordinate_confidence: r.coordinate_confidence as LocationNode["coordinate_confidence"],
+    csp_profile: (r.csp_profile as Record<string, string> | null) ?? undefined,
     status: r.status as LocationNode["status"],
     updated_at: (r.updated_at as Date).toISOString(),
   };
@@ -92,9 +97,10 @@ export class PgRepos implements Repos {
   // --- users
   async insertUser(u: User): Promise<void> {
     await this.pool.query(
-      `INSERT INTO users (id, tenant_id, name, phone, employee_code, role, scope_location_id, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
-      [u.id, u.tenant_id, u.name, u.phone, u.employee_code ?? null, u.role, u.scope_location_id ?? null, u.status],
+      `INSERT INTO users (id, tenant_id, name, phone, employee_code, role, scope_location_id, status, dashboard_url, home_lat, home_lng)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (id) DO NOTHING`,
+      [u.id, u.tenant_id, u.name, u.phone, u.employee_code ?? null, u.role, u.scope_location_id ?? null, u.status,
+       u.dashboard_url ?? null, u.home_lat ?? null, u.home_lng ?? null],
     );
   }
   async getUserById(tenantId: TenantId, id: string): Promise<User | null> {
@@ -441,6 +447,89 @@ export class PgRepos implements Repos {
       started_at: r.started_at ? (r.started_at as Date).toISOString() : null,
       ended_at: r.ended_at ? (r.ended_at as Date).toISOString() : null,
     };
+  }
+
+  // --- CSP change requests (v0.8.0 — admin records)
+  async insertCspChangeRequest(r: CspChangeRequest): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO csp_change_requests (id, tenant_id, csp_location_id, requested_by_user_id, changes, status, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING`,
+      [r.id, r.tenant_id, r.csp_location_id, r.requested_by_user_id, JSON.stringify(r.changes), r.status, r.created_at],
+    );
+  }
+  private crFromRow(r: Row): CspChangeRequest {
+    return {
+      id: r.id as string,
+      tenant_id: r.tenant_id as string,
+      csp_location_id: r.csp_location_id as string,
+      requested_by_user_id: r.requested_by_user_id as string,
+      changes: r.changes as CspChangeRequest["changes"],
+      status: r.status as CspChangeRequest["status"],
+      rejection_reason: (r.rejection_reason as string | null) ?? undefined,
+      decided_by_user_id: (r.decided_by_user_id as string | null) ?? undefined,
+      decided_at: r.decided_at ? (r.decided_at as Date).toISOString() : undefined,
+      created_at: (r.created_at as Date).toISOString(),
+    };
+  }
+  async getCspChangeRequest(tenantId: TenantId, id: string): Promise<CspChangeRequest | null> {
+    const { rows } = await this.pool.query(`SELECT * FROM csp_change_requests WHERE tenant_id = $1 AND id = $2`, [tenantId, id]);
+    return rows[0] ? this.crFromRow(rows[0] as Row) : null;
+  }
+  async listCspChangeRequests(
+    tenantId: TenantId,
+    requesterIds: "ALL" | ReadonlySet<string>,
+    status?: CspChangeRequest["status"],
+  ): Promise<CspChangeRequest[]> {
+    const values: unknown[] = [tenantId];
+    let sql = `SELECT * FROM csp_change_requests WHERE tenant_id = $1`;
+    if (requesterIds !== "ALL") {
+      values.push([...requesterIds]);
+      sql += ` AND requested_by_user_id = ANY($${values.length}::uuid[])`;
+    }
+    if (status !== undefined) {
+      values.push(status);
+      sql += ` AND status = $${values.length}`;
+    }
+    sql += ` ORDER BY created_at DESC`;
+    const { rows } = await this.pool.query(sql, values);
+    return (rows as Row[]).map((r) => this.crFromRow(r));
+  }
+  async decideCspChangeRequest(tenantId: TenantId, d: CspChangeRequest): Promise<void> {
+    await this.pool.query(
+      `UPDATE csp_change_requests SET status = $3, rejection_reason = $4, decided_by_user_id = $5, decided_at = $6
+       WHERE tenant_id = $1 AND id = $2 AND status = 'PENDING'`,
+      [tenantId, d.id, d.status, d.rejection_reason ?? null, d.decided_by_user_id ?? null, d.decided_at ?? null],
+    );
+  }
+  async updateLocationFields(
+    tenantId: TenantId,
+    locationId: string,
+    patch: { name?: string; address?: string; lat?: number; lng?: number; profile?: Record<string, string>; updated_at: string },
+  ): Promise<void> {
+    const coordsChanged = patch.lat !== undefined || patch.lng !== undefined;
+    await this.pool.query(
+      `UPDATE locations SET
+         name = COALESCE($3, name),
+         address = COALESCE($4, address),
+         coord_lat = COALESCE($5, coord_lat),
+         coord_lng = COALESCE($6, coord_lng),
+         coordinates = CASE WHEN $7 THEN ST_SetSRID(ST_MakePoint(COALESCE($6, coord_lng), COALESCE($5, coord_lat)),4326)::geography ELSE coordinates END,
+         coordinate_confidence = CASE WHEN $7 THEN 'FIELD_CAPTURED' ELSE coordinate_confidence END,
+         csp_profile = COALESCE(csp_profile, '{}'::jsonb) || COALESCE($8::jsonb, '{}'::jsonb),
+         updated_at = $9
+       WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, locationId, patch.name ?? null, patch.address ?? null, patch.lat ?? null, patch.lng ?? null,
+       coordsChanged, patch.profile ? JSON.stringify(patch.profile) : null, patch.updated_at],
+    );
+  }
+  async lastVisitDatesForDc(tenantId: TenantId, dcUserId: string): Promise<Map<string, string>> {
+    const { rows } = await this.pool.query(
+      `SELECT location_id, MAX(occurred_ist_date) AS d FROM visits
+       WHERE tenant_id = $1 AND dc_user_id = $2 GROUP BY location_id`,
+      [tenantId, dcUserId],
+    );
+    return new Map((rows as Row[]).map((r) => [r.location_id as string,
+      typeof r.d === "string" ? r.d : (r.d as Date).toISOString().slice(0, 10)]));
   }
 
   // --- GPS track (v0.7.0; append-only jsonb chunks — row-per-point partitioning is the M2 scale step)

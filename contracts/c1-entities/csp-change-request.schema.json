@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.eko-dc-visits/c1/csp-change-request.schema.json",
+  "title": "CspChangeRequest (spec: docs/specs/csp-visit-mobile-app-draft.md §3/§4)",
+  "type": "object",
+  "description": "DC-proposed edit to an assigned CSP's details. Never applied directly: PENDING until the Circle Head (or Admin) approves — approval updates the location master (admin data, updatable); rejection carries a reason back to the DC. The request itself is append-only history of who proposed/decided what.",
+  "required": ["id", "tenant_id", "csp_location_id", "requested_by_user_id", "changes", "status", "created_at"],
+  "properties": {
+    "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "tenant_id": { "$ref": "common.schema.json#/$defs/tenantId" },
+    "csp_location_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "requested_by_user_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "changes": {
+      "type": "object",
+      "description": "field -> { old, new }. Whitelisted fields only (name, address, lat, lng + csp_profile keys).",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["old", "new"],
+        "properties": { "old": { "type": ["string", "number", "null"] }, "new": { "type": ["string", "number"] } },
+        "additionalProperties": false
+      }
+    },
+    "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+    "rejection_reason": { "type": "string" },
+    "decided_by_user_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "decided_at": { "type": "string", "format": "date-time" },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}
