@@ -42,6 +42,8 @@ export interface User {
   role: Role;
   scope_location_id?: string | null;
   status: 'INVITED' | 'ACTIVE' | 'SUSPENDED' | 'EXITED';
+  /** Spec §3: per-user "My Dashboard" link — shown only to the logged-in user. */
+  dashboard_url?: string;
 }
 
 /** 200 response of POST /auth/otp/verify (C2). */
@@ -100,7 +102,7 @@ export interface VisitsResponse {
 }
 
 /** C2 GET /dashboard/attendance row (v0.3.0, design 0001 §7). */
-export type AttendanceStatus = 'NOT_STARTED' | 'ON_DUTY' | 'ENDED';
+export type AttendanceStatus = 'NOT_STARTED' | 'ON_DUTY' | 'ENDED' | 'AUTO_CLOSED';
 export interface AttendanceRow {
   dc_user_id: string;
   dc_name: string;
@@ -109,6 +111,9 @@ export interface AttendanceRow {
   ended_at?: string | null;
   /** track_straightline_v0 — PROVISIONAL, never for reimbursement (C7). */
   km_today?: number;
+  /** Spec: no End Day by 21:00 IST → auto-closed, "not confirmed by user". */
+  auto_closed?: boolean;
+  hours_worked?: number | null;
 }
 export interface AttendanceResponse {
   items: AttendanceRow[];
@@ -360,6 +365,119 @@ export interface ScorecardRow {
 export interface ScorecardResponse {
   formula_version: 'dc_score_v1';
   items: ScorecardRow[];
+}
+
+/** C2 v0.8.0 (spec §3): DC's assigned CSPs with details + last-visit date. */
+export interface CspDetail {
+  csp_location_id: string;
+  code: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  coordinate_confidence: string;
+  last_visit_date: string | null;
+  csp_profile: Record<string, string>;
+}
+
+export async function getDcCspDetails(signal?: AbortSignal): Promise<{ items: CspDetail[] }> {
+  return (await request({ method: 'GET', path: '/dc/csp-details', auth: true, signal })) as { items: CspDetail[] };
+}
+
+/** C2 v0.8.0: DC-proposed CSP edit, pending Circle Head/Admin approval. */
+export interface CspChangeRequest {
+  id: string;
+  csp_location_id: string;
+  requested_by_user_id: string;
+  changes: Record<string, { old: string | number | null; new: string | number }>;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  rejection_reason?: string;
+  created_at: string;
+  csp_code?: string;
+  csp_name?: string;
+  requested_by_name?: string;
+}
+
+export async function createCspChangeRequest(
+  cspLocationId: string,
+  changes: Record<string, string | number>,
+): Promise<{ request: CspChangeRequest }> {
+  return (await request({
+    method: 'POST',
+    path: '/dc/csp-change-requests',
+    body: { csp_location_id: cspLocationId, changes },
+    auth: true,
+  })) as { request: CspChangeRequest };
+}
+
+export async function listCspChangeRequests(status?: string, signal?: AbortSignal): Promise<{ items: CspChangeRequest[] }> {
+  const qs = status ? `?status=${status}` : '';
+  return (await request({ method: 'GET', path: `/circle/csp-change-requests${qs}`, auth: true, signal })) as {
+    items: CspChangeRequest[];
+  };
+}
+
+export async function decideCspChangeRequest(
+  id: string,
+  decision: 'APPROVED' | 'REJECTED',
+  rejectionReason?: string,
+): Promise<{ request: CspChangeRequest }> {
+  return (await request({
+    method: 'POST',
+    path: '/circle/csp-change-requests/decide',
+    body: { id, decision, rejection_reason: rejectionReason },
+    auth: true,
+  })) as { request: CspChangeRequest };
+}
+
+/**
+ * Spec §3/§4: web check-in/check-out for the logged-in DC or Circle Head.
+ * Submits an attendance.start/end op through the standard C3 sync path —
+ * browser geolocation is attached when granted (logged, never gated, ADR-0004).
+ */
+export async function submitAttendance(kind: 'START' | 'END'): Promise<void> {
+  const s = getSession();
+  if (!s) throw new ApiError(problemFromStatus(401, 'Not signed in'));
+  const fix = await new Promise<{ lat: number; lng: number; accuracy_m: number } | undefined>((resolve) => {
+    if (!navigator.geolocation) return resolve(undefined);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy_m: Math.round(pos.coords.accuracy) }),
+      () => resolve(undefined), // denied/unavailable — attendance is never location-gated
+      { timeout: 6000, maximumAge: 30000 },
+    );
+  });
+  const nowIso = new Date().toISOString();
+  const batch = {
+    batch_id: crypto.randomUUID(),
+    device_id: s.device_id,
+    seq_from: Date.now(),
+    seq_to: Date.now(),
+    client_time: nowIso,
+    app_version: 'web-0.8.0',
+    contract_version: '0.8.0',
+    ops: [
+      {
+        op_id: crypto.randomUUID(),
+        seq: Date.now(),
+        type: kind === 'START' ? 'attendance.start' : 'attendance.end',
+        payload: {
+          id: crypto.randomUUID(),
+          dc_user_id: s.user.id,
+          device_id: s.device_id,
+          kind,
+          ...(fix ? { fix } : {}),
+          timestamps: { device_wall_time: nowIso, monotonic_ms: Math.round(performance.now()) },
+        },
+      },
+    ],
+  };
+  const res = (await request({ method: 'POST', path: '/sync/batches', body: batch, auth: true })) as {
+    results: Array<{ result: string }>;
+  };
+  const r = res.results[0]?.result;
+  if (r !== 'accepted' && r !== 'duplicate') {
+    throw new ApiError(problemFromStatus(422, `Attendance not recorded (${r ?? 'no result'})`));
+  }
 }
 
 /** GET /dashboard/scorecard?date= (C2 v0.4.0). DC self, CH circle, NH tenant — scoped server-side. */

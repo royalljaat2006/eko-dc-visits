@@ -95,6 +95,13 @@
       "type": "string",
       "format": "date-time",
       "description": "Server change cursor for delta pull."
+    },
+    "csp_profile": {
+      "type": "object",
+      "description": "CSP master template (spec §3.1): gender, csp_mail_id, mobile_number, alternative_mobile_number, relationship_manager, ao, ao_email, branch_email, rbo_email, lho_mail_id, population, etc. Free-form string map so template growth never needs a schema bump.",
+      "additionalProperties": {
+        "type": "string"
+      }
     }
   },
   "additionalProperties": false

@@ -1,0 +1,13 @@
+{
+  "_readme": "Circle 1A85 pilot roster (spec §7 — Ganesh Kumar / Eko Bharat Ventures). REAL people: NOT loaded by the default demo seed (the public demo uses a shared OTP). Load into the pilot database only, after PILOT_OTP + JWT_SECRET are set. Each dashboard_link is shown ONLY to that DC on their Scorecard.",
+  "circle_name": "Circle 1A85",
+  "dcs": [
+    { "name": "Ajay", "phone": "9838676182", "dashboard_url": "https://tinyurl.com/28ypmkxv" },
+    { "name": "Anil", "phone": "9306252773", "dashboard_url": "https://tinyurl.com/24rf7kbn" },
+    { "name": "Ashutosh Pathak", "phone": "9296168058", "dashboard_url": "https://tinyurl.com/25yaj7zf" },
+    { "name": "Balram", "phone": "7631817471", "dashboard_url": "https://tinyurl.com/234bmq9w" },
+    { "name": "Munna Pathak", "phone": "9471469396", "dashboard_url": "https://tinyurl.com/2cn8a5wh" },
+    { "name": "Ravi Shankar Kumar", "phone": "8873856172", "dashboard_url": "https://tinyurl.com/25q63zuj" },
+    { "name": "Vijay", "phone": "8623992217", "dashboard_url": "https://tinyurl.com/23njjetx" }
+  ]
+}

@@ -6,6 +6,7 @@ import type {
   Circle,
   CircleMembership,
   CspAssignment,
+  CspChangeRequest,
   Device,
   LocationNode,
   StoredAttendanceEvent,
@@ -111,6 +112,24 @@ export interface Repos {
   // CSP assignment mutations (design 0001 §6 — end-old + start-new, never edit)
   /** Ends the active assignment for a CSP (sets valid_to). Returns the ended assignment's id, or null if none was active. */
   endActiveCspAssignment(tenantId: TenantId, cspLocationId: string, validTo: string): Promise<string | null>;
+
+  // CSP change requests (v0.8.0 — admin records: decision update is allowed)
+  insertCspChangeRequest(r: CspChangeRequest): Promise<void>;
+  getCspChangeRequest(tenantId: TenantId, id: string): Promise<CspChangeRequest | null>;
+  listCspChangeRequests(
+    tenantId: TenantId,
+    requesterIds: "ALL" | ReadonlySet<string>,
+    status?: CspChangeRequest["status"],
+  ): Promise<CspChangeRequest[]>;
+  decideCspChangeRequest(tenantId: TenantId, decided: CspChangeRequest): Promise<void>;
+  /** Applies an APPROVED request to the location master (admin data — updatable). */
+  updateLocationFields(
+    tenantId: TenantId,
+    locationId: string,
+    patch: { name?: string; address?: string; lat?: number; lng?: number; profile?: Record<string, string>; updated_at: string },
+  ): Promise<void>;
+  /** Per-CSP most recent visit IST date for a DC (spec §3: last-visit date on each card). */
+  lastVisitDatesForDc(tenantId: TenantId, dcUserId: string): Promise<Map<string, string>>;
 
   // GPS track (v0.7.0; evidence append-only; km derived at READ time so
   // ingest order never matters — C3 §3 convergence)

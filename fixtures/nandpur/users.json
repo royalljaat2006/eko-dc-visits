@@ -7,7 +7,8 @@
     "employee_code": "EKO-DC-001",
     "role": "DC",
     "scope_location_id": null,
-    "status": "ACTIVE"
+    "status": "ACTIVE",
+    "dashboard_url": "https://eko-dc-visits-eko-kiosk-visit-app.vercel.app/#/scorecard"
   },
   {
     "id": "018f5a00-0000-7000-8000-000000000202",

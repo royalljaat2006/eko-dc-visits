@@ -66,6 +66,8 @@ export interface LocationNode {
   radius_m: number;
   coordinate_confidence: CoordinateConfidence;
   status?: LocationStatus;
+  /** CSP master template fields (spec §3.1) — free-form string map. */
+  csp_profile?: Record<string, string>;
   updated_at: string;
 }
 
@@ -79,6 +81,11 @@ export interface User {
   role: Role;
   scope_location_id?: string | null;
   status: UserStatus;
+  /** Spec §3: per-user "My Dashboard" link, shown only to the logged-in user. */
+  dashboard_url?: string;
+  /** Reference home location (logged against, never gated — ADR-0004). */
+  home_lat?: number;
+  home_lng?: number;
 }
 
 /** c1-entities/user-device.schema.json#/$defs/device */
@@ -183,7 +190,7 @@ export interface AttendanceDay {
   ended_at: string | null;
 }
 
-export type AttendanceStatus = "NOT_STARTED" | "ON_DUTY" | "ENDED";
+export type AttendanceStatus = "NOT_STARTED" | "ON_DUTY" | "ENDED" | "AUTO_CLOSED";
 
 /** Board row (C2 /dashboard/attendance) — includes NOT_STARTED DCs. */
 export interface AttendanceView {
@@ -267,6 +274,20 @@ export interface CspAssignment {
   valid_from: string; // date
   valid_to: string | null;
   updated_at: string;
+}
+
+/** c1-entities/csp-change-request.schema.json — DC edit pending CH/Admin approval. */
+export interface CspChangeRequest {
+  id: string;
+  tenant_id: TenantId;
+  csp_location_id: string;
+  requested_by_user_id: string;
+  changes: Record<string, { old: string | number | null; new: string | number }>;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  rejection_reason?: string;
+  decided_by_user_id?: string;
+  decided_at?: string;
+  created_at: string;
 }
 
 export interface RefreshToken {

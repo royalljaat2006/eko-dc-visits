@@ -6,6 +6,7 @@ import type {
   Circle,
   CircleMembership,
   CspAssignment,
+  CspChangeRequest,
   Device,
   LocationNode,
   StoredAttendanceEvent,
@@ -47,6 +48,7 @@ export class MemoryRepos implements Repos {
   private checkinEvents = new Map<string, StoredCheckInEvent>();
   private attendanceEvents = new Map<string, StoredAttendanceEvent>();
   private trackChunks = new Map<string, StoredTrackChunk>();
+  private cspChangeRequests = new Map<string, CspChangeRequest>();
   private attendanceDays = new Map<string, AttendanceDay>(); // key tenant:dc:istDate
   private visits = new Map<string, Visit>();
   private opDispositions = new Map<string, OpDisposition>();
@@ -225,6 +227,61 @@ export class MemoryRepos implements Repos {
   }
   async getAttendanceDay(tenantId: TenantId, dcUserId: string, istDate: string): Promise<AttendanceDay | null> {
     return this.attendanceDays.get(`${tenantId}:${dcUserId}:${istDate}`) ?? null;
+  }
+
+  // --- CSP change requests (v0.8.0 — admin records)
+  async insertCspChangeRequest(r: CspChangeRequest): Promise<void> {
+    this.cspChangeRequests.set(this.key(r.tenant_id, r.id), r);
+  }
+  async getCspChangeRequest(tenantId: TenantId, id: string): Promise<CspChangeRequest | null> {
+    return this.cspChangeRequests.get(this.key(tenantId, id)) ?? null;
+  }
+  async listCspChangeRequests(
+    tenantId: TenantId,
+    requesterIds: "ALL" | ReadonlySet<string>,
+    status?: CspChangeRequest["status"],
+  ): Promise<CspChangeRequest[]> {
+    return [...this.cspChangeRequests.values()]
+      .filter((r) => r.tenant_id === tenantId)
+      .filter((r) => requesterIds === "ALL" || requesterIds.has(r.requested_by_user_id))
+      .filter((r) => status === undefined || r.status === status)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+  async decideCspChangeRequest(tenantId: TenantId, decided: CspChangeRequest): Promise<void> {
+    this.cspChangeRequests.set(this.key(tenantId, decided.id), decided);
+  }
+  async updateLocationFields(
+    tenantId: TenantId,
+    locationId: string,
+    patch: { name?: string; address?: string; lat?: number; lng?: number; profile?: Record<string, string>; updated_at: string },
+  ): Promise<void> {
+    const k = this.key(tenantId, locationId);
+    const cur = this.locations.get(k);
+    if (!cur) return;
+    const coordsChanged = patch.lat !== undefined || patch.lng !== undefined;
+    this.locations.set(k, {
+      ...cur,
+      name: patch.name ?? cur.name,
+      address: patch.address ?? cur.address,
+      coordinates: coordsChanged
+        ? { ...cur.coordinates, lat: patch.lat ?? cur.coordinates.lat, lng: patch.lng ?? cur.coordinates.lng }
+        : cur.coordinates,
+      coordinate_confidence: coordsChanged ? "FIELD_CAPTURED" : cur.coordinate_confidence,
+      csp_profile: patch.profile ? { ...cur.csp_profile, ...patch.profile } : cur.csp_profile,
+      updated_at: patch.updated_at,
+    });
+  }
+  async lastVisitDatesForDc(tenantId: TenantId, dcUserId: string): Promise<Map<string, string>> {
+    const IST_OFFSET_MS = 5.5 * 3600 * 1000;
+    const istDateOf = (iso: string) => new Date(new Date(iso).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+    const out = new Map<string, string>();
+    for (const v of this.visits.values()) {
+      if (v.tenant_id !== tenantId || v.dc_user_id !== dcUserId) continue;
+      const d = istDateOf(v.occurred_at);
+      const cur = out.get(v.location_id);
+      if (!cur || d > cur) out.set(v.location_id, d);
+    }
+    return out;
   }
 
   // --- GPS track (v0.7.0; append-only; km derived at read time)

@@ -13,6 +13,7 @@ import { DEV_TOKEN_CONFIG, newRefreshToken, signAccessToken, verifyAccessToken, 
 import { istDateOf } from "./geo.js";
 import { computeScorecard } from "./scorecard.js";
 import { kmForPoints } from "./distance.js";
+import { deriveAttendance } from "./attendance.js";
 
 /** Route inventory consumed by contracts:check (paths relative to servers[0].url = /api/v1). */
 export const IMPLEMENTED_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
@@ -28,6 +29,10 @@ export const IMPLEMENTED_ROUTES: ReadonlyArray<{ method: string; path: string }>
   { method: "get", path: "/dashboard/attendance" },
   { method: "get", path: "/dashboard/scorecard" },
   { method: "get", path: "/dashboard/overview" },
+  { method: "get", path: "/dc/csp-details" },
+  { method: "post", path: "/dc/csp-change-requests" },
+  { method: "get", path: "/circle/csp-change-requests" },
+  { method: "post", path: "/circle/csp-change-requests/decide" },
 ];
 
 export const DEV_OTP = "000000"; // C2: M0 stub gateway always sends '000000' in dev
@@ -192,9 +197,10 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       // ---- sync (C2 /sync/batches, C3 §2–4) ----------------------------------
       api.post("/sync/batches", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
         const principal = req.principal!;
-        // C6: sync-batch create is a DC capability.
-        if (principal.role !== "DC") {
-          return problem(reply, 403, "Forbidden", "Only DC devices submit evidence batches");
+        // C6 + spec §4: DCs submit evidence; Circle Heads submit their OWN
+        // attendance (the engine restricts CH ops to attendance.* types).
+        if (principal.role !== "DC" && principal.role !== "CIRCLE_HEAD") {
+          return problem(reply, 403, "Forbidden", "Only DC and Circle Head devices submit evidence batches");
         }
         const batch = req.body as Partial<SyncBatch> | null;
         if (
@@ -278,20 +284,28 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         // scope stays empty — PII minimisation).
         const scope = await resolveScope(repos, principal, clock());
         const dcScope = principal.role === "HR_ADMIN" ? ("ALL" as const) : scope.dc_user_ids;
-        const dcs = await repos.listDcUsers(scope.tenant_id, dcScope);
+        const people = await repos.listDcUsers(scope.tenant_id, dcScope);
+        // Spec §4: a Circle Head has the same attendance flow for their own
+        // workday — surface their own row on their board.
+        if (principal.role === "CIRCLE_HEAD") {
+          const self = await repos.getUserById(scope.tenant_id, principal.user_id);
+          if (self) people.unshift(self);
+        }
         const items = await Promise.all(
-          dcs.map(async (dc) => {
+          people.map(async (person) => {
             const [day, points] = await Promise.all([
-              repos.getAttendanceDay(scope.tenant_id, dc.id, q.date!),
-              repos.listTrackPointsForDcDate(scope.tenant_id, dc.id, q.date!),
+              repos.getAttendanceDay(scope.tenant_id, person.id, q.date!),
+              repos.listTrackPointsForDcDate(scope.tenant_id, person.id, q.date!),
             ]);
-            const status = day?.ended_at ? "ENDED" : day?.started_at ? "ON_DUTY" : "NOT_STARTED";
+            const d = deriveAttendance(day, q.date!, clock());
             return {
-              dc_user_id: dc.id,
-              dc_name: dc.name,
-              status,
-              started_at: day?.started_at ?? null,
-              ended_at: day?.ended_at ?? null,
+              dc_user_id: person.id,
+              dc_name: person.name,
+              status: d.status,
+              started_at: d.started_at,
+              ended_at: d.ended_at,
+              auto_closed: d.auto_closed,
+              hours_worked: d.hours_worked,
               km_today: kmForPoints(points), // track_straightline_v0 — PROVISIONAL (C7)
             };
           }),
@@ -401,6 +415,165 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           rejected: results.filter((x) => x.result === "rejected").length,
         };
         return reply.code(200).send({ summary, results });
+      });
+
+      // ---- DC CSP Details (C2 /dc/csp-details, spec §3) ----------------------
+      api.get("/dc/csp-details", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
+        const principal = req.principal!;
+        if (principal.role !== "DC") {
+          return problem(reply, 403, "Forbidden", "CSP Details is the DC's own assigned list");
+        }
+        const today = istDateOf(clock());
+        const [assignments, lastVisits] = await Promise.all([
+          repos.listActiveCspAssignments(principal.tenant_id, new Set([principal.user_id]), today),
+          repos.lastVisitDatesForDc(principal.tenant_id, principal.user_id),
+        ]);
+        const items = (
+          await Promise.all(
+            assignments.map(async (a) => {
+              const loc = await repos.getLocationById(principal.tenant_id, a.csp_location_id);
+              if (!loc) return null;
+              return {
+                csp_location_id: loc.id,
+                code: loc.code,
+                name: loc.name,
+                address: loc.address ?? "",
+                lat: loc.coordinates.lat,
+                lng: loc.coordinates.lng,
+                coordinate_confidence: loc.coordinate_confidence,
+                last_visit_date: lastVisits.get(loc.id) ?? null,
+                csp_profile: loc.csp_profile ?? {},
+              };
+            }),
+          )
+        ).filter((x) => x !== null);
+        return reply.code(200).send({ items });
+      });
+
+      // ---- DC change requests (C2 /dc/csp-change-requests, spec §3) ----------
+      const CR_CORE_FIELDS = ["name", "address", "lat", "lng"] as const;
+      const CR_PROFILE_FIELDS = [
+        "gender", "csp_mail_id", "mobile_number", "alternative_mobile_number",
+        "relationship_manager", "district", "ao", "ao_email", "branch_email",
+        "rbo_email", "population",
+      ] as const;
+      api.post("/dc/csp-change-requests", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
+        const principal = req.principal!;
+        if (principal.role !== "DC") {
+          return problem(reply, 403, "Forbidden", "Only DCs propose CSP edits");
+        }
+        const body = (req.body ?? {}) as { csp_location_id?: unknown; changes?: unknown };
+        if (typeof body.csp_location_id !== "string" || typeof body.changes !== "object" || body.changes === null) {
+          return problem(reply, 400, "Bad Request", "csp_location_id and changes{} are required");
+        }
+        const today = istDateOf(clock());
+        const assigned = await repos.listActiveCspAssignments(principal.tenant_id, new Set([principal.user_id]), today);
+        if (!assigned.some((a) => a.csp_location_id === body.csp_location_id)) {
+          return problem(reply, 422, "Unprocessable", "You may only propose edits to CSPs assigned to you");
+        }
+        const loc = await repos.getLocationById(principal.tenant_id, body.csp_location_id);
+        if (!loc) return problem(reply, 422, "Unprocessable", "Unknown CSP");
+
+        const changes: Record<string, { old: string | number | null; new: string | number }> = {};
+        for (const [field, value] of Object.entries(body.changes as Record<string, unknown>)) {
+          if (typeof value !== "string" && typeof value !== "number") continue;
+          if ((CR_CORE_FIELDS as readonly string[]).includes(field)) {
+            const old =
+              field === "name" ? loc.name
+              : field === "address" ? (loc.address ?? null)
+              : field === "lat" ? loc.coordinates.lat
+              : loc.coordinates.lng;
+            if (String(old ?? "") !== String(value)) changes[field] = { old, new: value };
+          } else if ((CR_PROFILE_FIELDS as readonly string[]).includes(field)) {
+            const old = loc.csp_profile?.[field] ?? null;
+            if (String(old ?? "") !== String(value)) changes[field] = { old, new: value };
+          }
+          // unknown fields are ignored (whitelist), never applied
+        }
+        if (Object.keys(changes).length === 0) {
+          return problem(reply, 422, "Unprocessable", "No whitelisted field actually changes value");
+        }
+        const request = {
+          id: randomUUID(),
+          tenant_id: principal.tenant_id,
+          csp_location_id: loc.id,
+          requested_by_user_id: principal.user_id,
+          changes,
+          status: "PENDING" as const,
+          created_at: clock().toISOString(),
+        };
+        await repos.insertCspChangeRequest(request);
+        return reply.code(200).send({ request });
+      });
+
+      // ---- Circle Head approval queue (C2 /circle/csp-change-requests) -------
+      api.get("/circle/csp-change-requests", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
+        const principal = req.principal!;
+        if (principal.role !== "CIRCLE_HEAD" && principal.role !== "CORPORATE_ADMIN") {
+          return problem(reply, 403, "Forbidden", "Approval queue is for Circle Heads and Admin");
+        }
+        const q = req.query as { status?: string };
+        const status =
+          q.status === "PENDING" || q.status === "APPROVED" || q.status === "REJECTED" ? q.status : undefined;
+        const scope = await resolveScope(repos, principal, clock());
+        const requests = await repos.listCspChangeRequests(scope.tenant_id, scope.dc_user_ids, status);
+        const items = await Promise.all(
+          requests.map(async (r) => {
+            const [loc, requester] = await Promise.all([
+              repos.getLocationById(scope.tenant_id, r.csp_location_id),
+              repos.getUserById(scope.tenant_id, r.requested_by_user_id),
+            ]);
+            return { ...r, csp_code: loc?.code ?? "", csp_name: loc?.name ?? "", requested_by_name: requester?.name ?? "" };
+          }),
+        );
+        return reply.code(200).send({ items });
+      });
+
+      // ---- decide (C2 /circle/csp-change-requests/decide) --------------------
+      api.post("/circle/csp-change-requests/decide", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
+        const principal = req.principal!;
+        if (principal.role !== "CIRCLE_HEAD" && principal.role !== "CORPORATE_ADMIN") {
+          return problem(reply, 403, "Forbidden", "Only Circle Heads and Admin decide change requests");
+        }
+        const body = (req.body ?? {}) as { id?: unknown; decision?: unknown; rejection_reason?: unknown };
+        if (typeof body.id !== "string" || (body.decision !== "APPROVED" && body.decision !== "REJECTED")) {
+          return problem(reply, 400, "Bad Request", "id and decision (APPROVED|REJECTED) are required");
+        }
+        const request = await repos.getCspChangeRequest(principal.tenant_id, body.id);
+        if (!request || request.status !== "PENDING") {
+          return problem(reply, 422, "Unprocessable", "No pending request with that id");
+        }
+        // Scope guardrail: the requester must be one of the head's circle DCs.
+        const scope = await resolveScope(repos, principal, clock());
+        if (scope.dc_user_ids !== "ALL" && !scope.dc_user_ids.has(request.requested_by_user_id)) {
+          return problem(reply, 422, "Unprocessable", "Request belongs to another circle");
+        }
+
+        if (body.decision === "APPROVED") {
+          const patch: { name?: string; address?: string; lat?: number; lng?: number; profile?: Record<string, string>; updated_at: string } = {
+            updated_at: clock().toISOString(),
+          };
+          for (const [field, ch] of Object.entries(request.changes)) {
+            if (field === "name") patch.name = String(ch.new);
+            else if (field === "address") patch.address = String(ch.new);
+            else if (field === "lat") patch.lat = Number(ch.new);
+            else if (field === "lng") patch.lng = Number(ch.new);
+            else (patch.profile ??= {})[field] = String(ch.new);
+          }
+          await repos.updateLocationFields(principal.tenant_id, request.csp_location_id, patch);
+        }
+        const decided = {
+          ...request,
+          status: body.decision as "APPROVED" | "REJECTED",
+          rejection_reason:
+            body.decision === "REJECTED" && typeof body.rejection_reason === "string" && body.rejection_reason.length > 0
+              ? body.rejection_reason
+              : undefined,
+          decided_by_user_id: principal.user_id,
+          decided_at: clock().toISOString(),
+        };
+        await repos.decideCspChangeRequest(principal.tenant_id, decided);
+        return reply.code(200).send({ request: decided });
       });
 
       // ---- dashboard (C2 /dashboard/overview — the admin cockpit) ------------
