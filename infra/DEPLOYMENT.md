@@ -52,6 +52,10 @@ vercel --prod --yes                      # first run creates+links the project
 - [ ] Backups: enable Neon PITR/branch snapshots
 - [ ] Rate limiting + real SMS OTP before scaling beyond the pilot cohort
 
+## Production URL
+
+https://dc-visit-app.vercel.app (project domain; survives redeploys).
+
 ## Netlify (previous attempt)
 
 Site `eko-dc-visits-pilot` was created but the account hit plan limits; the

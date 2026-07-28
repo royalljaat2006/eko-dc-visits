@@ -10,7 +10,7 @@ export function renderLogin(root: HTMLElement, onLoggedIn: () => void): () => vo
     <main class="login">
       <div class="login-card">
         <img class="login-logo" src="${ekoLogo}" alt="Eko" />
-        <p class="login-sub">DC Visit Management</p>
+        <p class="login-sub">DC Visit App</p>
         <form id="login-form">
           <label>
             Phone
