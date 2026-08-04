@@ -48,6 +48,10 @@ node backend/tools/sync-sim/run.js                 # simulated DC device syncs a
 Without Docker (this repo's tests do this): the backend runs against an in-memory store
 implementing the same repository interfaces — `cd backend && npm install && npm test`.
 
+## Full context
+
+Read [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) first — history, doctrines, roles, mechanics, deployment, and what remains, in one file.
+
 ## Status
 
 M0 walking skeleton COMPLETE (backend + web + fixtures + sync simulator; Android lane deferred to a JDK-equipped machine — see android/README.md). Verified: 12 backend tests, 11 web tests, contracts:check, and the live sync-sim e2e story all green. Contract set: v0.1.0 (see `contracts/CHANGELOG.md`).
