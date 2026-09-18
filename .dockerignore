@@ -1,0 +1,17 @@
+# Keep the Docker build context small and free of host-OS artifacts.
+.git
+**/node_modules
+**/dist
+**/build
+android
+web
+docs
+netlify_deploy
+.netlify
+.vercel
+**/.gradle
+**/*.apk
+**/*.aab
+**/*.log
+infra/self-hosted/.env
+infra/self-hosted/download

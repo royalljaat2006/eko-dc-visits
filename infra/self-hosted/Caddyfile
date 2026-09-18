@@ -1,0 +1,24 @@
+# HTTP-only, IP+path — no domain configured, so no automatic HTTPS (Let's
+# Encrypt needs a real hostname to issue a cert; it can't certify a bare IP).
+# Reachable at http://<server-ip>:80/api/v1/... — APKs point apiBaseUrl there.
+#
+# Once a domain exists, switch the address below from `:80` to that hostname
+# and Caddy will provision TLS automatically with zero other changes.
+
+:80 {
+	encode gzip
+	reverse_proxy api:3000
+
+	# Optional: also serve the APK for download from this server, e.g.
+	#   http://<server-ip>/download/eko-csp-visits.apk
+	handle_path /download/* {
+		root * /srv/download
+		file_server
+		header Content-Disposition attachment
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
