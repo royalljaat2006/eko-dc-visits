@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.eko-dc-visits/c1/checkout-event.schema.json",
+  "title": "CheckoutEvent (evidence; append-only; sync op visit.checkout, tier T1)",
+  "type": "object",
+  "required": ["id", "visit_id", "dc_user_id", "device_id", "timestamps"],
+  "properties": {
+    "id": {
+      "$ref": "common.schema.json#/$defs/uuid",
+      "description": "Client UUIDv7. Idempotency key: resends are duplicates, never conflicts."
+    },
+    "visit_id": {
+      "$ref": "common.schema.json#/$defs/uuid",
+      "description": "The visit.checkin id this closes. May arrive before or after that op (convergence-safe: linked by id, resolved at read time, never ordered)."
+    },
+    "dc_user_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "device_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "fix": {
+      "$ref": "common.schema.json#/$defs/geoPoint",
+      "description": "LOGGED, never gated (ADR-0004) — same doctrine as check-in and attendance."
+    },
+    "trigger": {
+      "type": "string",
+      "enum": ["MANUAL", "AUTO_GEOFENCE"],
+      "default": "MANUAL",
+      "description": "design 0001 §4: AUTO_GEOFENCE = dwell-matcher-emitted on sustained exit, back-dated to the last-inside fix."
+    },
+    "timestamps": { "$ref": "common.schema.json#/$defs/evidenceTimestamps" }
+  },
+  "additionalProperties": false,
+  "description": "Server derives Visit.checked_out_at + duration_minutes at READ time from the earliest matching checkout event (by device_wall_time, id tie-break) — deterministic regardless of arrival order, mirrors km_today/photo_count. The checkin event itself is never mutated."
+}
