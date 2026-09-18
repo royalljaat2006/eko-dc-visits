@@ -25,8 +25,11 @@ vercel --prod --yes                      # first run creates+links the project
 | Var | Required | Purpose |
 |-----|----------|---------|
 | `JWT_SECRET` | YES before real users | Session token signing (random 32+ chars) |
-| `PILOT_OTP`  | YES before real users | Login OTP for enrolled pilot users (replaces dev 000000) |
+| `PILOT_OTP`  | until Eko is configured | Login OTP for enrolled pilot users (replaces dev 000000). Ignored once the four `EKO_*` vars below are all set |
 | `DATABASE_URL` | YES for the pilot | Postgres + PostGIS. Without it the API runs in **DEMO MODE**: seeded in-memory, resets on cold starts |
+| `EKO_DEVELOPER_KEY`, `EKO_ACCESS_KEY`, `EKO_INITIATOR_ID`, `EKO_USER_CODE` | for real SMS OTP | ekoicici product (`api.eko.in/ekoicici/v3`) — a LIVE, BILLED account; every Send OTP sends a real SMS at real cost. All four must be set together to switch on. `EKO_INITIATOR_ID`/`EKO_USER_CODE` are fixed account credentials, never a phone number; `csp_id`/`mobile` are the caller's own number, set per request |
+| `EKO_BASE_URL` | optional | Defaults to the UAT/staging host; set to Eko's production host once that account's KYC is approved |
+| `EKO_CSP_ID` | optional | Only if Eko's onboarding assigned one for this service |
 
 ## Attaching a durable database (required for the weeks-long pilot)
 
@@ -50,7 +53,9 @@ vercel --prod --yes                      # first run creates+links the project
       locked plan requires India-region hosting for production; a short pilot
       on Singapore infra is a product-owner risk call — record it.
 - [ ] Backups: enable Neon PITR/branch snapshots
-- [ ] Rate limiting + real SMS OTP before scaling beyond the pilot cohort
+- [x] Rate limiting (`@fastify/rate-limit`, 5/min OTP request, 10/min OTP verify)
+- [ ] Real SMS OTP before scaling beyond the pilot cohort — wired
+      (`backend/src/auth/eko.ts`), set the `EKO_*` vars above to switch it on
 
 ## Production URL
 
