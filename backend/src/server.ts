@@ -56,6 +56,8 @@ const OTP_CODE = process.env.PILOT_OTP ?? DEV_OTP;
 const EKO = loadEkoConfig();
 const PHONE_PATTERN = /^[6-9][0-9]{9}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+/** Tenant a self-registered DC lands in — matches the seed fixtures' tenant so scoping stays consistent. */
+const SELF_REGISTER_TENANT_ID = "eko";
 
 /**
  * Editable CSP master fields (spec §3.1 template). CORE = first-class Location
@@ -213,6 +215,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         const body = (req.body ?? {}) as {
           phone?: unknown;
           otp?: unknown;
+          name?: unknown;
           device?: {
             hardware?: { manufacturer?: string; model?: string; os_version?: string };
             public_key?: unknown;
@@ -221,10 +224,9 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         if (typeof body.phone !== "string" || typeof body.otp !== "string" || typeof body.device !== "object" || body.device === null) {
           return problem(reply, 400, "Bad Request", "phone, otp and device are required");
         }
-        const user = await repos.findUserByPhone(body.phone);
-        if (!user || user.status !== "ACTIVE") {
-          return problem(reply, 401, "Unauthorized", "OTP verification failed");
-        }
+
+        // Prove phone ownership first — independent of whether the number is
+        // already a known user. A wrong/expired OTP never reveals account state.
         if (EKO) {
           const verified = await ekoVerifyOtp(EKO, body.phone, body.otp);
           if (!verified.ok) {
@@ -233,6 +235,28 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           }
         } else if (body.otp !== OTP_CODE) {
           return problem(reply, 401, "Unauthorized", "OTP verification failed");
+        }
+
+        // Self-registration: a brand-new number that just proved ownership
+        // becomes a DC automatically — the mobile app never mints any other
+        // role. Circle Head / Corporate Admin accounts stay web-provisioned.
+        let user = await repos.findUserByPhone(body.phone);
+        if (!user) {
+          const name = typeof body.name === "string" ? body.name.trim().slice(0, 120) : "";
+          if (name.length < 2) {
+            return problem(reply, 422, "Name Required", "New number — provide a name to register as a DC");
+          }
+          user = {
+            id: randomUUID(),
+            tenant_id: SELF_REGISTER_TENANT_ID,
+            name,
+            phone: body.phone,
+            role: "DC",
+            status: "ACTIVE",
+          };
+          await repos.insertUser(user);
+        } else if (user.status !== "ACTIVE") {
+          return problem(reply, 401, "Unauthorized", "Account inactive");
         }
 
         // Register device; M0 auto-binds (C2: PENDING→BOUND is admin policy).

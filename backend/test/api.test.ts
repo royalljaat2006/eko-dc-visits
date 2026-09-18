@@ -85,6 +85,43 @@ test("auth: wrong OTP → 401 problem-details; bad phone → 400", async () => {
   assert.equal(badPhone.statusCode, 400);
 });
 
+test("auth: self-registration — new number + correct OTP + name → DC; no name → 422", async () => {
+  const { app, repos } = await makeApp();
+  const newPhone = "9800000099";
+
+  const noName = await app.inject({
+    method: "POST",
+    url: "/api/v1/auth/otp/verify",
+    payload: { phone: newPhone, otp: DEV_OTP, device: { hardware: { manufacturer: "Test", model: "Inject", os_version: "14" } } },
+  });
+  assert.equal(noName.statusCode, 422);
+  assert.equal(await repos.findUserByPhone(newPhone), null); // no half-created account on rejection
+
+  const registered = await app.inject({
+    method: "POST",
+    url: "/api/v1/auth/otp/verify",
+    payload: {
+      phone: newPhone,
+      otp: DEV_OTP,
+      name: "  New DC  ",
+      device: { hardware: { manufacturer: "Test", model: "Inject", os_version: "14" } },
+    },
+  });
+  assert.equal(registered.statusCode, 200);
+  const body = registered.json() as { user: { name: string; role: string; status: string; phone: string } };
+  assert.equal(body.user.name, "New DC"); // trimmed
+  assert.equal(body.user.role, "DC"); // self-registration can only ever mint DC
+  assert.equal(body.user.status, "ACTIVE");
+
+  // Second login for the same number never re-registers or requires a name again.
+  const again = await app.inject({
+    method: "POST",
+    url: "/api/v1/auth/otp/verify",
+    payload: { phone: newPhone, otp: DEV_OTP, device: { hardware: { manufacturer: "Test", model: "Inject", os_version: "14" } } },
+  });
+  assert.equal(again.statusCode, 200);
+});
+
 test("HG3: REVOKED device binding → 401 on every authed endpoint", async () => {
   const { app, repos } = await makeApp();
   const dc = await login(app, PHONES.asha);
