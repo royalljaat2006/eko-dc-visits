@@ -31,9 +31,21 @@ Breaking changes after M1 require an ADR + adoption tickets for all impacted lan
 }
 ```
 
-Op types (v0.7.0): `visit.checkin`, `attendance.start`, `attendance.end`, `track.chunk` (T3). (M1 adds: `visit.checkout`,
-`visit.photo_meta`, `visit.outcome`, `form.submission`, `track.chunk`, `complaint.*`.)
+Op types (v0.10.0): `visit.checkin`, `visit.checkout`, `visit.photo` (T2), `attendance.start`, `attendance.end`, `track.chunk` (T3).
+(M1 still adds: `visit.outcome`, `form.submission`, `complaint.*`.)
 Unknown op types are QUARANTINED, never dropped.
+
+`visit.checkout` (v0.10.0): closes a visit.checkin by `visit_id`, tier T1 (same
+tier as the check-in it closes — checkout duration is dashboard-visible fast).
+May arrive before its checkin (different batches can race); `checked_out_at` /
+`duration_minutes` are derived at read time from the earliest (device_wall_time,
+id) match, so arrival order and duplicate emits never change the result. Manual
+(DC taps "Check out") or `AUTO_GEOFENCE` (design 0001 §4 dwell-matcher exit).
+
+`visit.photo` (v0.9.0): metadata + the watermarked JPEG inline as base64 on tier T2 — an
+M1 interim so photos round-trip against the demo/no-object-store backend. The M2 hardening
+splits it: metadata op in-batch, binary via pre-signed resumable upload (§7). The server
+re-hashes the bytes; a mismatch is `accepted-flagged` (`HASH_MISMATCH`), never rejected.
 
 ## 3. Apply semantics
 

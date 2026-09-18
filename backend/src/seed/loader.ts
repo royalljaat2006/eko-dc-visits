@@ -16,6 +16,7 @@ import circlesJson from "../../../fixtures/nandpur/circles.json" with { type: "j
 import membershipsJson from "../../../fixtures/nandpur/circle-memberships.json" with { type: "json" };
 import cspAssignmentsJson from "../../../fixtures/nandpur/csp-assignments.json" with { type: "json" };
 import beatPlansJson from "../../../fixtures/nandpur/beat-plans.json" with { type: "json" };
+import circle1a85Json from "../../../fixtures/circle-1a85-roster.json" with { type: "json" };
 import type { Bank, BeatPlan, Circle, CircleMembership, CspAssignment, LocationNode, User } from "../domain/types.js";
 import type { Repos } from "../repos/types.js";
 import { istDateOf } from "../geo.js";
@@ -72,4 +73,43 @@ export async function seedFixtures(repos: Repos, opts: SeedOptions = {}): Promis
   for (const p of beatPlans) await repos.insertBeatPlan(p);
 
   return { banks, locations, users, beatPlans, circles, circleMemberships, cspAssignments, today };
+}
+
+/**
+ * The REAL Circle 1A85 pilot roster (spec §7 — Ganesh Kumar / Eko Bharat
+ * Ventures): 7 DC users with their phones + per-user dashboard_url, in a
+ * "Circle 1A85". NEVER part of the public demo seed (which uses a shared OTP).
+ * Load into the pilot DB only, after PILOT_OTP + JWT_SECRET are set:
+ *   DATABASE_URL='postgres://…' npm run seed:pilot
+ * CSPs, assignments, and the Circle Head come from real master data separately.
+ */
+export async function seedCircle1A85(repos: Repos, opts: SeedOptions = {}): Promise<{ circle: Circle; users: User[] }> {
+  const now = opts.now ?? new Date();
+  const today = istDateOf(now);
+  const tenant_id = "eko";
+  const roster = circle1a85Json as { circle_name: string; dcs: Array<{ name: string; phone: string; dashboard_url: string }> };
+
+  // Stable ids so re-running converges (insert-if-absent in the repos).
+  const circleId = "018f5a85-0000-7000-8000-0000000000c1";
+  const circle: Circle = {
+    id: circleId, tenant_id, name: roster.circle_name, status: "ACTIVE", updated_at: now.toISOString(),
+  };
+  await repos.insertCircle(circle);
+
+  const users: User[] = [];
+  for (const [i, dc] of roster.dcs.entries()) {
+    const id = `018f5a85-0000-7000-8000-${String(i + 1).padStart(12, "0")}`;
+    const user: User = {
+      id, tenant_id, name: dc.name, phone: dc.phone, role: "DC", status: "ACTIVE",
+      scope_location_id: null, dashboard_url: dc.dashboard_url,
+    };
+    await repos.insertUser(user);
+    await repos.insertCircleMembership({
+      id: `018f5a85-0000-7000-8000-1${String(i + 1).padStart(11, "0")}`,
+      tenant_id, circle_id: circleId, user_id: id, role_in_circle: "DC",
+      valid_from: today, valid_to: null,
+    });
+    users.push(user);
+  }
+  return { circle, users };
 }

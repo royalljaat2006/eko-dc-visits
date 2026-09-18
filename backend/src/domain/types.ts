@@ -140,6 +140,22 @@ export interface StoredCheckInEvent extends CheckInEvent {
   timestamps: EvidenceTimestamps & { server_received_at: string };
 }
 
+/** c1-entities/checkout-event.schema.json — append-only evidence (v0.10.0). */
+export interface CheckoutEvent {
+  id: string;
+  visit_id: string; // the CheckInEvent.id this closes
+  dc_user_id: string;
+  device_id: string;
+  fix?: GeoPoint; // logged, never gated (ADR-0004)
+  trigger?: "MANUAL" | "AUTO_GEOFENCE";
+  timestamps: EvidenceTimestamps;
+}
+
+export interface StoredCheckoutEvent extends CheckoutEvent {
+  tenant_id: TenantId;
+  timestamps: EvidenceTimestamps & { server_received_at: string };
+}
+
 /** c1-entities/attendance-event.schema.json — append-only evidence (v0.3.0). */
 export interface AttendanceEvent {
   id: string;
@@ -175,6 +191,33 @@ export interface TrackChunk {
 
 export interface StoredTrackChunk extends TrackChunk {
   tenant_id: TenantId;
+  timestamps: EvidenceTimestamps & { server_received_at: string };
+}
+
+/** c1-entities/visit-photo.schema.json — append-only evidence (v0.9.0). */
+export type PhotoCategory = "SHOPFRONT" | "INSIDE" | "QR_DEVICE" | "BRANDING" | "OTHER";
+
+export interface VisitPhoto {
+  id: string;
+  visit_id: string;
+  dc_user_id: string;
+  device_id: string;
+  category: PhotoCategory;
+  sha256: string;
+  width?: number;
+  height?: number;
+  bytes_b64: string;
+  watermark?: Record<string, string>;
+  sidecar_signature?: string;
+  fix?: GeoPoint;
+  timestamps: EvidenceTimestamps;
+}
+
+export type PhotoUploadState = "STORED" | "HASH_MISMATCH";
+
+export interface StoredVisitPhoto extends VisitPhoto {
+  tenant_id: TenantId;
+  upload_state: PhotoUploadState;
   timestamps: EvidenceTimestamps & { server_received_at: string };
 }
 
@@ -298,7 +341,13 @@ export interface RefreshToken {
   expires_at: string;
 }
 
-export type SyncOpType = "visit.checkin" | "attendance.start" | "attendance.end" | "track.chunk";
+export type SyncOpType =
+  | "visit.checkin"
+  | "visit.checkout"
+  | "visit.photo"
+  | "attendance.start"
+  | "attendance.end"
+  | "track.chunk";
 
 /** C3 §2 batch envelope (subset typing; ajv on op payloads is the gate). */
 export interface SyncOp {
