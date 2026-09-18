@@ -5,6 +5,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { MemoryRepos } from "../src/repos/memory.js";
 import { seedFixtures } from "../src/seed/loader.js";
 import { applySyncBatch, type Clock } from "../src/sync/engine.js";
@@ -250,4 +251,135 @@ test("unknown op type → quarantined UNSUPPORTED_TYPE, never dropped (C3 v0.3.0
   const res = await applySyncBatch(repos, principal, batch, clock);
   assert.equal(res.results[0]!.result, "quarantined");
   assert.equal(await repos.countQuarantined("eko"), 1);
+});
+
+test("visit.photo (v0.9.0): sha256 verified → accepted; mismatch → accepted-flagged, still stored; replay → duplicate", async () => {
+  const repos = await seeded();
+
+  // A real visit to hang the photos off of.
+  const ci = checkin();
+  await applySyncBatch(repos, principal, batchOf([ci]), clock);
+
+  const bytes = Buffer.from("fake-jpeg-bytes- ÿ", "latin1");
+  const bytesB64 = bytes.toString("base64");
+  const goodSha = createHash("sha256").update(bytes).digest("hex");
+
+  const photo = (id: string, sha: string) => ({
+    op_id: id,
+    seq: 1,
+    type: "visit.photo" as const,
+    payload: {
+      id,
+      visit_id: ci.id,
+      dc_user_id: DC_ASHA,
+      device_id: DEVICE,
+      category: "SHOPFRONT",
+      sha256: sha,
+      bytes_b64: bytesB64,
+      width: 1200,
+      height: 1600,
+      watermark: { csp_code: "CSP-KJ", dc_name: "Asha" },
+      timestamps: { device_wall_time: "2026-07-08T05:31:00Z", monotonic_ms: 2_000_000 },
+    },
+  });
+  const mkBatch = (ops: unknown[], n: number): SyncBatch => ({
+    batch_id: uuidish(920000 + n),
+    device_id: DEVICE,
+    seq_from: 1,
+    seq_to: ops.length,
+    client_time: NOW.toISOString(),
+    app_version: "0.9.0-test",
+    contract_version: "0.9.0",
+    ops,
+  });
+
+  const okId = uuidish(700001);
+  const badId = uuidish(700002);
+  const res = await applySyncBatch(
+    repos,
+    principal,
+    mkBatch([photo(okId, goodSha), photo(badId, "0".repeat(64))], 1),
+    clock,
+  );
+  assert.equal(res.results[0]!.result, "accepted");
+  assert.equal(res.results[1]!.result, "accepted-flagged");
+  assert.deepEqual(res.results[1]!.flags, ["HASH_MISMATCH"]);
+
+  const counts = await repos.countPhotosForVisits("eko", [ci.id]);
+  assert.equal(counts.get(ci.id), 2, "both photos stored — evidence is never dropped (ADR-0003)");
+
+  // Replay converges: byte-identical dispositions, zero new writes.
+  const replay = await applySyncBatch(
+    repos,
+    principal,
+    mkBatch([photo(okId, goodSha), photo(badId, "0".repeat(64))], 1),
+    clock,
+  );
+  assert.equal(replay.results[0]!.result, "duplicate");
+  assert.equal(replay.results[1]!.result, "duplicate");
+  assert.equal((await repos.countPhotosForVisits("eko", [ci.id])).get(ci.id), 2);
+});
+
+test("visit.checkout (v0.10.0): links by visit_id order-independently; earliest (wall,id) wins", async () => {
+  const repos = await seeded();
+  const ci = checkin();
+  await applySyncBatch(repos, principal, batchOf([ci]), clock);
+
+  const mkBatch = (ops: unknown[], n: number): SyncBatch => ({
+    batch_id: uuidish(930000 + n),
+    device_id: DEVICE,
+    seq_from: 1,
+    seq_to: ops.length,
+    client_time: NOW.toISOString(),
+    app_version: "0.10.0-test",
+    contract_version: "0.10.0",
+    ops,
+  });
+  const checkoutOp = (id: string, wall: string) => ({
+    op_id: id,
+    seq: 1,
+    type: "visit.checkout" as const,
+    payload: {
+      id,
+      visit_id: ci.id,
+      dc_user_id: DC_ASHA,
+      device_id: DEVICE,
+      trigger: "MANUAL",
+      timestamps: { device_wall_time: wall, monotonic_ms: 3_000_000 },
+    },
+  });
+
+  const earlyId = uuidish(710001);
+  const lateId = uuidish(710002);
+  const res = await applySyncBatch(
+    repos,
+    principal,
+    mkBatch([checkoutOp(lateId, "2026-07-08T06:10:00Z"), checkoutOp(earlyId, "2026-07-08T05:45:00Z")], 1),
+    clock,
+  );
+  assert.equal(res.results[0]!.result, "accepted");
+  assert.equal(res.results[1]!.result, "accepted");
+
+  const times = await repos.checkoutTimesForVisits("eko", [ci.id]);
+  assert.equal(times.get(ci.id), "2026-07-08T05:45:00Z", "the EARLIEST checkout wins regardless of arrival order");
+
+  // A checkout for a checkin that hasn't synced yet still stores cleanly.
+  const orphanCiId = uuidish(720000);
+  const orphanRes = await applySyncBatch(repos, principal, mkBatch([checkoutOp(uuidish(720001), "2026-07-08T05:00:00Z")], 2), clock);
+  // (payload above still references ci.id; prove a genuinely unknown visit_id is fine too)
+  const trulyOrphan = {
+    op_id: uuidish(720002),
+    seq: 1,
+    type: "visit.checkout" as const,
+    payload: {
+      id: uuidish(720002),
+      visit_id: orphanCiId,
+      dc_user_id: DC_ASHA,
+      device_id: DEVICE,
+      timestamps: { device_wall_time: "2026-07-08T05:00:00Z", monotonic_ms: 1 },
+    },
+  };
+  const orphanBatchRes = await applySyncBatch(repos, principal, mkBatch([trulyOrphan], 3), clock);
+  assert.equal(orphanBatchRes.results[0]!.result, "accepted", "checkout for a not-yet-synced visit is still accepted, never rejected");
+  void orphanRes;
 });

@@ -22,7 +22,9 @@ import type {
   Device,
   LocationNode,
   StoredAttendanceEvent,
+  StoredCheckoutEvent,
   StoredTrackChunk,
+  StoredVisitPhoto,
   TrackPoint,
   OpDisposition,
   QuarantinedOp,
@@ -107,6 +109,14 @@ export class PgRepos implements Repos {
     const { rows } = await this.pool.query(`SELECT * FROM users WHERE tenant_id = $1 AND id = $2`, [tenantId, id]);
     return rows[0] ? userFromRow(rows[0] as Row) : null;
   }
+  async listUsersByIds(tenantId: TenantId, ids: readonly string[]): Promise<User[]> {
+    if (ids.length === 0) return [];
+    const { rows } = await this.pool.query(`SELECT * FROM users WHERE tenant_id = $1 AND id = ANY($2::uuid[])`, [
+      tenantId,
+      [...ids],
+    ]);
+    return (rows as Row[]).map(userFromRow);
+  }
   async findUserByPhone(phone: string): Promise<User | null> {
     const { rows } = await this.pool.query(`SELECT * FROM users WHERE phone = $1 LIMIT 1`, [phone]);
     return rows[0] ? userFromRow(rows[0] as Row) : null;
@@ -154,6 +164,27 @@ export class PgRepos implements Repos {
       [t.token, t.tenant_id, t.user_id, t.device_id, t.expires_at],
     );
   }
+  async getRefreshToken(token: string): Promise<RefreshToken | null> {
+    const { rows } = await this.pool.query(
+      `SELECT token, tenant_id, user_id, device_id, expires_at FROM refresh_tokens WHERE token = $1`,
+      [token],
+    );
+    const r = rows[0] as Row | undefined;
+    return r
+      ? {
+          token: r.token as string,
+          tenant_id: r.tenant_id as string,
+          user_id: r.user_id as string,
+          device_id: r.device_id as string,
+          expires_at: (r.expires_at as Date | string) instanceof Date
+            ? (r.expires_at as Date).toISOString()
+            : (r.expires_at as string),
+        }
+      : null;
+  }
+  async deleteRefreshToken(token: string): Promise<void> {
+    await this.pool.query(`DELETE FROM refresh_tokens WHERE token = $1`, [token]);
+  }
 
   // --- locations
   async insertLocation(l: LocationNode): Promise<void> {
@@ -173,6 +204,14 @@ export class PgRepos implements Repos {
   async getLocationById(tenantId: TenantId, id: string): Promise<LocationNode | null> {
     const { rows } = await this.pool.query(`SELECT * FROM locations WHERE tenant_id = $1 AND id = $2`, [tenantId, id]);
     return rows[0] ? locationFromRow(rows[0] as Row) : null;
+  }
+  async listLocationsByIds(tenantId: TenantId, ids: readonly string[]): Promise<LocationNode[]> {
+    if (ids.length === 0) return [];
+    const { rows } = await this.pool.query(`SELECT * FROM locations WHERE tenant_id = $1 AND id = ANY($2::uuid[])`, [
+      tenantId,
+      [...ids],
+    ]);
+    return (rows as Row[]).map(locationFromRow);
   }
   async findLocationByCode(tenantId: TenantId, code: string): Promise<LocationNode | null> {
     const { rows } = await this.pool.query(`SELECT * FROM locations WHERE tenant_id = $1 AND code = $2 LIMIT 1`, [
@@ -448,6 +487,31 @@ export class PgRepos implements Repos {
       ended_at: r.ended_at ? (r.ended_at as Date).toISOString() : null,
     };
   }
+  async getAttendanceDaysForDcDates(
+    tenantId: TenantId,
+    dcIds: readonly string[],
+    istDates: readonly string[],
+  ): Promise<Map<string, AttendanceDay>> {
+    if (dcIds.length === 0 || istDates.length === 0) return new Map();
+    const { rows } = await this.pool.query(
+      `SELECT * FROM attendance_days
+       WHERE tenant_id = $1 AND dc_user_id = ANY($2::uuid[]) AND ist_date::text = ANY($3::text[])`,
+      [tenantId, [...dcIds], [...istDates]],
+    );
+    const out = new Map<string, AttendanceDay>();
+    for (const r of rows as Row[]) {
+      const dc = r.dc_user_id as string;
+      const date = typeof r.ist_date === "string" ? r.ist_date : (r.ist_date as Date).toISOString().slice(0, 10);
+      out.set(`${dc}|${date}`, {
+        tenant_id: r.tenant_id as string,
+        dc_user_id: dc,
+        ist_date: date,
+        started_at: r.started_at ? (r.started_at as Date).toISOString() : null,
+        ended_at: r.ended_at ? (r.ended_at as Date).toISOString() : null,
+      });
+    }
+    return out;
+  }
 
   // --- CSP change requests (v0.8.0 — admin records)
   async insertCspChangeRequest(r: CspChangeRequest): Promise<void> {
@@ -522,6 +586,12 @@ export class PgRepos implements Repos {
        coordsChanged, patch.profile ? JSON.stringify(patch.profile) : null, patch.updated_at],
     );
   }
+  async updateUserHomeLocation(tenantId: TenantId, userId: string, homeLat: number, homeLng: number): Promise<void> {
+    await this.pool.query(
+      `UPDATE users SET home_lat = $3, home_lng = $4 WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, userId, homeLat, homeLng],
+    );
+  }
   async lastVisitDatesForDc(tenantId: TenantId, dcUserId: string): Promise<Map<string, string>> {
     const { rows } = await this.pool.query(
       `SELECT location_id, MAX(occurred_ist_date) AS d FROM visits
@@ -543,15 +613,30 @@ export class PgRepos implements Repos {
     );
   }
   async listTrackPointsForDcDate(tenantId: TenantId, dcUserId: string, istDate: string): Promise<TrackPoint[]> {
+    return (await this.listTrackPointsForDcsDate(tenantId, [dcUserId], istDate)).get(dcUserId) ?? [];
+  }
+  async listTrackPointsForDcsDate(
+    tenantId: TenantId,
+    dcIds: readonly string[],
+    istDate: string,
+  ): Promise<Map<string, TrackPoint[]>> {
+    const out = new Map<string, TrackPoint[]>();
+    if (dcIds.length === 0) return out;
     const { rows } = await this.pool.query(
-      `SELECT p.point FROM track_chunks c,
+      `SELECT c.dc_user_id, p.point FROM track_chunks c,
               LATERAL jsonb_array_elements(c.points) AS p(point)
-       WHERE c.tenant_id = $1 AND c.dc_user_id = $2
+       WHERE c.tenant_id = $1 AND c.dc_user_id = ANY($2::uuid[])
          AND ((p.point->>'t')::timestamptz AT TIME ZONE 'Asia/Kolkata')::date = $3::date
-       ORDER BY p.point->>'t'`,
-      [tenantId, dcUserId, istDate],
+       ORDER BY c.dc_user_id, p.point->>'t'`,
+      [tenantId, [...dcIds], istDate],
     );
-    return (rows as Row[]).map((r) => r.point as TrackPoint);
+    for (const r of rows as Row[]) {
+      const dc = r.dc_user_id as string;
+      const bucket = out.get(dc) ?? [];
+      bucket.push(r.point as TrackPoint);
+      out.set(dc, bucket);
+    }
+    return out;
   }
 
   // --- CSP assignment mutations (design 0001 §6; effective-dating, not history edits)
@@ -597,6 +682,57 @@ export class PgRepos implements Repos {
         v.sync_state, istDateOf(v.occurred_at),
       ],
     );
+  }
+  async insertVisitPhotoIfAbsent(p: StoredVisitPhoto): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO visit_photos (id, tenant_id, visit_id, dc_user_id, device_id, category, sha256,
+                                 width, height, bytes_b64, watermark, sidecar_signature, fix, upload_state,
+                                 device_wall_time, monotonic_ms, server_received_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        p.id, p.tenant_id, p.visit_id, p.dc_user_id, p.device_id, p.category, p.sha256,
+        p.width ?? null, p.height ?? null, p.bytes_b64,
+        p.watermark ? JSON.stringify(p.watermark) : null, p.sidecar_signature ?? null,
+        p.fix ? JSON.stringify(p.fix) : null, p.upload_state,
+        p.timestamps.device_wall_time, p.timestamps.monotonic_ms, p.timestamps.server_received_at,
+      ],
+    );
+  }
+  async countPhotosForVisits(tenantId: TenantId, visitIds: string[]): Promise<Map<string, number>> {
+    if (visitIds.length === 0) return new Map();
+    const { rows } = await this.pool.query(
+      `SELECT visit_id, count(*)::int AS n FROM visit_photos
+       WHERE tenant_id = $1 AND visit_id = ANY($2::uuid[]) GROUP BY visit_id`,
+      [tenantId, visitIds],
+    );
+    return new Map((rows as Row[]).map((r) => [r.visit_id as string, r.n as number]));
+  }
+
+  async insertCheckoutEventIfAbsent(e: StoredCheckoutEvent): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO visit_checkouts (id, tenant_id, visit_id, dc_user_id, device_id, fix, trigger,
+                                    device_wall_time, monotonic_ms, server_received_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        e.id, e.tenant_id, e.visit_id, e.dc_user_id, e.device_id,
+        e.fix ? JSON.stringify(e.fix) : null, e.trigger ?? "MANUAL",
+        e.timestamps.device_wall_time, e.timestamps.monotonic_ms, e.timestamps.server_received_at,
+      ],
+    );
+  }
+  async checkoutTimesForVisits(tenantId: TenantId, visitIds: string[]): Promise<Map<string, string>> {
+    if (visitIds.length === 0) return new Map();
+    // Earliest wall-time wins, id as a deterministic tie-break — order-independent (C3 §3).
+    const { rows } = await this.pool.query(
+      `SELECT DISTINCT ON (visit_id) visit_id, device_wall_time
+       FROM visit_checkouts
+       WHERE tenant_id = $1 AND visit_id = ANY($2::uuid[])
+       ORDER BY visit_id, device_wall_time ASC, id ASC`,
+      [tenantId, visitIds],
+    );
+    return new Map((rows as Row[]).map((r) => [r.visit_id as string, (r.device_wall_time as Date).toISOString()]));
   }
   async listVisitsByIstDate(scope: Scope, istDate: string): Promise<VisitView[]> {
     // Scoping applied HERE in SQL (single choke-point Scope) — never post-filtered.

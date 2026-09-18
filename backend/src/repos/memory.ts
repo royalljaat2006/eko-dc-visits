@@ -10,7 +10,9 @@ import type {
   Device,
   LocationNode,
   StoredAttendanceEvent,
+  StoredCheckoutEvent,
   StoredTrackChunk,
+  StoredVisitPhoto,
   TrackPoint,
   OpDisposition,
   QuarantinedOp,
@@ -48,6 +50,8 @@ export class MemoryRepos implements Repos {
   private checkinEvents = new Map<string, StoredCheckInEvent>();
   private attendanceEvents = new Map<string, StoredAttendanceEvent>();
   private trackChunks = new Map<string, StoredTrackChunk>();
+  private visitPhotos = new Map<string, StoredVisitPhoto>();
+  private checkoutEvents = new Map<string, StoredCheckoutEvent>();
   private cspChangeRequests = new Map<string, CspChangeRequest>();
   private attendanceDays = new Map<string, AttendanceDay>(); // key tenant:dc:istDate
   private visits = new Map<string, Visit>();
@@ -61,6 +65,10 @@ export class MemoryRepos implements Repos {
   // --- users
   async insertUser(u: User): Promise<void> {
     this.users.set(this.key(u.tenant_id, u.id), u);
+  }
+  async listUsersByIds(tenantId: TenantId, ids: readonly string[]): Promise<User[]> {
+    const want = new Set(ids);
+    return [...this.users.values()].filter((u) => u.tenant_id === tenantId && want.has(u.id));
   }
   async getUserById(tenantId: TenantId, id: string): Promise<User | null> {
     return this.users.get(this.key(tenantId, id)) ?? null;
@@ -99,6 +107,12 @@ export class MemoryRepos implements Repos {
   async insertRefreshToken(t: RefreshToken): Promise<void> {
     this.refreshTokens.set(t.token, t);
   }
+  async getRefreshToken(token: string): Promise<RefreshToken | null> {
+    return this.refreshTokens.get(token) ?? null;
+  }
+  async deleteRefreshToken(token: string): Promise<void> {
+    this.refreshTokens.delete(token);
+  }
 
   // --- locations
   async insertLocation(l: LocationNode): Promise<void> {
@@ -106,6 +120,10 @@ export class MemoryRepos implements Repos {
   }
   async getLocationById(tenantId: TenantId, id: string): Promise<LocationNode | null> {
     return this.locations.get(this.key(tenantId, id)) ?? null;
+  }
+  async listLocationsByIds(tenantId: TenantId, ids: readonly string[]): Promise<LocationNode[]> {
+    const want = new Set(ids);
+    return [...this.locations.values()].filter((l) => l.tenant_id === tenantId && want.has(l.id));
   }
   async findLocationByCode(tenantId: TenantId, code: string): Promise<LocationNode | null> {
     for (const l of this.locations.values()) {
@@ -228,6 +246,21 @@ export class MemoryRepos implements Repos {
   async getAttendanceDay(tenantId: TenantId, dcUserId: string, istDate: string): Promise<AttendanceDay | null> {
     return this.attendanceDays.get(`${tenantId}:${dcUserId}:${istDate}`) ?? null;
   }
+  async getAttendanceDaysForDcDates(
+    tenantId: TenantId,
+    dcIds: readonly string[],
+    istDates: readonly string[],
+  ): Promise<Map<string, AttendanceDay>> {
+    const wantDc = new Set(dcIds);
+    const wantDate = new Set(istDates);
+    const out = new Map<string, AttendanceDay>();
+    for (const d of this.attendanceDays.values()) {
+      if (d.tenant_id === tenantId && wantDc.has(d.dc_user_id) && wantDate.has(d.ist_date)) {
+        out.set(`${d.dc_user_id}|${d.ist_date}`, d);
+      }
+    }
+    return out;
+  }
 
   // --- CSP change requests (v0.8.0 — admin records)
   async insertCspChangeRequest(r: CspChangeRequest): Promise<void> {
@@ -271,6 +304,11 @@ export class MemoryRepos implements Repos {
       updated_at: patch.updated_at,
     });
   }
+  async updateUserHomeLocation(tenantId: TenantId, userId: string, homeLat: number, homeLng: number): Promise<void> {
+    const k = this.key(tenantId, userId);
+    const cur = this.users.get(k);
+    if (cur) this.users.set(k, { ...cur, home_lat: homeLat, home_lng: homeLng });
+  }
   async lastVisitDatesForDc(tenantId: TenantId, dcUserId: string): Promise<Map<string, string>> {
     const IST_OFFSET_MS = 5.5 * 3600 * 1000;
     const istDateOf = (iso: string) => new Date(new Date(iso).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
@@ -290,13 +328,25 @@ export class MemoryRepos implements Repos {
     if (!this.trackChunks.has(k)) this.trackChunks.set(k, c);
   }
   async listTrackPointsForDcDate(tenantId: TenantId, dcUserId: string, istDate: string): Promise<TrackPoint[]> {
+    return (await this.listTrackPointsForDcsDate(tenantId, [dcUserId], istDate)).get(dcUserId) ?? [];
+  }
+  async listTrackPointsForDcsDate(
+    tenantId: TenantId,
+    dcIds: readonly string[],
+    istDate: string,
+  ): Promise<Map<string, TrackPoint[]>> {
     const IST_OFFSET_MS = 5.5 * 3600 * 1000;
     const istDateOf = (iso: string) => new Date(new Date(iso).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
-    return [...this.trackChunks.values()]
-      .filter((c) => c.tenant_id === tenantId && c.dc_user_id === dcUserId)
-      .flatMap((c) => c.points)
-      .filter((p) => istDateOf(p.t) === istDate)
-      .sort((a, b) => a.t.localeCompare(b.t));
+    const want = new Set(dcIds);
+    const out = new Map<string, TrackPoint[]>();
+    for (const c of this.trackChunks.values()) {
+      if (c.tenant_id !== tenantId || !want.has(c.dc_user_id)) continue;
+      const bucket = out.get(c.dc_user_id) ?? [];
+      for (const p of c.points) if (istDateOf(p.t) === istDate) bucket.push(p);
+      out.set(c.dc_user_id, bucket);
+    }
+    for (const list of out.values()) list.sort((a, b) => a.t.localeCompare(b.t));
+    return out;
   }
 
   // --- CSP assignment mutations (design 0001 §6)
@@ -321,6 +371,39 @@ export class MemoryRepos implements Repos {
   async insertVisitIfAbsent(v: Visit): Promise<void> {
     const k = this.key(v.tenant_id, v.id);
     if (!this.visits.has(k)) this.visits.set(k, v);
+  }
+  async insertVisitPhotoIfAbsent(p: StoredVisitPhoto): Promise<void> {
+    const k = this.key(p.tenant_id, p.id);
+    if (!this.visitPhotos.has(k)) this.visitPhotos.set(k, p);
+  }
+  async countPhotosForVisits(tenantId: TenantId, visitIds: string[]): Promise<Map<string, number>> {
+    const want = new Set(visitIds);
+    const out = new Map<string, number>();
+    for (const p of this.visitPhotos.values()) {
+      if (p.tenant_id !== tenantId || !want.has(p.visit_id)) continue;
+      out.set(p.visit_id, (out.get(p.visit_id) ?? 0) + 1);
+    }
+    return out;
+  }
+
+  async insertCheckoutEventIfAbsent(e: StoredCheckoutEvent): Promise<void> {
+    const k = this.key(e.tenant_id, e.id);
+    if (!this.checkoutEvents.has(k)) this.checkoutEvents.set(k, e);
+  }
+  async checkoutTimesForVisits(tenantId: TenantId, visitIds: string[]): Promise<Map<string, string>> {
+    const want = new Set(visitIds);
+    // Earliest wall-time wins, id as a deterministic tie-break — the result
+    // never depends on iteration/insertion order (C3 §3 convergence).
+    const best = new Map<string, { wall: string; id: string }>();
+    for (const e of this.checkoutEvents.values()) {
+      if (e.tenant_id !== tenantId || !want.has(e.visit_id)) continue;
+      const wall = e.timestamps.device_wall_time;
+      const cur = best.get(e.visit_id);
+      if (!cur || wall < cur.wall || (wall === cur.wall && e.id < cur.id)) {
+        best.set(e.visit_id, { wall, id: e.id });
+      }
+    }
+    return new Map([...best].map(([visitId, v]) => [visitId, v.wall]));
   }
   async listVisitsByIstDate(scope: Scope, istDate: string): Promise<VisitView[]> {
     const IST_OFFSET_MS = 5.5 * 3600 * 1000;

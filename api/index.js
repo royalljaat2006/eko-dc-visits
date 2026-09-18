@@ -1563,6 +1563,44 @@ var require_process_warning = __commonJS({
   "backend/node_modules/process-warning/index.js"(exports2, module2) {
     "use strict";
     var { format } = require("node:util");
+    var kWarningFn = Symbol("process-warning.fn");
+    var kWarningSpyData = Symbol("process-warning.spyData");
+    function spyWarning(warning) {
+      if (warning[kWarningSpyData] === null) {
+        const warningFn = warning[kWarningFn];
+        warning[kWarningFn] = function(a, b, c) {
+          const args = [];
+          if (c) {
+            args.push(a, b, c);
+          } else if (b) {
+            args.push(a, b);
+          } else if (a) {
+            args.push(a);
+          }
+          warning[kWarningSpyData].calls.push({
+            arguments: args,
+            result: warningFn(a, b, c)
+          });
+        };
+        const spyData = {
+          calls: [],
+          callCount() {
+            return spyData.calls.length;
+          },
+          reset() {
+            warning.emitted = false;
+            spyData.calls.length = 0;
+          },
+          restore() {
+            spyData.reset();
+            warning[kWarningFn] = warningFn;
+            warning[kWarningSpyData] = null;
+          }
+        };
+        warning[kWarningSpyData] = spyData;
+      }
+      return warning[kWarningSpyData];
+    }
     function createDeprecation(params) {
       return createWarning({ ...params, name: "DeprecationWarning" });
     }
@@ -1572,28 +1610,30 @@ var require_process_warning = __commonJS({
       if (!message2) throw new Error("Warning message must not be empty");
       if (typeof unlimited !== "boolean") throw new Error("Warning opts.unlimited must be a boolean");
       code = code.toUpperCase();
-      let warningContainer = {
+      const warningFn = unlimited === true ? function(a, b, c) {
+        warning.emitted = true;
+        process.emitWarning(warning.format(a, b, c), warning.name, warning.code);
+        return true;
+      } : function(a, b, c) {
+        if (warning.emitted === true && warning.unlimited !== true) {
+          return false;
+        }
+        warning.emitted = true;
+        process.emitWarning(warning.format(a, b, c), warning.name, warning.code);
+        return true;
+      };
+      const warningContainer = {
         [name]: function(a, b, c) {
-          if (warning.emitted === true && warning.unlimited !== true) {
-            return;
-          }
-          warning.emitted = true;
-          process.emitWarning(warning.format(a, b, c), warning.name, warning.code);
+          return warning[kWarningFn](a, b, c);
         }
       };
-      if (unlimited) {
-        warningContainer = {
-          [name]: function(a, b, c) {
-            warning.emitted = true;
-            process.emitWarning(warning.format(a, b, c), warning.name, warning.code);
-          }
-        };
-      }
       const warning = warningContainer[name];
       warning.emitted = false;
       warning.message = message2;
       warning.unlimited = unlimited;
       warning.code = code;
+      warning[kWarningFn] = warningFn;
+      warning[kWarningSpyData] = null;
       warning.format = function(a, b, c) {
         let formatted;
         if (a && b && c) {
@@ -1609,7 +1649,7 @@ var require_process_warning = __commonJS({
       };
       return warning;
     }
-    var out = { createWarning, createDeprecation };
+    var out = { createWarning, createDeprecation, spyWarning };
     module2.exports = out;
     module2.exports.default = out;
     module2.exports.processWarning = out;
@@ -1645,6 +1685,12 @@ var require_warnings = __commonJS({
       message: 'You are using /%s/ Content-Type which may be vulnerable to CORS attack. Please make sure your RegExp start with "^" or include ";?" to proper detection of the essence MIME type.',
       unlimited: true
     });
+    var FSTSEC002 = createWarning({
+      name: "FastifySecurity",
+      code: "FSTSEC002",
+      message: "The headers schema for %s: %s references an external $ref (%s) that is not case-normalized. Header names in the referenced schema keep their original case and will not match the lowercased request headers, so case-insensitive assertions such as required and dependencies may not apply. Inline the header schema instead of referencing it with an external $ref.",
+      unlimited: true
+    });
     var FSTDEP022 = createWarning({
       name: "FastifyWarning",
       code: "FSTDEP022",
@@ -1663,14 +1709,22 @@ var require_warnings = __commonJS({
       message: "requestIdLogLabel option is deprecated. Use the logController option with requestIdLogLabel instead. The requestIdLogLabel top-level option will be removed in `fastify@6`.",
       unlimited: true
     });
+    var FSTDEP025 = createWarning({
+      name: "FastifyDeprecation",
+      code: "FSTDEP025",
+      message: 'Calling addHttpMethod for existing method "%s" without { overrideExisting: true } is deprecated. In Fastify v6, this will throw an error.',
+      unlimited: true
+    });
     module2.exports = {
       FSTWRN001,
       FSTWRN003,
       FSTWRN004,
       FSTSEC001,
+      FSTSEC002,
       FSTDEP022,
       FSTDEP023,
-      FSTDEP024
+      FSTDEP024,
+      FSTDEP025
     };
   }
 });
@@ -2118,6 +2172,16 @@ var require_errors2 = __commonJS({
         500,
         TypeError
       ),
+      FST_ERR_ROUTE_MISSING_CONTENT_TYPE: createError(
+        "FST_ERR_ROUTE_MISSING_CONTENT_TYPE",
+        "Method '%s' must provide a 'Content-Type' header.",
+        400
+      ),
+      FST_ERR_ROUTE_MISSING_CONTENT: createError(
+        "FST_ERR_ROUTE_MISSING_CONTENT",
+        "Method '%s' must provide a request body.",
+        400
+      ),
       /**
        *  again listen when close server
        */
@@ -2457,7 +2521,11 @@ var require_hooks = __commonJS({
         }
       }
       function handleResolve(newPayload) {
-        next(null, newPayload);
+        try {
+          next(null, newPayload);
+        } catch (err) {
+          cb(err, request, reply, payload);
+        }
       }
       function handleReject(err) {
         if (!err) {
@@ -3025,7 +3093,7 @@ var require_validation = __commonJS({
     var {
       FST_ERR_SCH_RESPONSE_SCHEMA_NOT_NESTED_2XX
     } = require_errors2();
-    var { FSTWRN001 } = require_warnings();
+    var { FSTWRN001, FSTSEC002 } = require_warnings();
     function compileSchemasForSerialization(context, compile) {
       if (!context.schema || !context.schema.response) {
         return;
@@ -3061,6 +3129,135 @@ var require_validation = __commonJS({
         return acc;
       }, {});
     }
+    function lowerCaseHeadersSchema(schema) {
+      if (Array.isArray(schema)) {
+        return schema.map(lowerCaseHeadersSchema);
+      }
+      if (schema === null || typeof schema !== "object") {
+        return schema;
+      }
+      const result = {};
+      for (const key of Object.keys(schema)) {
+        const value = schema[key];
+        switch (key) {
+          case "properties": {
+            if (value === null || typeof value !== "object") {
+              result.properties = value;
+              break;
+            }
+            const normalized = {};
+            for (const prop of Object.keys(value)) {
+              normalized[prop.toLowerCase()] = lowerCaseHeadersSchema(value[prop]);
+            }
+            result.properties = normalized;
+            break;
+          }
+          case "required":
+            result.required = Array.isArray(value) ? value.map((name) => name.toLowerCase()) : value;
+            break;
+          case "dependencies": {
+            if (value === null || typeof value !== "object") {
+              result.dependencies = value;
+              break;
+            }
+            const normalized = {};
+            for (const dep of Object.keys(value)) {
+              const depValue = value[dep];
+              if (Array.isArray(depValue)) {
+                normalized[dep.toLowerCase()] = depValue.map((name) => name.toLowerCase());
+              } else {
+                normalized[dep.toLowerCase()] = lowerCaseHeadersSchema(depValue);
+              }
+            }
+            result.dependencies = normalized;
+            break;
+          }
+          case "dependentSchemas": {
+            if (value === null || typeof value !== "object") {
+              result.dependentSchemas = value;
+              break;
+            }
+            const normalized = {};
+            for (const dep of Object.keys(value)) {
+              normalized[dep.toLowerCase()] = lowerCaseHeadersSchema(value[dep]);
+            }
+            result.dependentSchemas = normalized;
+            break;
+          }
+          case "dependentRequired": {
+            if (value === null || typeof value !== "object") {
+              result.dependentRequired = value;
+              break;
+            }
+            const normalized = {};
+            for (const dep of Object.keys(value)) {
+              normalized[dep.toLowerCase()] = value[dep].map((name) => name.toLowerCase());
+            }
+            result.dependentRequired = normalized;
+            break;
+          }
+          // Arrays of subschemas (`allOf`/`anyOf`/`oneOf`) or a single subschema
+          // (`not`/`if`/`then`/`else`/`items`/`additionalItems`/...). `lowerCaseHeadersSchema`
+          // handles arrays, objects and booleans, so recursing here covers them all.
+          case "allOf":
+          case "anyOf":
+          case "oneOf":
+          case "not":
+          case "if":
+          case "then":
+          case "else":
+          case "items":
+          case "additionalItems":
+          case "additionalProperties":
+          case "unevaluatedItems":
+          case "unevaluatedProperties":
+          case "contains":
+          case "propertyNames":
+          case "contentSchema":
+            result[key] = lowerCaseHeadersSchema(value);
+            break;
+          // Maps of subschemas whose keys are not header names (definition names,
+          // regex patterns): keep the keys, normalize the subschema values.
+          case "definitions":
+          case "$defs":
+          case "patternProperties": {
+            if (value === null || typeof value !== "object") {
+              result[key] = value;
+              break;
+            }
+            const normalized = {};
+            for (const k of Object.keys(value)) {
+              normalized[k] = lowerCaseHeadersSchema(value[k]);
+            }
+            result[key] = normalized;
+            break;
+          }
+          default:
+            result[key] = value;
+        }
+      }
+      return result;
+    }
+    function findExternalHeaderRef(schema) {
+      if (Array.isArray(schema)) {
+        for (const item of schema) {
+          const ref = findExternalHeaderRef(item);
+          if (ref !== void 0) return ref;
+        }
+        return void 0;
+      }
+      if (schema === null || typeof schema !== "object") {
+        return void 0;
+      }
+      if (typeof schema.$ref === "string" && schema.$ref[0] !== "#") {
+        return schema.$ref;
+      }
+      for (const key of Object.keys(schema)) {
+        const ref = findExternalHeaderRef(schema[key]);
+        if (ref !== void 0) return ref;
+      }
+      return void 0;
+    }
     function compileSchemasForValidation(context, compile, isCustom) {
       const { schema } = context;
       if (!schema) {
@@ -3068,28 +3265,22 @@ var require_validation = __commonJS({
       }
       const { method, url } = context.config || {};
       const headers = schema.headers;
-      if (headers && (isCustom || Object.getPrototypeOf(headers) !== Object.prototype)) {
-        context[headersSchema] = compile({ schema: headers, method, url, httpPart: "headers" });
-      } else if (headers) {
-        const headersSchemaLowerCase = {};
-        Object.keys(headers).forEach((k) => {
-          headersSchemaLowerCase[k] = headers[k];
-        });
-        if (headersSchemaLowerCase.required instanceof Array) {
-          headersSchemaLowerCase.required = headersSchemaLowerCase.required.map((h) => h.toLowerCase());
+      if (headers !== void 0) {
+        if (isCustom || typeof headers !== "object" || headers === null || Object.getPrototypeOf(headers) !== Object.prototype) {
+          context[headersSchema] = compile({ schema: headers, method, url, httpPart: "headers" });
+        } else {
+          const headersSchemaLowerCase = lowerCaseHeadersSchema(headers);
+          const externalRef = findExternalHeaderRef(headers);
+          if (externalRef !== void 0) {
+            FSTSEC002(method, url, externalRef);
+          }
+          context[headersSchema] = compile({ schema: headersSchemaLowerCase, method, url, httpPart: "headers" });
         }
-        if (headers.properties) {
-          headersSchemaLowerCase.properties = {};
-          Object.keys(headers.properties).forEach((k) => {
-            headersSchemaLowerCase.properties[k.toLowerCase()] = headers.properties[k];
-          });
-        }
-        context[headersSchema] = compile({ schema: headersSchemaLowerCase, method, url, httpPart: "headers" });
       } else if (Object.hasOwn(schema, "headers")) {
         FSTWRN001("headers", method, url);
       }
-      if (schema.body) {
-        const contentProperty = schema.body.content;
+      if (schema.body !== void 0) {
+        const contentProperty = schema.body !== null && typeof schema.body === "object" ? schema.body.content : void 0;
         if (contentProperty) {
           const contentTypeSchemas = {};
           for (const contentType of Object.keys(contentProperty)) {
@@ -3103,12 +3294,12 @@ var require_validation = __commonJS({
       } else if (Object.hasOwn(schema, "body")) {
         FSTWRN001("body", method, url);
       }
-      if (schema.querystring) {
+      if (schema.querystring !== void 0) {
         context[querystringSchema] = compile({ schema: schema.querystring, method, url, httpPart: "querystring" });
       } else if (Object.hasOwn(schema, "querystring")) {
         FSTWRN001("querystring", method, url);
       }
-      if (schema.params) {
+      if (schema.params !== void 0) {
         context[paramsSchema] = compile({ schema: schema.params, method, url, httpPart: "params" });
       } else if (Object.hasOwn(schema, "params")) {
         FSTWRN001("params", method, url);
@@ -3118,14 +3309,22 @@ var require_validation = __commonJS({
       const isUndefined = request[paramName] === void 0;
       let ret;
       try {
-        ret = validatorFunction?.(isUndefined ? null : request[paramName]);
+        const data = isUndefined ? null : request[paramName];
+        if (validatorFunction?.schemaEnv) {
+          ret = validatorFunction(data, {
+            parentData: request,
+            parentDataProperty: paramName
+          });
+        } else {
+          ret = validatorFunction?.(data);
+        }
       } catch (err) {
         err.statusCode = 500;
         return err;
       }
       if (ret && typeof ret.then === "function") {
         return ret.then((res) => {
-          return answer(res);
+          return res === false ? validatorFunction.errors : false;
         }).catch((err) => {
           return err;
         });
@@ -3134,7 +3333,7 @@ var require_validation = __commonJS({
       function answer(ret2) {
         if (ret2 === false) return validatorFunction.errors;
         if (ret2 && ret2.error) return ret2.error;
-        if (ret2 && ret2.value) request[paramName] = ret2.value;
+        if (ret2 && typeof ret2 === "object" && "value" in ret2) request[paramName] = ret2.value;
         return false;
       }
     }
@@ -3915,7 +4114,8 @@ var require_content_type = __commonJS({
   "backend/node_modules/fastify/lib/content-type.js"(exports2, module2) {
     "use strict";
     var { LruMap: Lru } = require_toad_cache();
-    var keyValuePairsReg = /(?:^|;)\s*([\w!#$%&'*+.^`|~-]+)=([^;]*)/gm;
+    var keyValuePairsReg = /(?:^|;)\s*([\w!#$%&'*+.^`|~-]+)=("(?:[\t\u0020\u0021\u0023-\u005b\u005d-\u007e\u0080-\u00ff]|\\[\t\u0020-\u00ff])*"|[\w!#$%&'*+.^`|~-]+)/gu;
+    var quotedPairReg = /\\([\t\u0020-\u00ff])/gu;
     var typeNameReg = /^[\w!#$%&'*+.^`|~-]+$/;
     var subtypeNameReg = /^[\w!#$%&'*+.^`|~-]+\s*$/;
     var cache = new Lru(100);
@@ -3985,17 +4185,14 @@ var require_content_type = __commonJS({
         let matches = keyValuePairsReg.exec(paramsList);
         while (matches) {
           const key = matches[1].toLowerCase();
-          const value = matches[2];
-          if (value[0] === '"') {
-            if (value.at(-1) !== '"') {
-              this.#parameters.set(key, "invalid quoted string");
-              matches = keyValuePairsReg.exec(paramsList);
-              continue;
+          let value = matches[2];
+          if (value.charCodeAt(0) === 34) {
+            value = value.slice(1, -1);
+            if (value.indexOf("\\") !== -1) {
+              value = value.replace(quotedPairReg, "$1");
             }
-            this.#parameters.set(key, value.slice(1, value.length - 1));
-          } else {
-            this.#parameters.set(key, value);
           }
+          this.#parameters.set(key, value);
           matches = keyValuePairsReg.exec(paramsList);
         }
       }
@@ -4009,6 +4206,7 @@ var require_content_type = __commonJS({
         return this.#valid;
       }
       get mediaType() {
+        if (this.#valid === false) return void 0;
         return `${this.#type}/${this.#subtype}`;
       }
       get type() {
@@ -4047,7 +4245,11 @@ var require_handle_request = __commonJS({
     var wrapThenable = require_wrap_thenable();
     var { validate: validateSchema } = require_validation();
     var { preValidationHookRunner, preHandlerHookRunner } = require_hooks();
-    var { FST_ERR_CTP_INVALID_MEDIA_TYPE } = require_errors2();
+    var {
+      FST_ERR_CTP_INVALID_MEDIA_TYPE,
+      FST_ERR_ROUTE_MISSING_CONTENT_TYPE,
+      FST_ERR_ROUTE_MISSING_CONTENT
+    } = require_errors2();
     var { setErrorStatusCode } = require_error_status();
     var {
       kReplyIsError,
@@ -4074,11 +4276,20 @@ var require_handle_request = __commonJS({
       if (this[kSupportedHTTPMethods].bodywith.has(method)) {
         const headers = request.headers;
         const ctHeader = headers["content-type"];
+        if (method === "QUERY") {
+          if (ctHeader === void 0) {
+            reply[kReplyIsError] = true;
+            reply.status(400).send(new FST_ERR_ROUTE_MISSING_CONTENT_TYPE(method));
+            return;
+          }
+          if (isEmptyBody(headers)) {
+            reply[kReplyIsError] = true;
+            reply.status(400).send(new FST_ERR_ROUTE_MISSING_CONTENT(method));
+            return;
+          }
+        }
         if (ctHeader === void 0) {
-          const contentLength = headers["content-length"];
-          const transferEncoding = headers["transfer-encoding"];
-          const isEmptyBody = transferEncoding === void 0 && (contentLength === void 0 || contentLength === "0");
-          if (isEmptyBody) {
+          if (isEmptyBody(headers)) {
             handler2(request, reply);
             return;
           }
@@ -4113,6 +4324,11 @@ var require_handle_request = __commonJS({
       } catch (err) {
         preValidationCallback(err, request, reply);
       }
+    }
+    function isEmptyBody(headers) {
+      const contentLength = headers["content-length"];
+      const transferEncoding = headers["transfer-encoding"];
+      return transferEncoding === void 0 && (contentLength === void 0 || contentLength === "0");
     }
     function preValidationCallback(err, request, reply) {
       if (reply.sent === true) return;
@@ -5641,7 +5857,7 @@ var require_log_controller = __commonJS({
        * Logs the outcome of a completed request.
        * Uses `error` level when an error is present, `info` otherwise.
        *
-       * @param {Error | null} error  Error that occurred during the response, if any.
+       * @param {Error | null | undefined} error  Error that occurred during the response, if any.
        * @param {object} request      Fastify request object.
        * @param {object} reply        Fastify reply object.
        * @param {object} [metadata]   Extra contextual data (unused).
@@ -10466,8 +10682,8 @@ var require_schemas = __commonJS({
       if (routeSchemas[kSchemaVisited]) {
         return routeSchemas;
       }
-      if (routeSchemas.query) {
-        if (routeSchemas.querystring) {
+      if (routeSchemas.query !== void 0) {
+        if (routeSchemas.querystring !== void 0) {
           throw new FST_ERR_SCH_DUPLICATE("querystring");
         }
         routeSchemas.querystring = routeSchemas.query;
@@ -10533,7 +10749,7 @@ var require_schemas = __commonJS({
       }
       if (responseSchemaDef[statusCode]) {
         if (responseSchemaDef[statusCode].constructor === Object) {
-          const ct = new ContentType(contentType);
+          const ct = ContentType.from(contentType);
           if (ct.isValid) {
             if (responseSchemaDef[statusCode][ct.mediaType]) {
               return responseSchemaDef[statusCode][ct.mediaType];
@@ -10549,7 +10765,7 @@ var require_schemas = __commonJS({
       const fallbackStatusCode = (statusCode + "")[0] + "xx";
       if (responseSchemaDef[fallbackStatusCode]) {
         if (responseSchemaDef[fallbackStatusCode].constructor === Object) {
-          const ct = new ContentType(contentType);
+          const ct = ContentType.from(contentType);
           if (ct.isValid) {
             if (responseSchemaDef[fallbackStatusCode][ct.mediaType]) {
               return responseSchemaDef[fallbackStatusCode][ct.mediaType];
@@ -10564,7 +10780,7 @@ var require_schemas = __commonJS({
       }
       if (responseSchemaDef.default) {
         if (responseSchemaDef.default.constructor === Object) {
-          const ct = new ContentType(contentType);
+          const ct = ContentType.from(contentType);
           if (ct.isValid) {
             if (responseSchemaDef.default[ct.mediaType]) {
               return responseSchemaDef.default[ct.mediaType];
@@ -11051,7 +11267,7 @@ var require_decorate = __commonJS({
         throw new FST_ERR_DEC_DEPENDENCY_INVALID_TYPE(name);
       }
       for (let i = 0; i !== deps.length; ++i) {
-        if (!checkExistence(instance, deps[i])) {
+        if (!checkExistence(instance, deps[i]) && !hasInstanceProperty(instance, deps[i])) {
           throw new FST_ERR_DEC_MISSING_DEPENDENCY(deps[i]);
         }
       }
@@ -11176,6 +11392,12 @@ var require_reply = __commonJS({
             return 0;
           }
           return (this[kReplyEndTime] || now()) - this[kReplyStartTime];
+        }
+      },
+      mediaType: {
+        get() {
+          const contentTypeHeader = this[kReplyHeaders]["content-type"];
+          return ContentType.from(contentTypeHeader).mediaType;
         }
       },
       server: {
@@ -11304,7 +11526,11 @@ var require_reply = __commonJS({
       return this[kReplyHeaders][key] !== void 0 || this.raw.hasHeader(key);
     };
     Reply.prototype.removeHeader = function(key) {
-      delete this[kReplyHeaders][key.toLowerCase()];
+      key = key.toLowerCase();
+      delete this[kReplyHeaders][key];
+      if (!this.raw.headersSent) {
+        this.raw.removeHeader(key);
+      }
       return this;
     };
     Reply.prototype.header = function(key, value = "") {
@@ -11568,8 +11794,12 @@ var require_reply = __commonJS({
           header += " ";
           header += trailerName;
         }
-        reply.header("Transfer-Encoding", "chunked");
-        reply.header("Trailer", header.trim());
+        if (header !== "") {
+          reply.header("Transfer-Encoding", "chunked");
+          reply.header("Trailer", header.trim());
+        } else {
+          reply[kReplyTrailers] = null;
+        }
       }
       if (payload != null && typeof payload === "object" && toString.call(payload) === "[object Response]") {
         if (typeof payload.status === "number") {
@@ -12986,8 +13216,8 @@ var require_request = __commonJS({
         };
       }
       if (typeof tp === "number") {
-        return function(a, i) {
-          return i < tp;
+        return function() {
+          return false;
         };
       }
       if (typeof tp === "string") {
@@ -13592,6 +13822,7 @@ var require_content_type_parser = __commonJS({
       }
       for (let j = 0; j !== this.parserRegExpList.length; ++j) {
         const parserRegExp = this.parserRegExpList[j];
+        parserRegExp.lastIndex = 0;
         if (parserRegExp.test(ct)) {
           parser = this.customParsers.get(parserRegExp.toString());
           this.cache.set(ct, parser);
@@ -16891,9 +17122,28 @@ var require_utils = __commonJS({
     "use strict";
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
+    var isPort = RegExp.prototype.test.bind(/^\d*$/u);
     var isHexPair = RegExp.prototype.test.bind(/^[\da-f]{2}$/iu);
     var isUnreserved = RegExp.prototype.test.bind(/^[\da-z\-._~]$/iu);
-    var isPathCharacter = RegExp.prototype.test.bind(/^[\da-z\-._~!$&'()*+,;=:@/]$/iu);
+    var isPathCharacter = RegExp.prototype.test.bind(/^[A-Za-z0-9\-._~!$&'()*+,;=:@/]$/u);
+    var isQueryFragmentCharacter = RegExp.prototype.test.bind(/^[A-Za-z0-9\-._~!$&'()*+,;=:@/?]$/u);
+    var isUserinfoCharacter = RegExp.prototype.test.bind(/^[A-Za-z0-9\-._~!$&'()*+,;=:]$/u);
+    var BYTE_HEX = new Array(256);
+    {
+      const HEX_DIGITS = "0123456789ABCDEF";
+      for (let i = 0; i < 256; i++) {
+        BYTE_HEX[i] = "%" + HEX_DIGITS[i >> 4] + HEX_DIGITS[i & 15];
+      }
+    }
+    function percentEncodeNonAscii(cp) {
+      if (cp < 2048) {
+        return BYTE_HEX[192 | cp >> 6] + BYTE_HEX[128 | cp & 63];
+      }
+      if (cp < 65536) {
+        return BYTE_HEX[224 | cp >> 12] + BYTE_HEX[128 | cp >> 6 & 63] + BYTE_HEX[128 | cp & 63];
+      }
+      return BYTE_HEX[240 | cp >> 18] + BYTE_HEX[128 | cp >> 12 & 63] + BYTE_HEX[128 | cp >> 6 & 63] + BYTE_HEX[128 | cp & 63];
+    }
     function stringArrayToHexStripped(input) {
       let acc = "";
       let code = 0;
@@ -16918,91 +17168,105 @@ var require_utils = __commonJS({
       }
       return acc;
     }
+    var isHextet = RegExp.prototype.test.bind(/^[\dA-Fa-f]{1,4}$/);
+    var isIPvFuture = RegExp.prototype.test.bind(/^[vV][\dA-Fa-f]+\.[A-Za-z\d\-._~!$&'()*+,;=:]+$/);
+    var isZoneCharacter = RegExp.prototype.test.bind(/^[A-Za-z\d\-._~]$/);
     var nonSimpleDomain = RegExp.prototype.test.bind(/[^!"$&'()*+,\-.;=_`a-z{}~]/u);
-    function consumeIsZone(buffer) {
-      buffer.length = 0;
-      return true;
-    }
-    function consumeHextets(buffer, address, output) {
-      if (buffer.length) {
-        const hex = stringArrayToHexStripped(buffer);
-        if (hex !== "") {
-          address.push(hex);
-        } else {
-          output.error = true;
-          return false;
+    function isZoneIdentifier(zone) {
+      if (zone.length === 0) return false;
+      for (let i = 0; i < zone.length; i++) {
+        if (isZoneCharacter(zone[i])) continue;
+        if (zone[i] === "%" && i + 2 < zone.length && isHexPair(zone.slice(i + 1, i + 3))) {
+          i += 2;
+          continue;
         }
-        buffer.length = 0;
+        return false;
       }
       return true;
     }
-    function getIPV6(input) {
-      let tokenCount = 0;
-      const output = { error: false, address: "", zone: "" };
-      const address = [];
-      const buffer = [];
-      let endipv6Encountered = false;
-      let endIpv6 = false;
-      let consume = consumeHextets;
-      for (let i = 0; i < input.length; i++) {
-        const cursor = input[i];
-        if (cursor === "[" || cursor === "]") {
-          continue;
-        }
-        if (cursor === ":") {
-          if (endipv6Encountered === true) {
-            endIpv6 = true;
+    function compressIPv6ZeroRun(hextets) {
+      let bestStart = -1;
+      let bestLength = 0;
+      let runStart = -1;
+      let runLength = 0;
+      for (let i = 0; i < hextets.length; i++) {
+        if (hextets[i] === "0") {
+          if (runStart === -1) runStart = i;
+          runLength++;
+          if (runLength > bestLength) {
+            bestLength = runLength;
+            bestStart = runStart;
           }
-          if (!consume(buffer, address, output)) {
-            break;
-          }
-          if (++tokenCount > 7) {
-            output.error = true;
-            break;
-          }
-          if (i > 0 && input[i - 1] === ":") {
-            endipv6Encountered = true;
-          }
-          address.push(":");
-          continue;
-        } else if (cursor === "%") {
-          if (!consume(buffer, address, output)) {
-            break;
-          }
-          consume = consumeIsZone;
         } else {
-          buffer.push(cursor);
-          continue;
+          runStart = -1;
+          runLength = 0;
         }
       }
-      if (buffer.length) {
-        if (consume === consumeIsZone) {
-          output.zone = buffer.join("");
-        } else if (endIpv6) {
-          address.push(buffer.join(""));
-        } else {
-          address.push(stringArrayToHexStripped(buffer));
-        }
+      if (bestLength < 2) return hextets.join(":");
+      const head = hextets.slice(0, bestStart).join(":");
+      const tail = hextets.slice(bestStart + bestLength).join(":");
+      return head + "::" + tail;
+    }
+    function normalizeIPv6Address(input) {
+      const compression = input.indexOf("::");
+      if (compression !== -1 && input.indexOf("::", compression + 1) !== -1) return void 0;
+      const left = compression === -1 ? input.split(":") : input.slice(0, compression).split(":");
+      const right = compression === -1 ? [] : input.slice(compression + 2).split(":");
+      if (compression !== -1) {
+        if (left.length === 1 && left[0] === "") left.length = 0;
+        if (right.length === 1 && right[0] === "") right.length = 0;
       }
-      output.address = address.join("");
-      return output;
+      const parts = left.concat(right);
+      let hextetCount = 0;
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (part === "") return void 0;
+        if (part.indexOf(".") !== -1) {
+          if (i !== parts.length - 1 || compression !== -1 && right.length === 0 || !isIPv4(part)) return void 0;
+          hextetCount += 2;
+          continue;
+        }
+        if (!isHextet(part)) return void 0;
+        parts[i] = parseInt(part, 16).toString(16);
+        hextetCount++;
+      }
+      if (compression === -1) {
+        if (hextetCount !== 8) return void 0;
+        return compressIPv6ZeroRun(parts);
+      }
+      if (hextetCount >= 8) return void 0;
+      const expanded = parts.slice(0, left.length);
+      for (let i = hextetCount; i < 8; i++) expanded.push("0");
+      for (let i = left.length; i < parts.length; i++) expanded.push(parts[i]);
+      return compressIPv6ZeroRun(expanded);
     }
     function normalizeIPv6(host) {
-      if (findToken(host, ":") < 2) {
-        return { host, isIPV6: false };
+      const bracketed = host[0] === "[" && host[host.length - 1] === "]";
+      const hasBracket = host[0] === "[" || host[host.length - 1] === "]";
+      if (hasBracket && !bracketed) return { host, isIPV6: false, error: true };
+      let input = bracketed ? host.slice(1, -1) : host;
+      if (bracketed && isIPvFuture(input)) {
+        input = input.toLowerCase();
+        return { host: `[${input}]`, escapedHost: input, isIPV6: false, isIPVFuture: true };
       }
-      const ipv6 = getIPV6(host);
-      if (!ipv6.error) {
-        let newHost = ipv6.address;
-        let escapedHost = ipv6.address;
-        if (ipv6.zone) {
-          newHost += "%" + ipv6.zone;
-          escapedHost += "%25" + ipv6.zone;
-        }
-        return { host: newHost, isIPV6: true, escapedHost };
-      } else {
-        return { host, isIPV6: false };
+      if (findToken(input, ":") < 2) {
+        return { host, isIPV6: false, error: bracketed };
       }
+      let zoneIdentifier = "";
+      const zoneSeparator = input.indexOf("%");
+      if (zoneSeparator !== -1) {
+        const separatorLength = input.slice(zoneSeparator, zoneSeparator + 3).toLowerCase() === "%25" ? 3 : 1;
+        zoneIdentifier = input.slice(zoneSeparator + separatorLength);
+        if (!isZoneIdentifier(zoneIdentifier)) return { host, isIPV6: false, error: true };
+        input = input.slice(0, zoneSeparator);
+      }
+      const address = normalizeIPv6Address(input);
+      if (address === void 0) return { host, isIPV6: false, error: true };
+      return {
+        host: address + (zoneIdentifier ? "%" + zoneIdentifier : ""),
+        escapedHost: address + (zoneIdentifier ? "%25" + zoneIdentifier : ""),
+        isIPV6: true
+      };
     }
     function findToken(str, token) {
       let ind = 0;
@@ -17121,7 +17385,8 @@ var require_utils = __commonJS({
     function normalizePathEncoding(input) {
       let output = "";
       for (let i = 0; i < input.length; i++) {
-        if (input[i] === "%" && i + 2 < input.length) {
+        const ch = input[i];
+        if (ch === "%" && i + 2 < input.length) {
           const hex = input.slice(i + 1, i + 3);
           if (isHexPair(hex)) {
             const normalizedHex = hex.toUpperCase();
@@ -17135,10 +17400,152 @@ var require_utils = __commonJS({
             continue;
           }
         }
-        if (isPathCharacter(input[i])) {
-          output += input[i];
+        if (isPathCharacter(ch)) {
+          output += ch;
         } else {
-          output += escape(input[i]);
+          const code = input.charCodeAt(i);
+          if (code < 128) {
+            output += isEscapeSafe(code) ? ch : BYTE_HEX[code];
+          } else if (code < 55296 || code > 57343) {
+            output += percentEncodeNonAscii(code);
+          } else if (code <= 56319 && i + 1 < input.length) {
+            const low = input.charCodeAt(i + 1);
+            if (low >= 56320 && low <= 57343) {
+              output += percentEncodeNonAscii(65536 + (code - 55296 << 10) + (low - 56320));
+              i++;
+            } else {
+              output += percentEncodeNonAscii(65533);
+            }
+          } else {
+            output += percentEncodeNonAscii(65533);
+          }
+        }
+      }
+      return output;
+    }
+    function serializePathEncoding(input, pathNoScheme = false) {
+      let output = "";
+      let firstSegment = pathNoScheme && input[0] !== "/";
+      for (let i = 0; i < input.length; i++) {
+        const ch = input[i];
+        if (ch === "%" && i + 2 < input.length) {
+          const hex = input.slice(i + 1, i + 3);
+          if (isHexPair(hex)) {
+            output += "%" + hex.toUpperCase();
+            i += 2;
+            continue;
+          }
+        }
+        if (ch === "/") {
+          firstSegment = false;
+        }
+        if (isPathCharacter(ch) && (ch !== ":" || !firstSegment)) {
+          output += ch;
+        } else {
+          const code = input.charCodeAt(i);
+          if (code < 128) {
+            output += BYTE_HEX[code];
+          } else if (code < 55296 || code > 57343) {
+            output += percentEncodeNonAscii(code);
+          } else if (code <= 56319 && i + 1 < input.length) {
+            const low = input.charCodeAt(i + 1);
+            if (low >= 56320 && low <= 57343) {
+              output += percentEncodeNonAscii(65536 + (code - 55296 << 10) + (low - 56320));
+              i++;
+            } else {
+              output += percentEncodeNonAscii(65533);
+            }
+          } else {
+            output += percentEncodeNonAscii(65533);
+          }
+        }
+      }
+      return output;
+    }
+    function encodeComponent(input, isAllowed) {
+      let output = "";
+      for (let i = 0; i < input.length; i++) {
+        const ch = input[i];
+        if (ch === "%" && i + 2 < input.length) {
+          const hex = input.slice(i + 1, i + 3);
+          if (isHexPair(hex)) {
+            output += "%" + hex.toUpperCase();
+            i += 2;
+            continue;
+          }
+        }
+        if (isAllowed(ch)) {
+          output += ch;
+        } else {
+          const code = input.charCodeAt(i);
+          if (code < 128) {
+            output += BYTE_HEX[code];
+          } else if (code < 55296 || code > 57343) {
+            output += percentEncodeNonAscii(code);
+          } else if (code <= 56319 && i + 1 < input.length) {
+            const low = input.charCodeAt(i + 1);
+            if (low >= 56320 && low <= 57343) {
+              output += percentEncodeNonAscii(65536 + (code - 55296 << 10) + (low - 56320));
+              i++;
+            } else {
+              output += percentEncodeNonAscii(65533);
+            }
+          } else {
+            output += percentEncodeNonAscii(65533);
+          }
+        }
+      }
+      return output;
+    }
+    function encodeUserinfo(input) {
+      return encodeComponent(input, isUserinfoCharacter);
+    }
+    function encodeQuery(input) {
+      return encodeComponent(input, isQueryFragmentCharacter);
+    }
+    function encodeFragment(input) {
+      return encodeComponent(input, isQueryFragmentCharacter);
+    }
+    function isEscapeSafe(cp) {
+      return cp >= 48 && cp <= 57 || cp >= 65 && cp <= 90 || cp >= 97 && cp <= 122 || cp === 42 || cp === 43 || cp === 45 || cp === 46 || cp === 47 || cp === 64 || cp === 95;
+    }
+    function normalizeQueryFragmentEncoding(input) {
+      let output = "";
+      for (let i = 0; i < input.length; i++) {
+        const ch = input[i];
+        if (ch === "%" && i + 2 < input.length) {
+          const hex = input.slice(i + 1, i + 3);
+          if (isHexPair(hex)) {
+            const normalizedHex = hex.toUpperCase();
+            const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
+            if (isUnreserved(decoded)) {
+              output += decoded;
+            } else {
+              output += "%" + normalizedHex;
+            }
+            i += 2;
+            continue;
+          }
+        }
+        if (isQueryFragmentCharacter(ch)) {
+          output += ch;
+        } else {
+          const code = input.charCodeAt(i);
+          if (code < 128) {
+            output += isEscapeSafe(code) ? ch : BYTE_HEX[code];
+          } else if (code < 55296 || code > 57343) {
+            output += percentEncodeNonAscii(code);
+          } else if (code <= 56319 && i + 1 < input.length) {
+            const low = input.charCodeAt(i + 1);
+            if (low >= 56320 && low <= 57343) {
+              output += percentEncodeNonAscii(65536 + (code - 55296 << 10) + (low - 56320));
+              i++;
+            } else {
+              output += percentEncodeNonAscii(65533);
+            }
+          } else {
+            output += percentEncodeNonAscii(65533);
+          }
         }
       }
       return output;
@@ -17161,14 +17568,18 @@ var require_utils = __commonJS({
     function recomposeAuthority(component) {
       const uriTokens = [];
       if (component.userinfo !== void 0) {
-        uriTokens.push(component.userinfo);
+        uriTokens.push(encodeUserinfo(component.userinfo));
         uriTokens.push("@");
       }
       if (component.host !== void 0) {
-        let host = unescape(component.host);
+        let host = component.host;
         if (!isIPv4(host)) {
-          const ipV6res = normalizeIPv6(host);
-          if (ipV6res.isIPV6 === true) {
+          let ipV6res = normalizeIPv6(host);
+          if (ipV6res.isIPV6 !== true && ipV6res.isIPVFuture !== true) {
+            host = normalizePercentEncoding(host, true);
+            ipV6res = normalizeIPv6(host);
+          }
+          if (ipV6res.isIPV6 === true || ipV6res.isIPVFuture === true) {
             host = `[${ipV6res.escapedHost}]`;
           } else {
             host = reescapeHostDelimiters(host, false);
@@ -17177,8 +17588,12 @@ var require_utils = __commonJS({
         uriTokens.push(host);
       }
       if (typeof component.port === "number" || typeof component.port === "string") {
+        const port = String(component.port);
+        if (!isPort(port)) {
+          throw new TypeError("URI port is malformed.");
+        }
         uriTokens.push(":");
-        uriTokens.push(String(component.port));
+        uriTokens.push(port);
       }
       return uriTokens.length ? uriTokens.join("") : void 0;
     }
@@ -17188,6 +17603,11 @@ var require_utils = __commonJS({
       reescapeHostDelimiters,
       normalizePercentEncoding,
       normalizePathEncoding,
+      serializePathEncoding,
+      normalizeQueryFragmentEncoding,
+      encodeUserinfo,
+      encodeQuery,
+      encodeFragment,
       escapePreservingEscapes,
       removeDotSegments,
       isIPv4,
@@ -17203,7 +17623,7 @@ var require_schemes = __commonJS({
   "backend/node_modules/fast-uri/lib/schemes.js"(exports2, module2) {
     "use strict";
     var { isUUID } = require_utils();
-    var URN_REG = /([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-.:;=@]|%[\da-f]{2})+)/iu;
+    var URN_REG = /^([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-./:;=@]|%[\da-f]{2})+)$/iu;
     var supportedSchemeNames = (
       /** @type {const} */
       [
@@ -17264,9 +17684,10 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path3, query] = wsComponent.resourceName.split("?");
+        const queryIndex = wsComponent.resourceName.indexOf("?");
+        const path3 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
         wsComponent.path = path3 && path3 !== "/" ? path3 : void 0;
-        wsComponent.query = query;
+        wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
       wsComponent.fragment = void 0;
@@ -17278,7 +17699,7 @@ var require_schemes = __commonJS({
         return urnComponent;
       }
       const matches = urnComponent.path.match(URN_REG);
-      if (matches) {
+      if (matches && matches[0] === urnComponent.path) {
         const scheme = options.scheme || urnComponent.scheme || "urn";
         urnComponent.nid = matches[1].toLowerCase();
         urnComponent.nss = matches[2];
@@ -17412,8 +17833,17 @@ var require_schemes = __commonJS({
 var require_fast_uri = __commonJS({
   "backend/node_modules/fast-uri/index.js"(exports2, module2) {
     "use strict";
-    var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, escapePreservingEscapes, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
+    var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, serializePathEncoding, normalizeQueryFragmentEncoding, encodeQuery, encodeFragment, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
+    var VALID_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*$/u;
+    var MALFORMED_SCHEME_ERROR = "URI scheme is malformed.";
+    function decodeValidScheme(scheme) {
+      const decodedScheme = unescape(String(scheme));
+      if (!VALID_SCHEME.test(decodedScheme)) {
+        throw new TypeError(MALFORMED_SCHEME_ERROR);
+      }
+      return decodedScheme;
+    }
     function normalize2(uri, options) {
       if (typeof uri === "string") {
         uri = /** @type {T} */
@@ -17426,7 +17856,34 @@ var require_fast_uri = __commonJS({
     }
     function resolve(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
-      const resolved = resolveComponent(parse2(baseURI, schemelessOptions), parse2(relativeURI, schemelessOptions), schemelessOptions, true);
+      const {
+        parsed: baseParsed,
+        malformedAuthorityOrPort: baseMalformed,
+        malformedPercentEncoding: baseMalformedPercentEncoding,
+        malformedSchemeSpecific: baseMalformedSchemeSpecific,
+        malformedHost: baseMalformedHost,
+        malformedScheme: baseMalformedScheme
+      } = parseWithStatus(baseURI, schemelessOptions);
+      const {
+        parsed: relativeParsed,
+        malformedAuthorityOrPort: relativeMalformed,
+        malformedPercentEncoding: relativeMalformedPercentEncoding,
+        malformedSchemeSpecific: relativeMalformedSchemeSpecific,
+        malformedHost: relativeMalformedHost,
+        malformedScheme: relativeMalformedScheme
+      } = parseWithStatus(relativeURI, schemelessOptions);
+      if (baseMalformed || relativeMalformed || baseMalformedPercentEncoding || relativeMalformedPercentEncoding || baseMalformedSchemeSpecific || relativeMalformedSchemeSpecific || baseMalformedHost || relativeMalformedHost || baseMalformedScheme || relativeMalformedScheme) {
+        throw new Error(baseParsed.error || relativeParsed.error || "URI is malformed.");
+      }
+      const resolved = resolveComponent(baseParsed, relativeParsed, schemelessOptions, true);
+      const resolvedSchemeHandler = getSchemeHandler(options && options.scheme || resolved.scheme);
+      const resolvedHost = resolved.host;
+      const resolvedHostIsIP = resolvedHost !== void 0 && resolvedHost !== "" && (isIPv4(resolvedHost) || normalizeIPv6(resolvedHost).isIPV6);
+      canonicalizeHost(resolved, options || {}, resolvedSchemeHandler, resolvedHostIsIP);
+      const encodedASCIIHost = resolvedHost && resolvedHost.indexOf("%") !== -1 && !new RegExp("\\P{ASCII}", "u").test(resolvedHost);
+      if (resolved.error && !encodedASCIIHost) {
+        throw new Error(resolved.error);
+      }
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
@@ -17486,7 +17943,7 @@ var require_fast_uri = __commonJS({
     function equal(uriA, uriB, options) {
       const normalizedA = normalizeComparableURI(uriA, options);
       const normalizedB = normalizeComparableURI(uriB, options);
-      return normalizedA !== void 0 && normalizedB !== void 0 && normalizedA.toLowerCase() === normalizedB.toLowerCase();
+      return normalizedA !== void 0 && normalizedB !== void 0 && normalizedA === normalizedB;
     }
     function serialize(cmpts, opts) {
       const component = {
@@ -17507,19 +17964,22 @@ var require_fast_uri = __commonJS({
       };
       const options = Object.assign({}, opts);
       const uriTokens = [];
+      if (component.scheme) {
+        component.scheme = decodeValidScheme(component.scheme);
+      }
       const schemeHandler = getSchemeHandler(options.scheme || component.scheme);
       if (schemeHandler && schemeHandler.serialize) schemeHandler.serialize(component, options);
+      const hasAuthority = component.userinfo !== void 0 || component.host !== void 0 || component.port !== void 0;
+      const pathNoScheme = !options.skipEscape && component.scheme === void 0 && !hasAuthority;
       if (component.path !== void 0) {
         if (!options.skipEscape) {
-          component.path = escapePreservingEscapes(component.path);
-          if (component.scheme !== void 0) {
-            component.path = component.path.split("%3A").join(":");
-          }
+          component.path = serializePathEncoding(component.path, pathNoScheme);
         } else {
           component.path = normalizePercentEncoding(component.path);
         }
       }
       if (options.reference !== "suffix" && component.scheme) {
+        component.scheme = decodeValidScheme(component.scheme);
         uriTokens.push(component.scheme, ":");
       }
       const authority = recomposeAuthority(component);
@@ -17537,20 +17997,25 @@ var require_fast_uri = __commonJS({
         if (!options.absolutePath && (!schemeHandler || !schemeHandler.absolutePath)) {
           s = removeDotSegments(s);
         }
+        if (pathNoScheme) {
+          s = serializePathEncoding(s, true);
+        }
         if (authority === void 0 && s[0] === "/" && s[1] === "/") {
           s = "/%2F" + s.slice(2);
         }
         uriTokens.push(s);
       }
       if (component.query !== void 0) {
-        uriTokens.push("?", component.query);
+        uriTokens.push("?", encodeQuery(component.query));
       }
       if (component.fragment !== void 0) {
-        uriTokens.push("#", component.fragment);
+        uriTokens.push("#", encodeFragment(component.fragment));
       }
       return uriTokens.join("");
     }
     var URI_PARSE = /^(?:([^#/:?]+):)?(?:\/\/((?:([^#/?@]*)@)?(\[[^#/?\]]+\]|[^#/:?]*)(?::(\d*))?))?([^#?]*)(?:\?([^#]*))?(?:#((?:.|[\n\r])*))?/u;
+    var AUTHORITY_PREFIX = /^(?:[^#/:?]+:)?\/\/([^/?#]*)/;
+    var AUTHORITY_INTRODUCER_REGION = /^(?:[^#/:?]+:)?([/\\\t\n\r]*)/;
     function getParseError(parsed, matches) {
       if (matches[2] !== void 0 && parsed.path && parsed.path[0] !== "/") {
         return 'URI path must start with "/" when authority is present.';
@@ -17559,6 +18024,35 @@ var require_fast_uri = __commonJS({
         return "URI port is malformed.";
       }
       return void 0;
+    }
+    function hasMalformedPercentEncoding(component) {
+      if (component === void 0) return false;
+      let percent = component.indexOf("%");
+      while (percent !== -1) {
+        if (percent + 2 >= component.length || !/^[\da-f]{2}$/iu.test(component.slice(percent + 1, percent + 3))) {
+          return true;
+        }
+        percent = component.indexOf("%", percent + 3);
+      }
+      return false;
+    }
+    function isIPLiteral(host) {
+      return host[0] === "[" && host[host.length - 1] === "]";
+    }
+    function hasMalformedComponentPercentEncoding(matches) {
+      const host = matches[4];
+      return hasMalformedPercentEncoding(matches[3]) || host !== void 0 && !isIPLiteral(host) && hasMalformedPercentEncoding(host) || hasMalformedPercentEncoding(matches[6]) || hasMalformedPercentEncoding(matches[7]) || hasMalformedPercentEncoding(matches[8]);
+    }
+    function canonicalizeHost(parsed, options, schemeHandler, isIP) {
+      if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport) && parsed.host && !isIPLiteral(parsed.host) && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
+        try {
+          parsed.host = new URL("http://" + parsed.host).hostname;
+        } catch (e) {
+          parsed.error = parsed.error || "Host's domain name can not be converted to ASCII: " + e;
+          return true;
+        }
+      }
+      return false;
     }
     function parseWithStatus(uri, opts) {
       const options = Object.assign({}, opts);
@@ -17572,12 +18066,36 @@ var require_fast_uri = __commonJS({
         fragment: void 0
       };
       let malformedAuthorityOrPort = false;
+      let malformedPercentEncoding = false;
+      let malformedSchemeSpecific = false;
+      let malformedHost = false;
+      let malformedIPLiteral = false;
+      let malformedScheme = false;
       let isIP = false;
       if (options.reference === "suffix") {
         if (options.scheme) {
           uri = options.scheme + ":" + uri;
         } else {
           uri = "//" + uri;
+        }
+      }
+      const authorityMatch = uri.match(AUTHORITY_PREFIX);
+      if (authorityMatch !== null && authorityMatch[1].indexOf("\\") !== -1) {
+        parsed.error = "URI authority must not contain a literal backslash.";
+        malformedAuthorityOrPort = true;
+      }
+      const introducerMatch = uri.match(AUTHORITY_INTRODUCER_REGION);
+      if (introducerMatch !== null) {
+        const region = introducerMatch[1];
+        const normalizedRegion = region.replace(/[\t\n\r]/g, "");
+        if (normalizedRegion.length >= 2) {
+          if (normalizedRegion.slice(0, 2) !== "//") {
+            parsed.error = parsed.error || "URI authority must not contain a literal backslash.";
+            malformedAuthorityOrPort = true;
+          } else if (region.length !== normalizedRegion.length) {
+            parsed.error = parsed.error || "URI authority introducer must not contain whitespace.";
+            malformedAuthorityOrPort = true;
+          }
         }
       }
       const matches = uri.match(URI_PARSE);
@@ -17589,6 +18107,19 @@ var require_fast_uri = __commonJS({
         parsed.path = matches[6] || "";
         parsed.query = matches[7];
         parsed.fragment = matches[8];
+        if (parsed.scheme !== void 0) {
+          const decodedScheme = unescape(parsed.scheme);
+          if (VALID_SCHEME.test(decodedScheme)) {
+            parsed.scheme = decodedScheme.toLowerCase();
+          } else {
+            parsed.error = parsed.error || MALFORMED_SCHEME_ERROR;
+            malformedScheme = true;
+          }
+        }
+        malformedPercentEncoding = hasMalformedComponentPercentEncoding(matches);
+        if (malformedPercentEncoding) {
+          parsed.error = parsed.error || "URI contains malformed percent-encoding.";
+        }
         if (isNaN(parsed.port)) {
           parsed.port = matches[5];
         }
@@ -17600,9 +18131,16 @@ var require_fast_uri = __commonJS({
         if (parsed.host) {
           const ipv4result = isIPv4(parsed.host);
           if (ipv4result === false) {
+            const bracketedIPLiteral = isIPLiteral(parsed.host);
+            const hasIPLiteralBracket = parsed.host.indexOf("[") !== -1 || parsed.host.indexOf("]") !== -1;
             const ipv6result = normalizeIPv6(parsed.host);
-            parsed.host = ipv6result.host.toLowerCase();
-            isIP = ipv6result.isIPV6;
+            isIP = ipv6result.isIPV6 || ipv6result.isIPVFuture === true;
+            malformedIPLiteral = hasIPLiteralBracket && (!bracketedIPLiteral || ipv6result.error === true);
+            parsed.host = isIP ? ipv6result.host : ipv6result.host.toLowerCase();
+            if (malformedIPLiteral) {
+              parsed.error = parsed.error || "URI host is malformed.";
+              malformedAuthorityOrPort = true;
+            }
           } else {
             isIP = true;
           }
@@ -17620,42 +18158,36 @@ var require_fast_uri = __commonJS({
           parsed.error = parsed.error || "URI is not a " + options.reference + " reference.";
         }
         const schemeHandler = getSchemeHandler(options.scheme || parsed.scheme);
-        if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport)) {
-          if (parsed.host && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
-            try {
-              parsed.host = new URL("http://" + parsed.host).hostname;
-            } catch (e) {
-              parsed.error = parsed.error || "Host's domain name can not be converted to ASCII: " + e;
-            }
-          }
+        if (!malformedIPLiteral) {
+          malformedHost = canonicalizeHost(parsed, options, schemeHandler, isIP);
         }
         if (!schemeHandler || schemeHandler && !schemeHandler.skipNormalize) {
           if (uri.indexOf("%") !== -1) {
-            if (parsed.scheme !== void 0) {
-              parsed.scheme = unescape(parsed.scheme);
-            }
-            if (parsed.host !== void 0) {
-              parsed.host = reescapeHostDelimiters(unescape(parsed.host), isIP);
+            if (parsed.host !== void 0 && !malformedIPLiteral) {
+              const host = isIP ? parsed.host : normalizePercentEncoding(parsed.host, true);
+              parsed.host = reescapeHostDelimiters(host, isIP);
             }
           }
           if (parsed.path) {
             parsed.path = normalizePathEncoding(parsed.path);
           }
+          if (parsed.query) {
+            parsed.query = normalizeQueryFragmentEncoding(parsed.query);
+          }
           if (parsed.fragment) {
-            try {
-              parsed.fragment = encodeURI(decodeURIComponent(parsed.fragment));
-            } catch {
-              parsed.error = parsed.error || "URI malformed";
-            }
+            parsed.fragment = normalizeQueryFragmentEncoding(parsed.fragment);
           }
         }
         if (schemeHandler && schemeHandler.parse) {
           schemeHandler.parse(parsed, options);
+          if (schemeHandler === SCHEMES.urn && parsed.nid === void 0) {
+            malformedSchemeSpecific = true;
+          }
         }
       } else {
         parsed.error = parsed.error || "URI can not be parsed.";
       }
-      return { parsed, malformedAuthorityOrPort };
+      return { parsed, malformedAuthorityOrPort, malformedPercentEncoding, malformedSchemeSpecific, malformedHost, malformedScheme };
     }
     function parse2(uri, opts) {
       return parseWithStatus(uri, opts).parsed;
@@ -17664,20 +18196,28 @@ var require_fast_uri = __commonJS({
       return normalizeStringWithStatus(uri, opts).normalized;
     }
     function normalizeStringWithStatus(uri, opts) {
-      const { parsed, malformedAuthorityOrPort } = parseWithStatus(uri, opts);
+      const { parsed, malformedAuthorityOrPort, malformedPercentEncoding, malformedSchemeSpecific, malformedHost, malformedScheme } = parseWithStatus(uri, opts);
       return {
-        normalized: malformedAuthorityOrPort ? uri : serialize(parsed, opts),
-        malformedAuthorityOrPort
+        normalized: malformedAuthorityOrPort || malformedPercentEncoding || malformedSchemeSpecific || malformedHost || malformedScheme ? uri : serialize(parsed, opts),
+        malformedAuthorityOrPort,
+        malformedPercentEncoding,
+        malformedSchemeSpecific,
+        malformedHost,
+        malformedScheme
       };
     }
     function normalizeComparableURI(uri, opts) {
-      if (typeof uri === "string") {
-        const { normalized, malformedAuthorityOrPort } = normalizeStringWithStatus(uri, opts);
-        return malformedAuthorityOrPort ? void 0 : normalized;
+      if (typeof uri !== "string" && typeof uri !== "object") {
+        return void 0;
       }
-      if (typeof uri === "object") {
-        return serialize(uri, opts);
+      let value;
+      try {
+        value = typeof uri === "string" ? uri : serialize(uri, opts);
+      } catch {
+        return void 0;
       }
+      const { normalized, malformedAuthorityOrPort, malformedPercentEncoding, malformedSchemeSpecific, malformedHost, malformedScheme } = normalizeStringWithStatus(value, opts);
+      return malformedAuthorityOrPort || malformedPercentEncoding || malformedSchemeSpecific || malformedHost || malformedScheme ? void 0 : normalized;
     }
     var fastUri = {
       SCHEMES,
@@ -29704,6 +30244,7 @@ var require_pretty_print = __commonJS({
       if (Array.isArray(meta)) return meta.map((m) => parseMeta(m));
       if (typeof meta === "symbol") return meta.toString();
       if (typeof meta === "function") return parseFunctionName(meta);
+      if (meta instanceof RegExp) return meta.toString();
       return meta;
     }
     function getRouteMetaData(route, options) {
@@ -29739,11 +30280,17 @@ var require_pretty_print = __commonJS({
       delete constraints[httpMethodStrategy.name];
       return { ...route, method, opts: { constraints } };
     }
+    function serializeConstraints(constraints) {
+      return JSON.stringify(constraints, (_key, value) => {
+        if (value instanceof RegExp) return value.toString();
+        return value;
+      });
+    }
     function serializeRoute(route) {
       let serializedRoute = ` (${route.method})`;
       const constraints = route.opts.constraints || {};
       if (Object.keys(constraints).length !== 0) {
-        serializedRoute += " " + JSON.stringify(constraints);
+        serializedRoute += " " + serializeConstraints(constraints);
       }
       serializedRoute += serializeMetaData(route.metaData);
       return serializedRoute;
@@ -29784,8 +30331,8 @@ ${prefix}`);
         }
         prefix = "";
       }
-      if (node.staticChildren) {
-        for (const child of Object.values(node.staticChildren)) {
+      if (node.staticChildrenNodes) {
+        for (const child of node.staticChildrenNodes) {
           buildObjectTree(child, tree, prefix + child.prefix, options);
         }
       }
@@ -29996,14 +30543,32 @@ var require_node = __commonJS({
     var ParentNode = class extends Node {
       constructor() {
         super();
-        this.staticChildren = {};
+        this.staticChildrenCharCodes = [];
+        this.staticChildrenNodes = [];
+      }
+      setStaticChild(label, node) {
+        const charCode = label.charCodeAt(0);
+        const index = this.staticChildrenCharCodes.indexOf(charCode);
+        if (index === -1) {
+          this.staticChildrenCharCodes.push(charCode);
+          this.staticChildrenNodes.push(node);
+        } else {
+          this.staticChildrenNodes[index] = node;
+        }
       }
       findStaticMatchingChild(path3, pathIndex) {
-        const staticChild = this.staticChildren[path3.charAt(pathIndex)];
-        if (staticChild === void 0 || !staticChild.matchPrefix(path3, pathIndex)) {
-          return null;
+        const charCode = path3.charCodeAt(pathIndex);
+        const charCodes = this.staticChildrenCharCodes;
+        for (let i = 0; i < charCodes.length; i++) {
+          if (charCodes[i] === charCode) {
+            const staticChild = this.staticChildrenNodes[i];
+            if (staticChild.matchPrefix(path3, pathIndex)) {
+              return staticChild;
+            }
+            return null;
+          }
         }
-        return staticChild;
+        return null;
       }
       getStaticChild(path3, pathIndex = 0) {
         if (path3.length === pathIndex) {
@@ -30019,7 +30584,8 @@ var require_node = __commonJS({
         if (path3.length === 0) {
           return this;
         }
-        let staticChild = this.staticChildren[path3.charAt(0)];
+        const childIndex = this.staticChildrenCharCodes.indexOf(path3.charCodeAt(0));
+        let staticChild = childIndex === -1 ? void 0 : this.staticChildrenNodes[childIndex];
         if (staticChild) {
           let i = 1;
           for (; i < staticChild.prefix.length; i++) {
@@ -30030,9 +30596,9 @@ var require_node = __commonJS({
           }
           return staticChild.createStaticChild(path3.slice(i));
         }
-        const label = path3.charAt(0);
-        this.staticChildren[label] = new StaticNode(path3);
-        return this.staticChildren[label];
+        const node = new StaticNode(path3);
+        this.setStaticChild(path3.charAt(0), node);
+        return node;
       }
     };
     var StaticNode = class _StaticNode extends ParentNode {
@@ -30087,8 +30653,8 @@ var require_node = __commonJS({
         this.prefix = childPrefix;
         this._compilePrefixMatch();
         const staticNode = new _StaticNode(parentPrefix);
-        staticNode.staticChildren[childPrefix.charAt(0)] = this;
-        parentNode.staticChildren[parentPrefix.charAt(0)] = staticNode;
+        staticNode.setStaticChild(childPrefix.charAt(0), this);
+        parentNode.setStaticChild(parentPrefix.charAt(0), staticNode);
         return staticNode;
       }
       getNextNode(path3, pathIndex, nodeStack, paramsCount) {
@@ -30222,21 +30788,28 @@ var require_accept_host = __commonJS({
     function HostStorage() {
       const hosts = /* @__PURE__ */ new Map();
       const regexHosts = [];
+      const regexCache = /* @__PURE__ */ new Map();
       return {
         get: (host) => {
           const exact = hosts.get(host);
           if (exact) {
             return exact;
           }
+          if (regexHosts.length === 0) return void 0;
+          if (regexCache.has(host)) return regexCache.get(host);
           for (const regex of regexHosts) {
             if (regex.host.test(host)) {
+              regexCache.set(host, regex.value);
               return regex.value;
             }
           }
+          regexCache.set(host, void 0);
         },
         set: (host, value) => {
           if (host instanceof RegExp) {
-            regexHosts.push({ host, value });
+            const safeRegex = new RegExp(host.source, host.flags.replace(/[gy]/g, ""));
+            regexHosts.push({ host: safeRegex, value });
+            regexCache.clear();
           } else {
             hosts.set(host, value);
           }
@@ -30358,11 +30931,14 @@ var require_constrainer = __commonJS({
           done(null, constraints);
           return;
         }
+        let errored = false;
         constraints = constraints || {};
         for (const key of this.asyncStrategiesInUse) {
           const strategy = this.strategies[key];
           strategy.deriveConstraint(req, ctx, (err, constraintValue) => {
+            if (errored) return;
             if (err !== null) {
+              errored = true;
               done(err);
               return;
             }
@@ -30448,52 +31024,108 @@ var require_http_methods = __commonJS({
 var require_url_sanitizer = __commonJS({
   "backend/node_modules/find-my-way/lib/url-sanitizer.js"(exports2, module2) {
     "use strict";
-    function decodeComponentChar(highCharCode, lowCharCode) {
-      if (highCharCode === 50) {
-        if (lowCharCode === 53) return "%";
-        if (lowCharCode === 51) return "#";
-        if (lowCharCode === 52) return "$";
-        if (lowCharCode === 54) return "&";
-        if (lowCharCode === 66) return "+";
-        if (lowCharCode === 98) return "+";
-        if (lowCharCode === 67) return ",";
-        if (lowCharCode === 99) return ",";
-        if (lowCharCode === 70) return "/";
-        if (lowCharCode === 102) return "/";
-        return null;
-      }
-      if (highCharCode === 51) {
-        if (lowCharCode === 65) return ":";
-        if (lowCharCode === 97) return ":";
-        if (lowCharCode === 66) return ";";
-        if (lowCharCode === 98) return ";";
-        if (lowCharCode === 68) return "=";
-        if (lowCharCode === 100) return "=";
-        if (lowCharCode === 70) return "?";
-        if (lowCharCode === 102) return "?";
-        return null;
-      }
-      if (highCharCode === 52 && lowCharCode === 48) {
-        return "@";
-      }
-      return null;
+    var DECODE_COMPONENT_TABLE = new Uint8Array(768);
+    for (const [encoded, char] of [
+      ["%23", "#"],
+      ["%24", "$"],
+      ["%25", "%"],
+      ["%26", "&"],
+      ["%2B", "+"],
+      ["%2b", "+"],
+      ["%2C", ","],
+      ["%2c", ","],
+      ["%2F", "/"],
+      ["%2f", "/"],
+      ["%3A", ":"],
+      ["%3a", ":"],
+      ["%3B", ";"],
+      ["%3b", ";"],
+      ["%3D", "="],
+      ["%3d", "="],
+      ["%3F", "?"],
+      ["%3f", "?"],
+      ["%40", "@"]
+    ]) {
+      DECODE_COMPONENT_TABLE[encoded.charCodeAt(1) - 50 << 8 | encoded.charCodeAt(2)] = char.charCodeAt(0);
     }
+    function decodeComponentCharCode(highCharCode, lowCharCode) {
+      if (highCharCode < 50 || highCharCode > 52 || lowCharCode > 255) {
+        return 0;
+      }
+      return DECODE_COMPONENT_TABLE[highCharCode - 50 << 8 | lowCharCode];
+    }
+    function decodeComponentChar(highCharCode, lowCharCode) {
+      const charCode = decodeComponentCharCode(highCharCode, lowCharCode);
+      if (charCode === 0) {
+        return null;
+      }
+      return String.fromCharCode(charCode);
+    }
+    var MIN_NATIVE_SCAN_LENGTH = 12;
     function safeDecodeURI(path3, useSemicolonDelimiter) {
+      if (path3.length >= MIN_NATIVE_SCAN_LENGTH) {
+        return safeDecodeURINativeScan(path3, useSemicolonDelimiter);
+      }
+      return safeDecodeURICharScan(path3, useSemicolonDelimiter, 1);
+    }
+    function safeDecodeURINativeScan(path3, useSemicolonDelimiter) {
+      const percentIndex = path3.indexOf("%", 1);
+      let delimIndex = path3.indexOf("?", 1);
+      const hashIndex = path3.indexOf("#", 1);
+      if (hashIndex !== -1 && (delimIndex === -1 || hashIndex < delimIndex)) {
+        delimIndex = hashIndex;
+      }
+      if (useSemicolonDelimiter) {
+        const semicolonIndex = path3.indexOf(";", 1);
+        if (semicolonIndex !== -1 && (delimIndex === -1 || semicolonIndex < delimIndex)) {
+          delimIndex = semicolonIndex;
+        }
+      }
+      if (percentIndex === -1 || delimIndex !== -1 && percentIndex > delimIndex) {
+        if (delimIndex === -1) {
+          return { path: path3, querystring: "", shouldDecodeParam: false };
+        }
+        return {
+          path: path3.slice(0, delimIndex),
+          querystring: path3.slice(delimIndex + 1),
+          shouldDecodeParam: false
+        };
+      }
+      return safeDecodeURIPercentScan(path3, useSemicolonDelimiter, percentIndex);
+    }
+    function safeDecodeURICharScan(path3, useSemicolonDelimiter, startIndex) {
+      for (let i = startIndex; i < path3.length; i++) {
+        const charCode = path3.charCodeAt(i);
+        if (charCode === 37) {
+          return safeDecodeURIPercentScan(path3, useSemicolonDelimiter, i);
+        } else if (charCode === 63 || charCode === 35 || charCode === 59 && useSemicolonDelimiter) {
+          return {
+            path: path3.slice(0, i),
+            querystring: path3.slice(i + 1),
+            shouldDecodeParam: false
+          };
+        }
+      }
+      return { path: path3, querystring: "", shouldDecodeParam: false };
+    }
+    function reencodePercentChar(path3, index) {
+      return path3.slice(0, index + 1) + "25" + path3.slice(index + 1);
+    }
+    function safeDecodeURIPercentScan(path3, useSemicolonDelimiter, startIndex) {
       let shouldDecode = false;
       let shouldDecodeParam = false;
       let querystring = "";
-      for (let i = 1; i < path3.length; i++) {
+      for (let i = startIndex; i < path3.length; i++) {
         const charCode = path3.charCodeAt(i);
         if (charCode === 37) {
-          const highCharCode = path3.charCodeAt(i + 1);
-          const lowCharCode = path3.charCodeAt(i + 2);
-          if (decodeComponentChar(highCharCode, lowCharCode) === null) {
+          const componentCharCode = decodeComponentCharCode(path3.charCodeAt(i + 1), path3.charCodeAt(i + 2));
+          if (componentCharCode === 0) {
             shouldDecode = true;
           } else {
             shouldDecodeParam = true;
-            if (highCharCode === 50 && lowCharCode === 53) {
+            if (componentCharCode === 37) {
               shouldDecode = true;
-              path3 = path3.slice(0, i + 1) + "25" + path3.slice(i + 1);
+              path3 = reencodePercentChar(path3, i);
               i += 2;
             }
             i += 2;
@@ -30523,7 +31155,7 @@ var require_url_sanitizer = __commonJS({
       }
       return uriComponent.slice(0, startIndex) + decoded + uriComponent.slice(lastIndex);
     }
-    module2.exports = { safeDecodeURI, safeDecodeURIComponent };
+    module2.exports = { safeDecodeURI, safeDecodeURIComponent, safeDecodeURINativeScan, safeDecodeURICharScan, MIN_NATIVE_SCAN_LENGTH };
   }
 });
 
@@ -30540,14 +31172,10 @@ var require_find_my_way = __commonJS({
     var Constrainer = require_constrainer();
     var httpMethods = require_http_methods();
     var httpMethodStrategy = require_http_method();
-    var { safeDecodeURI, safeDecodeURIComponent } = require_url_sanitizer();
-    var FULL_PATH_REGEXP = /^https?:\/\/.*?\//;
+    var { safeDecodeURI, safeDecodeURIComponent, safeDecodeURINativeScan, safeDecodeURICharScan, MIN_NATIVE_SCAN_LENGTH } = require_url_sanitizer();
     var OPTIONAL_PARAM_REGEXP = /(\/:[^/()]*?)\?(\/?)/;
     var ESCAPE_REGEXP = /[.*+?^${}()|[\]\\]/g;
     var REMOVE_DUPLICATE_SLASHES_REGEXP = /\/\/+/g;
-    if (!isRegexSafe(FULL_PATH_REGEXP)) {
-      throw new Error("the FULL_PATH_REGEXP is not safe, update this module");
-    }
     if (!isRegexSafe(OPTIONAL_PARAM_REGEXP)) {
       throw new Error("the OPTIONAL_PARAM_REGEXP is not safe, update this module");
     }
@@ -30596,7 +31224,8 @@ var require_find_my_way = __commonJS({
       this.constrainer = new Constrainer(opts.constraints);
       this.useSemicolonDelimiter = opts.useSemicolonDelimiter || false;
       this.routes = [];
-      this.trees = {};
+      this.trees = /* @__PURE__ */ Object.create(null);
+      this._treeGET = null;
     }
     Router.prototype.on = function on(method, path3, opts, handler2, store) {
       if (typeof opts === "function") {
@@ -30650,9 +31279,12 @@ var require_find_my_way = __commonJS({
       if (pattern === "*" && this.trees[method].prefix.length !== 0) {
         const currentRoot = this.trees[method];
         this.trees[method] = new StaticNode("");
-        this.trees[method].staticChildren["/"] = currentRoot;
+        this.trees[method].setStaticChild("/", currentRoot);
       }
       let currentNode = this.trees[method];
+      if (method === "GET") {
+        this._treeGET = currentNode;
+      }
       let parentNodePathIndex = currentNode.prefix.length;
       const params = [];
       for (let i = 0; i <= pattern.length; i++) {
@@ -30676,6 +31308,7 @@ var require_find_my_way = __commonJS({
           let isParamSafe = true;
           let backtrack = "";
           const regexps = [];
+          let nodePatternParts = "";
           let lastParamStartIndex = i + 1;
           for (let j = lastParamStartIndex; ; j++) {
             const charCode = pattern.charCodeAt(j);
@@ -30716,8 +31349,9 @@ var require_find_my_way = __commonJS({
                 regexps.push(backtrack = escapeRegExp(staticPart));
               }
               lastParamStartIndex = j + 1;
+              nodePatternParts += "()" + staticPart;
               if (isEndOfNode || pattern.charCodeAt(j) === 47 || j === pattern.length) {
-                const nodePattern = isRegexNode ? "()" + staticPart : staticPart;
+                const nodePattern = isRegexNode ? nodePatternParts : staticPart;
                 const nodePath = pattern.slice(i, j);
                 pattern = pattern.slice(0, i + 1) + nodePattern + pattern.slice(j);
                 i += nodePattern.length;
@@ -30789,6 +31423,7 @@ var require_find_my_way = __commonJS({
           let isParamSafe = true;
           let backtrack = "";
           const regexps = [];
+          let nodePatternParts = "";
           let lastParamStartIndex = i + 1;
           for (let j = lastParamStartIndex; ; j++) {
             const charCode = pattern.charCodeAt(j);
@@ -30807,7 +31442,7 @@ var require_find_my_way = __commonJS({
                 }
                 regexps.push(trimRegExpStartAndEnd(regexString));
                 j = endOfRegexIndex + 1;
-                isParamSafe = false;
+                isParamSafe = true;
               } else {
                 regexps.push(isParamSafe ? "(.*?)" : `(${backtrack}|(?:(?!${backtrack}).)*)`);
                 isParamSafe = false;
@@ -30829,8 +31464,9 @@ var require_find_my_way = __commonJS({
                 regexps.push(backtrack = escapeRegExp(staticPart));
               }
               lastParamStartIndex = j + 1;
+              nodePatternParts += "()" + staticPart;
               if (isEndOfNode || pattern.charCodeAt(j) === 47 || j === pattern.length) {
-                const nodePattern = isRegexNode ? "()" + staticPart : staticPart;
+                const nodePattern = isRegexNode ? nodePatternParts : staticPart;
                 const nodePath = pattern.slice(i, j);
                 pattern = pattern.slice(0, i + 1) + nodePattern + pattern.slice(j);
                 i += nodePattern.length;
@@ -30876,7 +31512,8 @@ var require_find_my_way = __commonJS({
       this._rebuild(this.routes);
     };
     Router.prototype.reset = function reset() {
-      this.trees = {};
+      this.trees = /* @__PURE__ */ Object.create(null);
+      this._treeGET = null;
       this.routes = [];
     };
     Router.prototype.off = function off(method, path3, constraints) {
@@ -30891,7 +31528,7 @@ var require_find_my_way = __commonJS({
       if (optionalParamMatch) {
         assert(path3.length === optionalParamMatch.index + optionalParamMatch[0].length, "Optional Parameter needs to be the last parameter of the path");
         const pathFull = path3.replace(OPTIONAL_PARAM_REGEXP, "$1$2");
-        const pathOptional = path3.replace(OPTIONAL_PARAM_REGEXP, "$2");
+        const pathOptional = path3.replace(OPTIONAL_PARAM_REGEXP, "$2") || "/";
         this.off(method, pathFull, constraints);
         this.off(method, pathOptional, constraints);
         return;
@@ -30949,10 +31586,14 @@ var require_find_my_way = __commonJS({
       return ctx === void 0 ? handle.handler(req, res, handle.params, handle.store, handle.searchParams) : handle.handler.call(ctx, req, res, handle.params, handle.store, handle.searchParams);
     };
     Router.prototype.find = function find(method, path3, derivedConstraints) {
-      let currentNode = this.trees[method];
-      if (currentNode === void 0) return null;
+      let currentNode = method === "GET" ? this._treeGET : this.trees[method];
+      if (currentNode == null) return null;
       if (path3.charCodeAt(0) !== 47) {
-        path3 = path3.replace(FULL_PATH_REGEXP, "/");
+        const absolutePath = getPathFromAbsoluteUrl(path3);
+        if (absolutePath === null) {
+          return this._onBadUrl(path3);
+        }
+        path3 = absolutePath;
       }
       if (this.ignoreDuplicateSlashes) {
         path3 = removeDuplicateSlashes(path3);
@@ -30961,7 +31602,7 @@ var require_find_my_way = __commonJS({
       let querystring2;
       let shouldDecodeParam;
       try {
-        sanitizedUrl = safeDecodeURI(path3, this.useSemicolonDelimiter);
+        sanitizedUrl = path3.length >= MIN_NATIVE_SCAN_LENGTH ? safeDecodeURINativeScan(path3, this.useSemicolonDelimiter) : safeDecodeURICharScan(path3, this.useSemicolonDelimiter, 1);
         path3 = sanitizedUrl.path;
         querystring2 = sanitizedUrl.querystring;
         shouldDecodeParam = sanitizedUrl.shouldDecodeParam;
@@ -31007,58 +31648,88 @@ var require_find_my_way = __commonJS({
           node = brotherNodeState.brotherNode;
         }
         currentNode = node;
-        if (currentNode.kind === NODE_TYPES.STATIC) {
-          pathIndex += currentNode.prefix.length;
-          continue;
-        }
-        if (currentNode.kind === NODE_TYPES.WILDCARD) {
-          let param2 = originPath.slice(pathIndex);
-          if (shouldDecodeParam) {
-            param2 = safeDecodeURIComponent(param2);
+        while (true) {
+          if (currentNode.kind === NODE_TYPES.STATIC) {
+            pathIndex += currentNode.prefix.length;
+            break;
           }
-          params.push(param2);
-          pathIndex = pathLen;
-          continue;
-        }
-        let paramEndIndex = originPath.indexOf("/", pathIndex);
-        if (paramEndIndex === -1) {
-          paramEndIndex = pathLen;
-        }
-        let param = originPath.slice(pathIndex, paramEndIndex);
-        if (shouldDecodeParam) {
-          param = safeDecodeURIComponent(param);
-        }
-        if (currentNode.isRegex) {
-          const matchedParameters = currentNode.regex.exec(param);
-          if (matchedParameters === null) {
-            node = null;
-            continue;
-          }
-          let regexMaxParamLengthExceeded = false;
-          for (let i = 1; i < matchedParameters.length; i++) {
-            const matchedParam = matchedParameters[i];
-            if (matchedParam.length > maxParamLength) {
-              regexMaxParamLengthExceeded = true;
-              break;
+          if (currentNode.kind === NODE_TYPES.WILDCARD) {
+            let param2 = originPath.slice(pathIndex);
+            if (shouldDecodeParam) {
+              param2 = safeDecodeURIComponent(param2);
             }
+            params.push(param2);
+            pathIndex = pathLen;
+            break;
           }
-          if (regexMaxParamLengthExceeded) {
-            maxParamLengthExceeded = true;
-            node = null;
-            continue;
+          let paramEndIndex = originPath.indexOf("/", pathIndex);
+          if (paramEndIndex === -1) {
+            paramEndIndex = pathLen;
           }
-          for (let i = 1; i < matchedParameters.length; i++) {
-            params.push(matchedParameters[i]);
+          let param = originPath.slice(pathIndex, paramEndIndex);
+          if (shouldDecodeParam) {
+            param = safeDecodeURIComponent(param);
           }
-        } else {
-          if (param.length > maxParamLength) {
-            maxParamLengthExceeded = true;
-            node = null;
-            continue;
+          if (currentNode.isRegex) {
+            const matchedParameters = currentNode.regex.exec(param);
+            if (matchedParameters === null) {
+              if (brothersNodesStack.length === 0) {
+                if (maxParamLengthExceeded && this.onMaxParamLength) {
+                  return this._onMaxParamLength(originPath);
+                }
+                return null;
+              }
+              const brotherNodeState = brothersNodesStack.pop();
+              pathIndex = brotherNodeState.brotherPathIndex;
+              params.splice(brotherNodeState.paramsCount);
+              currentNode = brotherNodeState.brotherNode;
+              continue;
+            }
+            let regexMaxParamLengthExceeded = false;
+            for (let i = 1; i < matchedParameters.length; i++) {
+              const matchedParam = matchedParameters[i] ?? "";
+              if (matchedParam.length > maxParamLength) {
+                regexMaxParamLengthExceeded = true;
+                break;
+              }
+            }
+            if (regexMaxParamLengthExceeded) {
+              maxParamLengthExceeded = true;
+              if (brothersNodesStack.length === 0) {
+                if (this.onMaxParamLength) {
+                  return this._onMaxParamLength(originPath);
+                }
+                return null;
+              }
+              const brotherNodeState = brothersNodesStack.pop();
+              pathIndex = brotherNodeState.brotherPathIndex;
+              params.splice(brotherNodeState.paramsCount);
+              currentNode = brotherNodeState.brotherNode;
+              continue;
+            }
+            for (let i = 1; i < matchedParameters.length; i++) {
+              params.push(matchedParameters[i] ?? "");
+            }
+          } else {
+            if (param.length > maxParamLength) {
+              maxParamLengthExceeded = true;
+              if (brothersNodesStack.length === 0) {
+                if (this.onMaxParamLength) {
+                  return this._onMaxParamLength(originPath);
+                }
+                return null;
+              }
+              const brotherNodeState = brothersNodesStack.pop();
+              pathIndex = brotherNodeState.brotherPathIndex;
+              params.splice(brotherNodeState.paramsCount);
+              currentNode = brotherNodeState.brotherNode;
+              continue;
+            }
+            params.push(param);
           }
-          params.push(param);
+          pathIndex = paramEndIndex;
+          break;
         }
-        pathIndex = paramEndIndex;
       }
     };
     Router.prototype._rebuild = function(routes) {
@@ -31144,6 +31815,44 @@ var require_find_my_way = __commonJS({
     module2.exports = Router;
     function escapeRegExp(string) {
       return string.replace(ESCAPE_REGEXP, "\\$&");
+    }
+    function getPathFromAbsoluteUrl(url) {
+      const schemeEnd = url.indexOf("://");
+      if (schemeEnd === -1) {
+        return url;
+      }
+      const scheme = url.slice(0, schemeEnd).toLowerCase();
+      if (scheme !== "http" && scheme !== "https") {
+        return url;
+      }
+      const authorityStart = schemeEnd + 3;
+      let authorityEnd = url.length;
+      const pathStart = url.indexOf("/", authorityStart);
+      if (pathStart !== -1) {
+        authorityEnd = pathStart;
+      }
+      const queryStart = url.indexOf("?", authorityStart);
+      if (queryStart !== -1 && queryStart < authorityEnd) {
+        authorityEnd = queryStart;
+      }
+      if (url.indexOf("#", authorityStart) !== -1 || authorityEnd === authorityStart) {
+        return null;
+      }
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== `${scheme}:` || parsed.host.length === 0) {
+          return null;
+        }
+      } catch (error) {
+        return null;
+      }
+      if (authorityEnd === url.length) {
+        return "/";
+      }
+      if (authorityEnd === queryStart) {
+        return "/" + url.slice(queryStart);
+      }
+      return url.slice(pathStart);
     }
     function removeDuplicateSlashes(path3) {
       return path3.indexOf("//") !== -1 ? path3.replace(REMOVE_DUPLICATE_SLASHES_REGEXP, "/") : path3;
@@ -31394,7 +32103,7 @@ var require_route = __commonJS({
       }
       function findRoute(options2) {
         const route2 = router.find(
-          options2.method,
+          options2.method?.toUpperCase() ?? "",
           options2.url || "",
           options2.constraints
         );
@@ -31473,6 +32182,7 @@ var require_route = __commonJS({
           if (opts.attachValidation == null) {
             opts.attachValidation = false;
           }
+          const routeConfigUrl = prefixing ? prefix : url;
           if (prefixing === false) {
             for (const hook of this[kHooks].onRoute) {
               hook.call(this, opts);
@@ -31507,7 +32217,7 @@ var require_route = __commonJS({
           const constraints = opts.constraints || {};
           const config = {
             ...opts.config,
-            url,
+            url: routeConfigUrl,
             method: opts.method
           };
           const context = new Context({
@@ -31567,7 +32277,7 @@ var require_route = __commonJS({
               if (opts.schema) {
                 context.schema = normalizeSchema(context.schema, this.initialConfig);
                 const schemaController = this[kSchemaController];
-                const hasValidationSchema = opts.schema.body || opts.schema.headers || opts.schema.querystring || opts.schema.params;
+                const hasValidationSchema = opts.schema.body !== void 0 || opts.schema.headers !== void 0 || opts.schema.querystring !== void 0 || opts.schema.params !== void 0;
                 if (!opts.validatorCompiler && hasValidationSchema) {
                   schemaController.setupValidator(this[kOptions]);
                 }
@@ -31806,17 +32516,14 @@ var require_four_oh_four = __commonJS({
     function fourOhFour(options) {
       const { logger } = options;
       const router = FindMyWay({
-        onBadUrl: createRouteEventHandler(),
-        onMaxParamLength: createRouteEventHandler(),
+        onBadUrl: options.routerOptions.onBadUrl,
+        onMaxParamLength: options.routerOptions.onMaxParamLength,
         defaultRoute: fourOhFourFallBack
       });
-      let _routeEventHandler = null;
       return { router, setNotFoundHandler, setContext, arrange404 };
       function arrange404(instance) {
         instance[kFourOhFourLevelInstance] = instance;
         instance[kCanSetNotFoundHandler] = true;
-        router.onBadUrl = router.onBadUrl.bind(instance);
-        router.onMaxParamLength = router.onMaxParamLength.bind(instance);
         router.defaultRoute = router.defaultRoute.bind(instance);
       }
       function basic404(request, reply) {
@@ -31828,18 +32535,8 @@ var require_four_oh_four = __commonJS({
           statusCode: 404
         });
       }
-      function createRouteEventHandler() {
-        return function onRouteEvent(path3, req, res) {
-          const fourOhFourContext = this[kFourOhFourLevelInstance][kFourOhFourContext];
-          const id = getGenReqId(fourOhFourContext.server, req);
-          const childLogger = createChildLogger(fourOhFourContext, logger, req, id);
-          const request = new Request(id, null, req, null, childLogger, fourOhFourContext);
-          const reply = new Reply(res, request, childLogger);
-          _routeEventHandler(request, reply);
-        };
-      }
       function setContext(instance, context) {
-        const _404Context = Object.assign({}, instance[kFourOhFourContext]);
+        const _404Context = Object.create(instance[kFourOhFourContext]);
         _404Context.onSend = context.onSend;
         context[kFourOhFourContext] = _404Context;
       }
@@ -31879,10 +32576,8 @@ var require_four_oh_four = __commonJS({
         if (handler2) {
           this[kFourOhFourLevelInstance][kCanSetNotFoundHandler] = false;
           handler2 = handler2.bind(this);
-          _routeEventHandler = handler2;
         } else {
           handler2 = basic404;
-          _routeEventHandler = basic404;
         }
         this.after((notHandledErr, done) => {
           _setNotFoundHandler.call(this, prefix, opts, handler2, avvio, routeHandler);
@@ -32348,7 +33043,7 @@ var require_parse_url = __commonJS({
 var require_form_data = __commonJS({
   "backend/node_modules/light-my-request/lib/form-data.js"(exports2, module2) {
     "use strict";
-    var { randomUUID: randomUUID2 } = require("node:crypto");
+    var { randomUUID: randomUUID3 } = require("node:crypto");
     var { Readable } = require("node:stream");
     var textEncoder;
     function isFormDataLike(payload) {
@@ -32356,7 +33051,7 @@ var require_form_data = __commonJS({
     }
     function formDataToStream(formdata) {
       textEncoder = textEncoder ?? new TextEncoder();
-      const boundary = `----formdata-${randomUUID2()}`;
+      const boundary = `----formdata-${randomUUID3()}`;
       const prefix = `--${boundary}\r
 Content-Disposition: form-data`;
       const escape2 = (str) => str.replace(/\n/g, "%0A").replace(/\r/g, "%0D").replace(/"/g, "%22");
@@ -33958,7 +34653,7 @@ var require_light_my_request = __commonJS({
 var require_fastify = __commonJS({
   "backend/node_modules/fastify/fastify.js"(exports2, module2) {
     "use strict";
-    var VERSION = "5.10.0";
+    var VERSION = "5.12.2";
     var Avvio = require_boot();
     var http = require("node:http");
     var diagnostics = require("node:diagnostics_channel");
@@ -34032,7 +34727,7 @@ var require_fastify = __commonJS({
       FST_ERR_ROUTE_METHOD_INVALID
     } = errorCodes;
     var { buildErrorHandler } = require_error_handler();
-    var { FSTWRN004, FSTDEP023, FSTDEP024 } = require_warnings();
+    var { FSTWRN004, FSTDEP023, FSTDEP024, FSTDEP025 } = require_warnings();
     var initChannel = diagnostics.channel("fastify.initialization");
     function fastify(serverOptions) {
       const {
@@ -34080,7 +34775,9 @@ var require_fastify = __commonJS({
             "OPTIONS",
             "PATCH",
             "PUT",
-            "POST"
+            "POST",
+            // RFC 10008
+            "QUERY"
           ])
         },
         [kOptions]: options,
@@ -34136,6 +34833,9 @@ var require_fastify = __commonJS({
         },
         options: function _options(url, options2, handler2) {
           return router.prepareRoute.call(this, { method: "OPTIONS", url, options: options2, handler: handler2 });
+        },
+        query: function _query(url, options2, handler2) {
+          return router.prepareRoute.call(this, { method: "QUERY", url, options: options2, handler: handler2 });
         },
         all: function _all(url, options2, handler2) {
           return router.prepareRoute.call(this, { method: this.supportedMethods, url, options: options2, handler: handler2 });
@@ -34314,7 +35014,7 @@ var require_fastify = __commonJS({
             if (fastify2[kState].listening) {
               if (forceCloseConnections === "idle" && options.serverFactory) {
                 instance.server.closeIdleConnections();
-              } else if (serverHasCloseAllConnections && forceCloseConnections) {
+              } else if (serverHasCloseAllConnections && forceCloseConnections === true) {
                 instance.server.closeAllConnections();
               } else if (forceCloseConnections === true) {
                 for (const conn of fastify2[kKeepAliveConnections]) {
@@ -34464,7 +35164,7 @@ var require_fastify = __commonJS({
         }
         if (name === "onClose") {
           this.onClose(fn.bind(this));
-        } else if (name === "onReady" || name === "onListen" || name === "onRoute") {
+        } else if (name === "onReady" || name === "onListen" || name === "onRoute" || name === "preClose") {
           this[kHooks].add(name, fn);
         } else {
           this.after((err, done) => {
@@ -34641,9 +35341,13 @@ var require_fastify = __commonJS({
         this[kGenReqId] = reqIdGenFactory(this[kOptions].requestIdHeader, func);
         return this;
       }
-      function addHttpMethod(method, { hasBody = false } = {}) {
+      function addHttpMethod(method, { hasBody = false, overrideExisting = false } = {}) {
         if (typeof method !== "string" || http.METHODS.indexOf(method) === -1) {
           throw new FST_ERR_ROUTE_METHOD_INVALID();
+        }
+        const alreadyExists = this[kSupportedHTTPMethods].bodyless.has(method) || this[kSupportedHTTPMethods].bodywith.has(method);
+        if (alreadyExists && !overrideExisting) {
+          FSTDEP025(method);
         }
         if (hasBody === true) {
           this[kSupportedHTTPMethods].bodywith.add(method);
@@ -34777,6 +35481,1317 @@ ${body}`);
     module2.exports.LogController = LogController;
     module2.exports.fastify = fastify;
     module2.exports.default = fastify;
+  }
+});
+
+// backend/node_modules/fastify-plugin/lib/getPluginName.js
+var require_getPluginName = __commonJS({
+  "backend/node_modules/fastify-plugin/lib/getPluginName.js"(exports2, module2) {
+    "use strict";
+    var fpStackTracePattern = /at\s(?:.*\.)?plugin\s.*\n\s*(.*)/;
+    var fileNamePattern = /(\w*(\.\w*)*)\..*/;
+    module2.exports = function getPluginName(fn) {
+      if (fn.name.length > 0) return fn.name;
+      const stackTraceLimit = Error.stackTraceLimit;
+      Error.stackTraceLimit = 10;
+      try {
+        throw new Error("anonymous function");
+      } catch (e) {
+        Error.stackTraceLimit = stackTraceLimit;
+        return extractPluginName(e.stack);
+      }
+    };
+    function extractPluginName(stack) {
+      const m = stack.match(fpStackTracePattern);
+      return m ? m[1].split(/[/\\]/).slice(-1)[0].match(fileNamePattern)[1] : "anonymous";
+    }
+    module2.exports.extractPluginName = extractPluginName;
+  }
+});
+
+// backend/node_modules/fastify-plugin/lib/toCamelCase.js
+var require_toCamelCase = __commonJS({
+  "backend/node_modules/fastify-plugin/lib/toCamelCase.js"(exports2, module2) {
+    "use strict";
+    module2.exports = function toCamelCase(name) {
+      if (name[0] === "@") {
+        name = name.slice(1).replace("/", "-");
+      }
+      return name.replace(/-(.)/g, function(match, g1) {
+        return g1.toUpperCase();
+      });
+    };
+  }
+});
+
+// backend/node_modules/fastify-plugin/index.js
+var require_fastify_plugin = __commonJS({
+  "backend/node_modules/fastify-plugin/index.js"(exports2, module2) {
+    "use strict";
+    var getPluginName = require_getPluginName();
+    var toCamelCase = require_toCamelCase();
+    var count = 0;
+    function plugin(fn, options = {}) {
+      let autoName = false;
+      if (fn.default !== void 0) {
+        fn = fn.default;
+      }
+      if (typeof fn !== "function") {
+        throw new TypeError(
+          `fastify-plugin expects a function, instead got a '${typeof fn}'`
+        );
+      }
+      if (typeof options === "string") {
+        options = {
+          fastify: options
+        };
+      }
+      if (typeof options !== "object" || Array.isArray(options) || options === null) {
+        throw new TypeError("The options object should be an object");
+      }
+      if (options.fastify !== void 0 && typeof options.fastify !== "string") {
+        throw new TypeError(`fastify-plugin expects a version string, instead got '${typeof options.fastify}'`);
+      }
+      if (!options.name) {
+        autoName = true;
+        options.name = getPluginName(fn) + "-auto-" + count++;
+      }
+      fn[Symbol.for("skip-override")] = options.encapsulate !== true;
+      fn[Symbol.for("fastify.display-name")] = options.name;
+      fn[Symbol.for("plugin-meta")] = options;
+      if (!fn.default) {
+        fn.default = fn;
+      }
+      const camelCase = toCamelCase(options.name);
+      if (!autoName && !fn[camelCase]) {
+        fn[camelCase] = fn;
+      }
+      return fn;
+    }
+    module2.exports = plugin;
+    module2.exports.default = plugin;
+    module2.exports.fastifyPlugin = plugin;
+  }
+});
+
+// backend/node_modules/helmet/index.cjs
+var require_helmet = __commonJS({
+  "backend/node_modules/helmet/index.cjs"(exports2, module2) {
+    "use strict";
+    Object.defineProperties(exports2, { __esModule: { value: true }, [Symbol.toStringTag]: { value: "Module" } });
+    var dashify = (str) => str.replace(/[A-Z]/g, (capitalLetter) => "-" + capitalLetter.toLowerCase());
+    var errify = (err) => err instanceof Error ? err : new Error(String(err));
+    var isString = (value) => typeof value === "string";
+    var throwErrorIfExists = (err) => {
+      if (err) throw err;
+    };
+    var dangerouslyDisableDefaultSrc = Symbol("dangerouslyDisableDefaultSrc");
+    var SHOULD_BE_QUOTED = /* @__PURE__ */ new Set(["none", "self", "strict-dynamic", "report-sample", "inline-speculation-rules", "unsafe-inline", "unsafe-eval", "unsafe-hashes", "wasm-unsafe-eval"]);
+    var getDefaultDirectives = () => ({
+      "default-src": ["'self'"],
+      "base-uri": ["'self'"],
+      "font-src": ["'self'", "https:", "data:"],
+      "form-action": ["'self'"],
+      "frame-ancestors": ["'self'"],
+      "img-src": ["'self'", "data:"],
+      "object-src": ["'none'"],
+      "script-src": ["'self'"],
+      "script-src-attr": ["'none'"],
+      "style-src": ["'self'", "https:", "'unsafe-inline'"],
+      "upgrade-insecure-requests": []
+    });
+    var parseDirectiveName = (rawDirectiveName) => {
+      if (rawDirectiveName.length === 0 || !/^[a-z](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(rawDirectiveName)) {
+        throw new Error(`Content-Security-Policy received an invalid directive name ${JSON.stringify(rawDirectiveName)}`);
+      }
+      return dashify(rawDirectiveName);
+    };
+    var getDirectiveValueValidationError = (directiveName, directiveValue) => /;|,/.test(directiveValue) ? new Error(`Content-Security-Policy received an invalid directive value for ${JSON.stringify(directiveName)}`) : null;
+    var getDirectiveValueEntryValidationError = (directiveName, directiveValueEntry) => SHOULD_BE_QUOTED.has(directiveValueEntry) || directiveValueEntry.startsWith("nonce-") || directiveValueEntry.startsWith("sha256-") || directiveValueEntry.startsWith("sha384-") || directiveValueEntry.startsWith("sha512-") ? new Error(`Content-Security-Policy received an invalid directive value for ${JSON.stringify(directiveName)}. ${JSON.stringify(directiveValueEntry)} should be quoted`) : null;
+    var stringifyDirectiveValue = (directiveValue) => {
+      if (Array.isArray(directiveValue)) {
+        return directiveValue.every(isString) ? directiveValue.join(" ") : null;
+      }
+      if (directiveValue instanceof Set) {
+        return stringifyDirectiveValue(Array.from(directiveValue));
+      }
+      return null;
+    };
+    var parseDirectives = ({ useDefaults = true, directives: rawDirectives = {} }) => {
+      const result = new Map(useDefaults ? Object.entries(getDefaultDirectives()) : []);
+      let hasDisabledDefaultSrc = false;
+      const directiveNamesSeen = /* @__PURE__ */ new Set();
+      for (const rawDirectiveName in rawDirectives) {
+        if (!Object.hasOwn(rawDirectives, rawDirectiveName)) {
+          continue;
+        }
+        const directiveName = parseDirectiveName(rawDirectiveName);
+        if (directiveNamesSeen.has(directiveName)) {
+          throw new Error(`Content-Security-Policy received a duplicate directive ${JSON.stringify(directiveName)}`);
+        }
+        directiveNamesSeen.add(directiveName);
+        const rawDirectiveValue = rawDirectives[rawDirectiveName];
+        let directiveValue;
+        if (rawDirectiveValue === null) {
+          if (directiveName === "default-src") {
+            throw new Error("Content-Security-Policy needs a default-src but it was set to `null`. If you really want to disable it, set it to `contentSecurityPolicy.dangerouslyDisableDefaultSrc`.");
+          }
+          result.delete(directiveName);
+          continue;
+        } else if (typeof rawDirectiveValue === "string") {
+          directiveValue = [rawDirectiveValue];
+        } else if (rawDirectiveValue === dangerouslyDisableDefaultSrc) {
+          if (directiveName === "default-src") {
+            hasDisabledDefaultSrc = true;
+            result.delete(directiveName);
+            continue;
+          } else {
+            throw new Error(`Content-Security-Policy: tried to disable ${JSON.stringify(directiveName)} as if it were default-src; simply omit the key`);
+          }
+        } else if (rawDirectiveValue) {
+          directiveValue = rawDirectiveValue;
+        } else {
+          throw new Error(`Content-Security-Policy received an invalid directive value for ${JSON.stringify(directiveName)}`);
+        }
+        for (const element of directiveValue) {
+          if (typeof element !== "string") continue;
+          throwErrorIfExists(getDirectiveValueValidationError(directiveName, element) ?? getDirectiveValueEntryValidationError(directiveName, element));
+        }
+        result.set(directiveName, directiveValue);
+      }
+      if (!result.size) {
+        throw new Error("Content-Security-Policy has no directives. Either set some or disable the header");
+      }
+      if (!result.has("default-src") && !hasDisabledDefaultSrc) {
+        throw new Error("Content-Security-Policy needs a default-src but none was provided. If you really want to disable it, set it to `contentSecurityPolicy.dangerouslyDisableDefaultSrc`.");
+      }
+      let stringResult = "";
+      let shouldUseStringResult = true;
+      for (const [directiveName, directiveValue] of result) {
+        const directiveValueString = stringifyDirectiveValue(directiveValue);
+        if (directiveValueString === null) {
+          shouldUseStringResult = false;
+          break;
+        } else {
+          if (stringResult) stringResult += ";";
+          stringResult += directiveValueString ? `${directiveName} ${directiveValueString}` : directiveName;
+        }
+      }
+      return shouldUseStringResult ? stringResult : result;
+    };
+    function getHeaderValue(req, res, normalizedDirectives) {
+      const result = [];
+      for (const [directiveName, rawDirectiveValue] of normalizedDirectives) {
+        let directiveValue = "";
+        for (const element of rawDirectiveValue) {
+          if (typeof element === "function") {
+            let newElement;
+            try {
+              newElement = element(req, res);
+            } catch (err2) {
+              return errify(err2);
+            }
+            const err = getDirectiveValueEntryValidationError(directiveName, newElement);
+            if (err) return err;
+            directiveValue += " " + newElement;
+          } else {
+            directiveValue += " " + element;
+          }
+        }
+        if (directiveValue) {
+          const err = getDirectiveValueValidationError(directiveName, directiveValue);
+          if (err) return err;
+          result.push(`${directiveName}${directiveValue}`);
+        } else {
+          result.push(directiveName);
+        }
+      }
+      return result.join(";");
+    }
+    var contentSecurityPolicy = function contentSecurityPolicy2(options = {}) {
+      const headerName = options.reportOnly ? "Content-Security-Policy-Report-Only" : "Content-Security-Policy";
+      const parsedDirectives = parseDirectives(options);
+      if (typeof parsedDirectives === "string") {
+        return function contentSecurityPolicyMiddleware(_req, res, next) {
+          res.setHeader(headerName, parsedDirectives);
+          next();
+        };
+      }
+      return function contentSecurityPolicyMiddleware(req, res, next) {
+        const result = getHeaderValue(req, res, parsedDirectives);
+        if (result instanceof Error) {
+          next(result);
+        } else {
+          res.setHeader(headerName, result);
+          next();
+        }
+      };
+    };
+    contentSecurityPolicy.getDefaultDirectives = getDefaultDirectives;
+    contentSecurityPolicy.dangerouslyDisableDefaultSrc = dangerouslyDisableDefaultSrc;
+    var ALLOWED_POLICIES$2 = /* @__PURE__ */ new Set(["require-corp", "credentialless", "unsafe-none"]);
+    function getHeaderValueFromOptions$6({ policy = "require-corp" }) {
+      if (ALLOWED_POLICIES$2.has(policy)) {
+        return policy;
+      } else {
+        throw new Error(`Cross-Origin-Embedder-Policy does not support the ${JSON.stringify(policy)} policy`);
+      }
+    }
+    function crossOriginEmbedderPolicy(options = {}) {
+      const headerValue = getHeaderValueFromOptions$6(options);
+      return function crossOriginEmbedderPolicyMiddleware(_req, res, next) {
+        res.setHeader("Cross-Origin-Embedder-Policy", headerValue);
+        next();
+      };
+    }
+    var ALLOWED_POLICIES$1 = /* @__PURE__ */ new Set(["same-origin", "same-origin-allow-popups", "noopener-allow-popups", "unsafe-none"]);
+    function getHeaderValueFromOptions$5({ policy = "same-origin" }) {
+      if (ALLOWED_POLICIES$1.has(policy)) {
+        return policy;
+      } else {
+        throw new Error(`Cross-Origin-Opener-Policy does not support the ${JSON.stringify(policy)} policy`);
+      }
+    }
+    function crossOriginOpenerPolicy(options = {}) {
+      const headerValue = getHeaderValueFromOptions$5(options);
+      return function crossOriginOpenerPolicyMiddleware(_req, res, next) {
+        res.setHeader("Cross-Origin-Opener-Policy", headerValue);
+        next();
+      };
+    }
+    var ALLOWED_POLICIES = /* @__PURE__ */ new Set(["same-origin", "same-site", "cross-origin"]);
+    function getHeaderValueFromOptions$4({ policy = "same-origin" }) {
+      if (ALLOWED_POLICIES.has(policy)) {
+        return policy;
+      } else {
+        throw new Error(`Cross-Origin-Resource-Policy does not support the ${JSON.stringify(policy)} policy`);
+      }
+    }
+    function crossOriginResourcePolicy(options = {}) {
+      const headerValue = getHeaderValueFromOptions$4(options);
+      return function crossOriginResourcePolicyMiddleware(_req, res, next) {
+        res.setHeader("Cross-Origin-Resource-Policy", headerValue);
+        next();
+      };
+    }
+    function originAgentCluster() {
+      return function originAgentClusterMiddleware(_req, res, next) {
+        res.setHeader("Origin-Agent-Cluster", "?1");
+        next();
+      };
+    }
+    var ALLOWED_TOKENS = /* @__PURE__ */ new Set(["no-referrer", "no-referrer-when-downgrade", "same-origin", "origin", "strict-origin", "origin-when-cross-origin", "strict-origin-when-cross-origin", "unsafe-url", ""]);
+    function getHeaderValueFromOptions$3({ policy = ["no-referrer"] }) {
+      const tokens = typeof policy === "string" ? [policy] : policy;
+      if (tokens.length === 0) {
+        throw new Error("Referrer-Policy received no policy tokens");
+      }
+      const tokensSeen = /* @__PURE__ */ new Set();
+      tokens.forEach((token) => {
+        if (!ALLOWED_TOKENS.has(token)) {
+          throw new Error(`Referrer-Policy received an unexpected policy token ${JSON.stringify(token)}`);
+        } else if (tokensSeen.has(token)) {
+          throw new Error(`Referrer-Policy received a duplicate policy token ${JSON.stringify(token)}`);
+        }
+        tokensSeen.add(token);
+      });
+      return tokens.join(",");
+    }
+    function referrerPolicy(options = {}) {
+      const headerValue = getHeaderValueFromOptions$3(options);
+      return function referrerPolicyMiddleware(_req, res, next) {
+        res.setHeader("Referrer-Policy", headerValue);
+        next();
+      };
+    }
+    var DEFAULT_MAX_AGE = 365 * 24 * 60 * 60;
+    function parseMaxAge(value = DEFAULT_MAX_AGE) {
+      if (value >= 0 && Number.isFinite(value)) {
+        return Math.floor(value);
+      } else {
+        throw new Error(`Strict-Transport-Security: ${JSON.stringify(value)} is not a valid value for maxAge. Please choose a positive integer.`);
+      }
+    }
+    function getHeaderValueFromOptions$2(options) {
+      if ("maxage" in options) {
+        throw new Error("Strict-Transport-Security received an unsupported property, `maxage`. Did you mean to pass `maxAge`?");
+      }
+      if ("includeSubdomains" in options) {
+        throw new Error('Strict-Transport-Security middleware should use `includeSubDomains` instead of `includeSubdomains`. (The correct one has an uppercase "D".)');
+      }
+      const directives = [`max-age=${parseMaxAge(options.maxAge)}`];
+      if (options.includeSubDomains === void 0 || options.includeSubDomains) {
+        directives.push("includeSubDomains");
+      }
+      if (options.preload) {
+        directives.push("preload");
+      }
+      return directives.join("; ");
+    }
+    function strictTransportSecurity(options = {}) {
+      const headerValue = getHeaderValueFromOptions$2(options);
+      return function strictTransportSecurityMiddleware(_req, res, next) {
+        res.setHeader("Strict-Transport-Security", headerValue);
+        next();
+      };
+    }
+    function xContentTypeOptions() {
+      return function xContentTypeOptionsMiddleware(_req, res, next) {
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        next();
+      };
+    }
+    function xDnsPrefetchControl(options = {}) {
+      const headerValue = options.allow ? "on" : "off";
+      return function xDnsPrefetchControlMiddleware(_req, res, next) {
+        res.setHeader("X-DNS-Prefetch-Control", headerValue);
+        next();
+      };
+    }
+    function xDownloadOptions() {
+      return function xDownloadOptionsMiddleware(_req, res, next) {
+        res.setHeader("X-Download-Options", "noopen");
+        next();
+      };
+    }
+    function getHeaderValueFromOptions$1({ action = "sameorigin" }) {
+      const normalizedAction = typeof action === "string" ? action.toUpperCase() : action;
+      switch (normalizedAction) {
+        case "SAME-ORIGIN":
+          return "SAMEORIGIN";
+        case "DENY":
+        case "SAMEORIGIN":
+          return normalizedAction;
+        default:
+          throw new Error(`X-Frame-Options received an invalid action ${JSON.stringify(action)}`);
+      }
+    }
+    function xFrameOptions(options = {}) {
+      const headerValue = getHeaderValueFromOptions$1(options);
+      return function xFrameOptionsMiddleware(_req, res, next) {
+        res.setHeader("X-Frame-Options", headerValue);
+        next();
+      };
+    }
+    var ALLOWED_PERMITTED_POLICIES = /* @__PURE__ */ new Set(["none", "master-only", "by-content-type", "all"]);
+    function getHeaderValueFromOptions({ permittedPolicies = "none" }) {
+      if (ALLOWED_PERMITTED_POLICIES.has(permittedPolicies)) {
+        return permittedPolicies;
+      } else {
+        throw new Error(`X-Permitted-Cross-Domain-Policies does not support ${JSON.stringify(permittedPolicies)}`);
+      }
+    }
+    function xPermittedCrossDomainPolicies(options = {}) {
+      const headerValue = getHeaderValueFromOptions(options);
+      return function xPermittedCrossDomainPoliciesMiddleware(_req, res, next) {
+        res.setHeader("X-Permitted-Cross-Domain-Policies", headerValue);
+        next();
+      };
+    }
+    function xPoweredBy() {
+      return function xPoweredByMiddleware(_req, res, next) {
+        res.removeHeader("X-Powered-By");
+        next();
+      };
+    }
+    function xXssProtection() {
+      return function xXssProtectionMiddleware(_req, res, next) {
+        res.setHeader("X-XSS-Protection", "0");
+        next();
+      };
+    }
+    function getMiddlewareFunctionsFromOptions(options) {
+      const result = [];
+      switch (options.contentSecurityPolicy) {
+        case void 0:
+        case true:
+          result.push(contentSecurityPolicy());
+          break;
+        case false:
+          break;
+        default:
+          result.push(contentSecurityPolicy(options.contentSecurityPolicy));
+          break;
+      }
+      switch (options.crossOriginEmbedderPolicy) {
+        case void 0:
+        case false:
+          break;
+        case true:
+          result.push(crossOriginEmbedderPolicy());
+          break;
+        default:
+          result.push(crossOriginEmbedderPolicy(options.crossOriginEmbedderPolicy));
+          break;
+      }
+      switch (options.crossOriginOpenerPolicy) {
+        case void 0:
+        case true:
+          result.push(crossOriginOpenerPolicy());
+          break;
+        case false:
+          break;
+        default:
+          result.push(crossOriginOpenerPolicy(options.crossOriginOpenerPolicy));
+          break;
+      }
+      switch (options.crossOriginResourcePolicy) {
+        case void 0:
+        case true:
+          result.push(crossOriginResourcePolicy());
+          break;
+        case false:
+          break;
+        default:
+          result.push(crossOriginResourcePolicy(options.crossOriginResourcePolicy));
+          break;
+      }
+      switch (options.originAgentCluster) {
+        case void 0:
+        case true:
+          result.push(originAgentCluster());
+          break;
+        case false:
+          break;
+        default:
+          console.warn("Origin-Agent-Cluster does not take options. Remove the property to silence this warning.");
+          result.push(originAgentCluster());
+          break;
+      }
+      switch (options.referrerPolicy) {
+        case void 0:
+        case true:
+          result.push(referrerPolicy());
+          break;
+        case false:
+          break;
+        default:
+          result.push(referrerPolicy(options.referrerPolicy));
+          break;
+      }
+      if ("strictTransportSecurity" in options && "hsts" in options) {
+        throw new Error("Strict-Transport-Security option was specified twice. Remove the `hsts` option to fix this error.");
+      }
+      const strictTransportSecurityOption = options.strictTransportSecurity ?? options.hsts;
+      switch (strictTransportSecurityOption) {
+        case void 0:
+        case true:
+          result.push(strictTransportSecurity());
+          break;
+        case false:
+          break;
+        default:
+          result.push(strictTransportSecurity(strictTransportSecurityOption));
+          break;
+      }
+      if ("xContentTypeOptions" in options && "noSniff" in options) {
+        throw new Error("X-Content-Type-Options option was specified twice. Remove the `noSniff` option to fix this error.");
+      }
+      const xContentTypeOptionsOption = options.xContentTypeOptions ?? options.noSniff;
+      switch (xContentTypeOptionsOption) {
+        case void 0:
+        case true:
+          result.push(xContentTypeOptions());
+          break;
+        case false:
+          break;
+        default:
+          console.warn("X-Content-Type-Options does not take options. Remove the property to silence this warning.");
+          result.push(xContentTypeOptions());
+          break;
+      }
+      if ("xDnsPrefetchControl" in options && "dnsPrefetchControl" in options) {
+        throw new Error("X-DNS-Prefetch-Control option was specified twice. Remove the `dnsPrefetchControl` option to fix this error.");
+      }
+      const xDnsPrefetchControlOption = options.xDnsPrefetchControl ?? options.dnsPrefetchControl;
+      switch (xDnsPrefetchControlOption) {
+        case void 0:
+        case true:
+          result.push(xDnsPrefetchControl());
+          break;
+        case false:
+          break;
+        default:
+          result.push(xDnsPrefetchControl(xDnsPrefetchControlOption));
+          break;
+      }
+      if ("xDownloadOptions" in options && "ieNoOpen" in options) {
+        throw new Error("X-Download-Options option was specified twice. Remove the `ieNoOpen` option to fix this error.");
+      }
+      const xDownloadOptionsOption = options.xDownloadOptions ?? options.ieNoOpen;
+      switch (xDownloadOptionsOption) {
+        case void 0:
+        case true:
+          result.push(xDownloadOptions());
+          break;
+        case false:
+          break;
+        default:
+          console.warn("X-Download-Options does not take options. Remove the property to silence this warning.");
+          result.push(xDownloadOptions());
+          break;
+      }
+      if ("xFrameOptions" in options && "frameguard" in options) {
+        throw new Error("X-Frame-Options option was specified twice. Remove the `frameguard` option to fix this error.");
+      }
+      const xFrameOptionsOption = options.xFrameOptions ?? options.frameguard;
+      switch (xFrameOptionsOption) {
+        case void 0:
+        case true:
+          result.push(xFrameOptions());
+          break;
+        case false:
+          break;
+        default:
+          result.push(xFrameOptions(xFrameOptionsOption));
+          break;
+      }
+      if ("xPermittedCrossDomainPolicies" in options && "permittedCrossDomainPolicies" in options) {
+        throw new Error("X-Permitted-Cross-Domain-Policies option was specified twice. Remove the `permittedCrossDomainPolicies` option to fix this error.");
+      }
+      const xPermittedCrossDomainPoliciesOption = options.xPermittedCrossDomainPolicies ?? options.permittedCrossDomainPolicies;
+      switch (xPermittedCrossDomainPoliciesOption) {
+        case void 0:
+        case true:
+          result.push(xPermittedCrossDomainPolicies());
+          break;
+        case false:
+          break;
+        default:
+          result.push(xPermittedCrossDomainPolicies(xPermittedCrossDomainPoliciesOption));
+          break;
+      }
+      if ("xPoweredBy" in options && "hidePoweredBy" in options) {
+        throw new Error("X-Powered-By option was specified twice. Remove the `hidePoweredBy` option to fix this error.");
+      }
+      const xPoweredByOption = options.xPoweredBy ?? options.hidePoweredBy;
+      switch (xPoweredByOption) {
+        case void 0:
+        case true:
+          result.push(xPoweredBy());
+          break;
+        case false:
+          break;
+        default:
+          console.warn("X-Powered-By does not take options. Remove the property to silence this warning.");
+          result.push(xPoweredBy());
+          break;
+      }
+      if ("xXssProtection" in options && "xssFilter" in options) {
+        throw new Error("X-XSS-Protection option was specified twice. Remove the `xssFilter` option to fix this error.");
+      }
+      const xXssProtectionOption = options.xXssProtection ?? options.xssFilter;
+      switch (xXssProtectionOption) {
+        case void 0:
+        case true:
+          result.push(xXssProtection());
+          break;
+        case false:
+          break;
+        default:
+          console.warn("X-XSS-Protection does not take options. Remove the property to silence this warning.");
+          result.push(xXssProtection());
+          break;
+      }
+      return result;
+    }
+    var helmet2 = Object.assign(
+      function helmet3(options = {}) {
+        if (options.constructor?.name === "IncomingMessage") {
+          throw new Error("It appears you have done something like `app.use(helmet)`, but it should be `app.use(helmet())`.");
+        }
+        const middlewareFunctions = getMiddlewareFunctionsFromOptions(options);
+        return function helmetMiddleware(req, res, next) {
+          let middlewareIndex = 0;
+          (function internalNext(err) {
+            if (err) {
+              next(err);
+              return;
+            }
+            const middlewareFunction = middlewareFunctions[middlewareIndex];
+            if (middlewareFunction) {
+              middlewareIndex++;
+              middlewareFunction(req, res, internalNext);
+            } else {
+              next();
+            }
+          })();
+        };
+      },
+      {
+        contentSecurityPolicy,
+        crossOriginEmbedderPolicy,
+        crossOriginOpenerPolicy,
+        crossOriginResourcePolicy,
+        originAgentCluster,
+        referrerPolicy,
+        strictTransportSecurity,
+        xContentTypeOptions,
+        xDnsPrefetchControl,
+        xDownloadOptions,
+        xFrameOptions,
+        xPermittedCrossDomainPolicies,
+        xPoweredBy,
+        xXssProtection,
+        // Legacy aliases
+        dnsPrefetchControl: xDnsPrefetchControl,
+        xssFilter: xXssProtection,
+        permittedCrossDomainPolicies: xPermittedCrossDomainPolicies,
+        ieNoOpen: xDownloadOptions,
+        noSniff: xContentTypeOptions,
+        frameguard: xFrameOptions,
+        hidePoweredBy: xPoweredBy,
+        hsts: strictTransportSecurity
+      }
+    );
+    exports2.contentSecurityPolicy = contentSecurityPolicy;
+    exports2.crossOriginEmbedderPolicy = crossOriginEmbedderPolicy;
+    exports2.crossOriginOpenerPolicy = crossOriginOpenerPolicy;
+    exports2.crossOriginResourcePolicy = crossOriginResourcePolicy;
+    exports2.default = helmet2;
+    exports2.dnsPrefetchControl = xDnsPrefetchControl;
+    exports2.frameguard = xFrameOptions;
+    exports2.hidePoweredBy = xPoweredBy;
+    exports2.hsts = strictTransportSecurity;
+    exports2.ieNoOpen = xDownloadOptions;
+    exports2.noSniff = xContentTypeOptions;
+    exports2.originAgentCluster = originAgentCluster;
+    exports2.permittedCrossDomainPolicies = xPermittedCrossDomainPolicies;
+    exports2.referrerPolicy = referrerPolicy;
+    exports2.strictTransportSecurity = strictTransportSecurity;
+    exports2.xContentTypeOptions = xContentTypeOptions;
+    exports2.xDnsPrefetchControl = xDnsPrefetchControl;
+    exports2.xDownloadOptions = xDownloadOptions;
+    exports2.xFrameOptions = xFrameOptions;
+    exports2.xPermittedCrossDomainPolicies = xPermittedCrossDomainPolicies;
+    exports2.xPoweredBy = xPoweredBy;
+    exports2.xXssProtection = xXssProtection;
+    exports2.xssFilter = xXssProtection;
+    module2.exports = exports2.default;
+    module2.exports.default = module2.exports;
+  }
+});
+
+// backend/node_modules/@fastify/helmet/index.js
+var require_helmet2 = __commonJS({
+  "backend/node_modules/@fastify/helmet/index.js"(exports2, module2) {
+    "use strict";
+    var { randomBytes: randomBytes2 } = require("node:crypto");
+    var fp = require_fastify_plugin();
+    var helmet2 = require_helmet();
+    async function fastifyHelmet(fastify, options) {
+      const { enableCSPNonces, global: global2, ...globalConfiguration } = options;
+      const isGlobal = typeof global2 === "boolean" ? global2 : true;
+      if (!fastify.hasReplyDecorator("helmet")) {
+        fastify.decorateReply("helmet", null);
+      }
+      if (!fastify.hasReplyDecorator("cspNonce")) {
+        fastify.decorateReply("cspNonce", null);
+      }
+      fastify.addHook("onRoute", (routeOptions) => {
+        if (routeOptions.helmet !== void 0) {
+          if (typeof routeOptions.helmet === "object") {
+            routeOptions.config = Object.assign(routeOptions.config || /* @__PURE__ */ Object.create(null), { helmet: routeOptions.helmet });
+          } else if (routeOptions.helmet === false) {
+            routeOptions.config = Object.assign(routeOptions.config || /* @__PURE__ */ Object.create(null), { helmet: { skipRoute: true } });
+          } else {
+            throw new Error("Unknown value for route helmet configuration");
+          }
+        }
+      });
+      fastify.addHook("onRequest", async function helmetConfigureReply(request, reply) {
+        const { helmet: routeOptions } = request.routeOptions.config;
+        if (routeOptions !== void 0) {
+          const { enableCSPNonces: enableRouteCSPNonces, skipRoute, ...helmetRouteConfiguration } = routeOptions;
+          const mergedHelmetConfiguration = Object.assign(/* @__PURE__ */ Object.create(null), globalConfiguration, helmetRouteConfiguration);
+          return replyDecorators(request, reply, mergedHelmetConfiguration, enableRouteCSPNonces);
+        }
+        return replyDecorators(request, reply, globalConfiguration, enableCSPNonces);
+      });
+      fastify.addHook("onRequest", function helmetApplyHeaders(request, reply, next) {
+        const { helmet: routeOptions } = request.routeOptions.config;
+        if (routeOptions !== void 0) {
+          const { enableCSPNonces: enableRouteCSPNonces, skipRoute, ...helmetRouteConfiguration } = routeOptions;
+          if (skipRoute === true) {
+          } else {
+            const mergedHelmetConfiguration = Object.assign(/* @__PURE__ */ Object.create(null), globalConfiguration, helmetRouteConfiguration);
+            return buildHelmetOnRoutes(request, reply, mergedHelmetConfiguration, enableRouteCSPNonces);
+          }
+          return next();
+        }
+        if (isGlobal) {
+          return buildHelmetOnRoutes(request, reply, globalConfiguration, enableCSPNonces);
+        }
+        return next();
+      });
+    }
+    async function replyDecorators(request, reply, configuration, enableCSP) {
+      if (enableCSP) {
+        reply.cspNonce = {
+          script: randomBytes2(16).toString("hex"),
+          style: randomBytes2(16).toString("hex")
+        };
+      }
+      reply.helmet = function(opts) {
+        const helmetConfiguration = opts ? Object.assign(/* @__PURE__ */ Object.create(null), configuration, opts) : configuration;
+        return helmet2(helmetConfiguration)(request.raw, reply.raw, done);
+      };
+    }
+    async function buildHelmetOnRoutes(request, reply, configuration, enableCSP) {
+      if (enableCSP === true && configuration.contentSecurityPolicy !== false) {
+        const cspDirectives = configuration.contentSecurityPolicy ? configuration.contentSecurityPolicy.directives : helmet2.contentSecurityPolicy.getDefaultDirectives();
+        const cspReportOnly = configuration.contentSecurityPolicy ? configuration.contentSecurityPolicy.reportOnly : void 0;
+        const cspUseDefaults = configuration.contentSecurityPolicy ? configuration.contentSecurityPolicy.useDefaults : void 0;
+        const { script: scriptCSPNonce, style: styleCSPNonce } = reply.cspNonce;
+        const directives = { ...cspDirectives };
+        const scriptKey = Array.isArray(directives["script-src"]) ? "script-src" : "scriptSrc";
+        directives[scriptKey] = Array.isArray(directives[scriptKey]) ? [...directives[scriptKey]] : [];
+        directives[scriptKey].push(`'nonce-${scriptCSPNonce}'`);
+        const styleKey = Array.isArray(directives["style-src"]) ? "style-src" : "styleSrc";
+        directives[styleKey] = Array.isArray(directives[styleKey]) ? [...directives[styleKey]] : [];
+        directives[styleKey].push(`'nonce-${styleCSPNonce}'`);
+        const contentSecurityPolicy = { directives, reportOnly: cspReportOnly, useDefaults: cspUseDefaults };
+        const mergedHelmetConfiguration = Object.assign(/* @__PURE__ */ Object.create(null), configuration, { contentSecurityPolicy });
+        helmet2(mergedHelmetConfiguration)(request.raw, reply.raw, done);
+      } else {
+        helmet2(configuration)(request.raw, reply.raw, done);
+      }
+    }
+    function done(error) {
+      if (error) throw error;
+    }
+    module2.exports = fp(fastifyHelmet, {
+      fastify: "5.x",
+      name: "@fastify/helmet"
+    });
+    module2.exports.default = fastifyHelmet;
+    module2.exports.fastifyHelmet = fastifyHelmet;
+    module2.exports.contentSecurityPolicy = helmet2.contentSecurityPolicy;
+  }
+});
+
+// backend/node_modules/@fastify/rate-limit/node_modules/fastify-plugin/lib/getPluginName.js
+var require_getPluginName2 = __commonJS({
+  "backend/node_modules/@fastify/rate-limit/node_modules/fastify-plugin/lib/getPluginName.js"(exports2, module2) {
+    "use strict";
+    var fpStackTracePattern = /at\s(?:.*\.)?plugin\s.*\n\s*(.*)/;
+    var fileNamePattern = /(\w*(\.\w*)*)\..*/;
+    module2.exports = function getPluginName(fn) {
+      if (fn.name.length > 0) return fn.name;
+      const stackTraceLimit = Error.stackTraceLimit;
+      Error.stackTraceLimit = 10;
+      try {
+        throw new Error("anonymous function");
+      } catch (e) {
+        Error.stackTraceLimit = stackTraceLimit;
+        return extractPluginName(e.stack);
+      }
+    };
+    function extractPluginName(stack) {
+      const m = stack.match(fpStackTracePattern);
+      return m ? m[1].split(/[/\\]/).slice(-1)[0].match(fileNamePattern)[1] : "anonymous";
+    }
+    module2.exports.extractPluginName = extractPluginName;
+  }
+});
+
+// backend/node_modules/@fastify/rate-limit/node_modules/fastify-plugin/lib/toCamelCase.js
+var require_toCamelCase2 = __commonJS({
+  "backend/node_modules/@fastify/rate-limit/node_modules/fastify-plugin/lib/toCamelCase.js"(exports2, module2) {
+    "use strict";
+    module2.exports = function toCamelCase(name) {
+      if (name[0] === "@") {
+        name = name.slice(1).replace("/", "-");
+      }
+      return name.replace(/-(.)/g, function(match, g1) {
+        return g1.toUpperCase();
+      });
+    };
+  }
+});
+
+// backend/node_modules/@fastify/rate-limit/node_modules/fastify-plugin/plugin.js
+var require_plugin2 = __commonJS({
+  "backend/node_modules/@fastify/rate-limit/node_modules/fastify-plugin/plugin.js"(exports2, module2) {
+    "use strict";
+    var getPluginName = require_getPluginName2();
+    var toCamelCase = require_toCamelCase2();
+    var count = 0;
+    function plugin(fn, options = {}) {
+      let autoName = false;
+      if (fn.default !== void 0) {
+        fn = fn.default;
+      }
+      if (typeof fn !== "function") {
+        throw new TypeError(
+          `fastify-plugin expects a function, instead got a '${typeof fn}'`
+        );
+      }
+      if (typeof options === "string") {
+        options = {
+          fastify: options
+        };
+      }
+      if (typeof options !== "object" || Array.isArray(options) || options === null) {
+        throw new TypeError("The options object should be an object");
+      }
+      if (options.fastify !== void 0 && typeof options.fastify !== "string") {
+        throw new TypeError(`fastify-plugin expects a version string, instead got '${typeof options.fastify}'`);
+      }
+      if (!options.name) {
+        autoName = true;
+        options.name = getPluginName(fn) + "-auto-" + count++;
+      }
+      fn[Symbol.for("skip-override")] = options.encapsulate !== true;
+      fn[Symbol.for("fastify.display-name")] = options.name;
+      fn[Symbol.for("plugin-meta")] = options;
+      if (!fn.default) {
+        fn.default = fn;
+      }
+      const camelCase = toCamelCase(options.name);
+      if (!autoName && !fn[camelCase]) {
+        fn[camelCase] = fn;
+      }
+      return fn;
+    }
+    module2.exports = plugin;
+    module2.exports.default = plugin;
+    module2.exports.fastifyPlugin = plugin;
+  }
+});
+
+// backend/node_modules/@lukeed/ms/dist/index.js
+var require_dist5 = __commonJS({
+  "backend/node_modules/@lukeed/ms/dist/index.js"(exports2) {
+    var RGX = /^(-?(?:\d+)?\.?\d+) *(m(?:illiseconds?|s(?:ecs?)?))?(s(?:ec(?:onds?|s)?)?)?(m(?:in(?:utes?|s)?)?)?(h(?:ours?|rs?)?)?(d(?:ays?)?)?(w(?:eeks?|ks?)?)?(y(?:ears?|rs?)?)?$/;
+    var SEC = 1e3;
+    var MIN = SEC * 60;
+    var HOUR = MIN * 60;
+    var DAY = HOUR * 24;
+    var YEAR = DAY * 365.25;
+    function parse2(val) {
+      var num, arr = val.toLowerCase().match(RGX);
+      if (arr != null && (num = parseFloat(arr[1]))) {
+        if (arr[3] != null) return num * SEC;
+        if (arr[4] != null) return num * MIN;
+        if (arr[5] != null) return num * HOUR;
+        if (arr[6] != null) return num * DAY;
+        if (arr[7] != null) return num * DAY * 7;
+        if (arr[8] != null) return num * YEAR;
+        return num;
+      }
+    }
+    function fmt(val, pfx, str, long) {
+      var num = (val | 0) === val ? val : ~~(val + 0.5);
+      return pfx + num + (long ? " " + str + (num != 1 ? "s" : "") : str[0]);
+    }
+    function format(num, long) {
+      var pfx = num < 0 ? "-" : "", abs = num < 0 ? -num : num;
+      if (abs < SEC) return num + (long ? " ms" : "ms");
+      if (abs < MIN) return fmt(abs / SEC, pfx, "second", long);
+      if (abs < HOUR) return fmt(abs / MIN, pfx, "minute", long);
+      if (abs < DAY) return fmt(abs / HOUR, pfx, "hour", long);
+      if (abs < YEAR) return fmt(abs / DAY, pfx, "day", long);
+      return fmt(abs / YEAR, pfx, "year", long);
+    }
+    exports2.format = format;
+    exports2.parse = parse2;
+  }
+});
+
+// backend/node_modules/@fastify/rate-limit/store/LocalStore.js
+var require_LocalStore = __commonJS({
+  "backend/node_modules/@fastify/rate-limit/store/LocalStore.js"(exports2, module2) {
+    "use strict";
+    var { LruMap: Lru } = require_toad_cache();
+    function LocalStore(continueExceeding, exponentialBackoff, cache = 5e3) {
+      this.continueExceeding = continueExceeding;
+      this.exponentialBackoff = exponentialBackoff;
+      this.lru = new Lru(cache);
+    }
+    LocalStore.prototype.incr = function(ip, cb, timeWindow, max) {
+      const nowInMs = Date.now();
+      let current = this.lru.get(ip);
+      if (!current) {
+        current = { current: 1, ttl: timeWindow, iterationStartMs: nowInMs };
+      } else if (current.iterationStartMs + timeWindow <= nowInMs) {
+        current.current = 1;
+        current.ttl = timeWindow;
+        current.iterationStartMs = nowInMs;
+      } else {
+        ++current.current;
+        if (this.continueExceeding && current.current > max) {
+          current.ttl = timeWindow;
+          current.iterationStartMs = nowInMs;
+        } else if (this.exponentialBackoff && current.current > max) {
+          const backoffExponent = current.current - max - 1;
+          const ttl = timeWindow * 2 ** backoffExponent;
+          current.ttl = Number.isSafeInteger(ttl) ? ttl : Number.MAX_SAFE_INTEGER;
+          current.iterationStartMs = nowInMs;
+        } else {
+          current.ttl = timeWindow - (nowInMs - current.iterationStartMs);
+        }
+      }
+      this.lru.set(ip, current);
+      cb(null, current);
+    };
+    LocalStore.prototype.child = function(routeOptions) {
+      return new LocalStore(routeOptions.continueExceeding, routeOptions.exponentialBackoff, routeOptions.cache);
+    };
+    module2.exports = LocalStore;
+  }
+});
+
+// backend/node_modules/@fastify/rate-limit/store/RedisStore.js
+var require_RedisStore = __commonJS({
+  "backend/node_modules/@fastify/rate-limit/store/RedisStore.js"(exports2, module2) {
+    "use strict";
+    var lua = `
+  -- Key to operate on
+  local key = KEYS[1]
+  -- Time window for the TTL
+  local timeWindow = tonumber(ARGV[1])
+  -- Max requests
+  local max = tonumber(ARGV[2])
+  -- Flag to determine if TTL should be reset after exceeding
+  local continueExceeding = ARGV[3] == 'true'
+  --Flag to determine if exponential backoff should be applied
+  local exponentialBackoff = ARGV[4] == 'true'
+
+  --Max safe integer
+  local MAX_SAFE_INTEGER = (2^53) - 1
+
+  -- Increment the key's value
+  local current = redis.call('INCR', key)
+
+  if current == 1 or (continueExceeding and current > max) then
+    redis.call('PEXPIRE', key, timeWindow)
+  elseif exponentialBackoff and current > max then
+    local backoffExponent = current - max - 1
+    timeWindow = math.min(timeWindow * (2 ^ backoffExponent), MAX_SAFE_INTEGER)
+    redis.call('PEXPIRE', key, timeWindow)
+  else
+    timeWindow = redis.call('PTTL', key)
+  end
+
+  return {current, timeWindow}
+`;
+    function RedisStore(continueExceeding, exponentialBackoff, redis, key = "fastify-rate-limit-") {
+      this.continueExceeding = continueExceeding;
+      this.exponentialBackoff = exponentialBackoff;
+      this.redis = redis;
+      this.key = key;
+      if (!this.redis.rateLimit) {
+        this.redis.defineCommand("rateLimit", {
+          numberOfKeys: 1,
+          lua
+        });
+      }
+    }
+    RedisStore.prototype.incr = function(ip, cb, timeWindow, max) {
+      this.redis.rateLimit(this.key + ip, timeWindow, max, this.continueExceeding, this.exponentialBackoff, (err, result) => {
+        err ? cb(err, null) : cb(null, { current: result[0], ttl: result[1] });
+      });
+    };
+    RedisStore.prototype.child = function(routeOptions) {
+      return new RedisStore(routeOptions.continueExceeding, routeOptions.exponentialBackoff, this.redis, `${this.key}${routeOptions.routeInfo.method}${routeOptions.routeInfo.url}-`);
+    };
+    module2.exports = RedisStore;
+  }
+});
+
+// backend/node_modules/@fastify/rate-limit/index.js
+var require_rate_limit = __commonJS({
+  "backend/node_modules/@fastify/rate-limit/index.js"(exports2, module2) {
+    "use strict";
+    var fp = require_plugin2();
+    var { parse: parse2, format } = require_dist5();
+    var LocalStore = require_LocalStore();
+    var RedisStore = require_RedisStore();
+    var defaultMax = 1e3;
+    var defaultTimeWindow = 6e4;
+    var defaultHook = "onRequest";
+    var defaultHeaders = {
+      rateLimit: "x-ratelimit-limit",
+      rateRemaining: "x-ratelimit-remaining",
+      rateReset: "x-ratelimit-reset",
+      retryAfter: "retry-after"
+    };
+    var draftSpecHeaders = {
+      rateLimit: "ratelimit-limit",
+      rateRemaining: "ratelimit-remaining",
+      rateReset: "ratelimit-reset",
+      retryAfter: "retry-after"
+    };
+    var defaultOnFn = () => {
+    };
+    var defaultKeyGenerator = (req) => req.ip;
+    var defaultErrorResponse = (_req, context) => {
+      const err = new Error(`Rate limit exceeded, retry in ${context.after}`);
+      err.statusCode = context.statusCode;
+      return err;
+    };
+    async function fastifyRateLimit(fastify, settings) {
+      const globalParams = {
+        global: typeof settings.global === "boolean" ? settings.global : true
+      };
+      if (typeof settings.enableDraftSpec === "boolean" && settings.enableDraftSpec) {
+        globalParams.enableDraftSpec = true;
+        globalParams.labels = draftSpecHeaders;
+      } else {
+        globalParams.enableDraftSpec = false;
+        globalParams.labels = defaultHeaders;
+      }
+      globalParams.addHeaders = Object.assign({
+        [globalParams.labels.rateLimit]: true,
+        [globalParams.labels.rateRemaining]: true,
+        [globalParams.labels.rateReset]: true,
+        [globalParams.labels.retryAfter]: true
+      }, settings.addHeaders);
+      globalParams.addHeadersOnExceeding = Object.assign({
+        [globalParams.labels.rateLimit]: true,
+        [globalParams.labels.rateRemaining]: true,
+        [globalParams.labels.rateReset]: true
+      }, settings.addHeadersOnExceeding);
+      if (Number.isFinite(settings.max) && settings.max >= 0) {
+        globalParams.max = Math.trunc(settings.max);
+      } else if (typeof settings.max === "function") {
+        globalParams.max = settings.max;
+      } else {
+        globalParams.max = defaultMax;
+      }
+      if (Number.isFinite(settings.timeWindow) && settings.timeWindow >= 0) {
+        globalParams.timeWindow = Math.trunc(settings.timeWindow);
+      } else if (typeof settings.timeWindow === "string") {
+        globalParams.timeWindow = parse2(settings.timeWindow);
+      } else if (typeof settings.timeWindow === "function") {
+        globalParams.timeWindow = settings.timeWindow;
+      } else {
+        globalParams.timeWindow = defaultTimeWindow;
+      }
+      globalParams.hook = settings.hook || defaultHook;
+      globalParams.allowList = settings.allowList || settings.whitelist || null;
+      globalParams.ban = Number.isFinite(settings.ban) && settings.ban >= 0 ? Math.trunc(settings.ban) : -1;
+      globalParams.onBanReach = typeof settings.onBanReach === "function" ? settings.onBanReach : defaultOnFn;
+      globalParams.onExceeding = typeof settings.onExceeding === "function" ? settings.onExceeding : defaultOnFn;
+      globalParams.onExceeded = typeof settings.onExceeded === "function" ? settings.onExceeded : defaultOnFn;
+      globalParams.continueExceeding = typeof settings.continueExceeding === "boolean" ? settings.continueExceeding : false;
+      globalParams.exponentialBackoff = typeof settings.exponentialBackoff === "boolean" ? settings.exponentialBackoff : false;
+      globalParams.keyGenerator = typeof settings.keyGenerator === "function" ? settings.keyGenerator : defaultKeyGenerator;
+      if (typeof settings.errorResponseBuilder === "function") {
+        globalParams.errorResponseBuilder = settings.errorResponseBuilder;
+        globalParams.isCustomErrorMessage = true;
+      } else {
+        globalParams.errorResponseBuilder = defaultErrorResponse;
+        globalParams.isCustomErrorMessage = false;
+      }
+      globalParams.skipOnError = typeof settings.skipOnError === "boolean" ? settings.skipOnError : false;
+      const pluginComponent = {
+        rateLimitRan: Symbol("fastify.request.rateLimitRan"),
+        store: null
+      };
+      if (settings.store) {
+        const Store = settings.store;
+        pluginComponent.store = new Store(globalParams);
+      } else {
+        if (settings.redis) {
+          pluginComponent.store = new RedisStore(globalParams.continueExceeding, globalParams.exponentialBackoff, settings.redis, settings.nameSpace);
+        } else {
+          pluginComponent.store = new LocalStore(globalParams.continueExceeding, globalParams.exponentialBackoff, settings.cache);
+        }
+      }
+      fastify.decorateRequest(pluginComponent.rateLimitRan, false);
+      if (!fastify.hasDecorator("createRateLimit")) {
+        fastify.decorate("createRateLimit", (options) => {
+          const args = createLimiterArgs(pluginComponent, globalParams, options);
+          return (req) => applyRateLimit.apply(this, args.concat(req));
+        });
+      }
+      if (!fastify.hasDecorator("rateLimit")) {
+        fastify.decorate("rateLimit", (options) => {
+          const args = createLimiterArgs(pluginComponent, globalParams, options);
+          return rateLimitRequestHandler(...args);
+        });
+      }
+      fastify.addHook("onRoute", (routeOptions) => {
+        if (routeOptions.config?.rateLimit != null) {
+          if (typeof routeOptions.config.rateLimit === "object") {
+            const newPluginComponent = Object.create(pluginComponent);
+            const mergedRateLimitParams = mergeParams(globalParams, routeOptions.config.rateLimit, { routeInfo: routeOptions });
+            newPluginComponent.store = pluginComponent.store.child(mergedRateLimitParams);
+            addRouteRateHook(newPluginComponent, mergedRateLimitParams, routeOptions);
+          } else if (routeOptions.config.rateLimit !== false) {
+            throw new Error("Unknown value for route rate-limit configuration");
+          }
+        } else if (globalParams.global) {
+          addRouteRateHook(pluginComponent, globalParams, routeOptions);
+        }
+      });
+    }
+    function mergeParams(...params) {
+      const result = Object.assign({}, ...params);
+      if (Number.isFinite(result.timeWindow) && result.timeWindow >= 0) {
+        result.timeWindow = Math.trunc(result.timeWindow);
+      } else if (typeof result.timeWindow === "string") {
+        result.timeWindow = parse2(result.timeWindow);
+      } else if (typeof result.timeWindow !== "function") {
+        result.timeWindow = defaultTimeWindow;
+      }
+      if (Number.isFinite(result.max) && result.max >= 0) {
+        result.max = Math.trunc(result.max);
+      } else if (typeof result.max !== "function") {
+        result.max = defaultMax;
+      }
+      if (Number.isFinite(result.ban) && result.ban >= 0) {
+        result.ban = Math.trunc(result.ban);
+      } else {
+        result.ban = -1;
+      }
+      if (result.groupId !== void 0 && typeof result.groupId !== "string") {
+        throw new Error("groupId must be a string");
+      }
+      return result;
+    }
+    function createLimiterArgs(pluginComponent, globalParams, options) {
+      if (typeof options === "object") {
+        const newPluginComponent = Object.create(pluginComponent);
+        const mergedRateLimitParams = mergeParams(globalParams, options, { routeInfo: {} });
+        newPluginComponent.store = newPluginComponent.store.child(mergedRateLimitParams);
+        return [newPluginComponent, mergedRateLimitParams];
+      }
+      return [pluginComponent, globalParams];
+    }
+    function addRouteRateHook(pluginComponent, params, routeOptions) {
+      const hook = params.hook;
+      const hookHandler = rateLimitRequestHandler(pluginComponent, params);
+      if (Array.isArray(routeOptions[hook])) {
+        routeOptions[hook].push(hookHandler);
+      } else if (typeof routeOptions[hook] === "function") {
+        routeOptions[hook] = [routeOptions[hook], hookHandler];
+      } else {
+        routeOptions[hook] = [hookHandler];
+      }
+    }
+    async function applyRateLimit(pluginComponent, params, req) {
+      const { store } = pluginComponent;
+      let key = await params.keyGenerator(req);
+      const groupId = req.routeOptions.config?.rateLimit?.groupId;
+      if (groupId) {
+        key += groupId;
+      }
+      if (params.allowList) {
+        if (typeof params.allowList === "function") {
+          if (await params.allowList(req, key)) {
+            return {
+              isAllowed: true,
+              key
+            };
+          }
+        } else if (params.allowList.indexOf(key) !== -1) {
+          return {
+            isAllowed: true,
+            key
+          };
+        }
+      }
+      const max = typeof params.max === "number" ? params.max : await params.max(req, key);
+      const timeWindow = typeof params.timeWindow === "number" ? params.timeWindow : await params.timeWindow(req, key);
+      let current = 0;
+      let ttl = 0;
+      let ttlInSeconds = 0;
+      try {
+        const res = await new Promise((resolve, reject) => {
+          store.incr(key, (err, res2) => {
+            err ? reject(err) : resolve(res2);
+          }, timeWindow, max);
+        });
+        current = res.current;
+        ttl = res.ttl;
+        ttlInSeconds = Math.ceil(res.ttl / 1e3);
+      } catch (err) {
+        if (!params.skipOnError) {
+          throw err;
+        }
+      }
+      return {
+        isAllowed: false,
+        key,
+        max,
+        timeWindow,
+        remaining: Math.max(0, max - current),
+        ttl,
+        ttlInSeconds,
+        isExceeded: current > max,
+        isBanned: params.ban !== -1 && current - max > params.ban
+      };
+    }
+    function rateLimitRequestHandler(pluginComponent, params) {
+      const { rateLimitRan } = pluginComponent;
+      return async (req, res) => {
+        if (req[rateLimitRan]) {
+          return;
+        }
+        req[rateLimitRan] = true;
+        const rateLimit2 = await applyRateLimit(pluginComponent, params, req);
+        if (rateLimit2.isAllowed) {
+          return;
+        }
+        const {
+          key,
+          max,
+          remaining,
+          ttl,
+          ttlInSeconds,
+          isExceeded,
+          isBanned
+        } = rateLimit2;
+        if (!isExceeded) {
+          if (params.addHeadersOnExceeding[params.labels.rateLimit]) {
+            res.header(params.labels.rateLimit, max);
+          }
+          if (params.addHeadersOnExceeding[params.labels.rateRemaining]) {
+            res.header(params.labels.rateRemaining, remaining);
+          }
+          if (params.addHeadersOnExceeding[params.labels.rateReset]) {
+            res.header(params.labels.rateReset, ttlInSeconds);
+          }
+          params.onExceeding(req, key);
+          return;
+        }
+        params.onExceeded(req, key);
+        if (params.addHeaders[params.labels.rateLimit]) {
+          res.header(params.labels.rateLimit, max);
+        }
+        if (params.addHeaders[params.labels.rateRemaining]) {
+          res.header(params.labels.rateRemaining, 0);
+        }
+        if (params.addHeaders[params.labels.rateReset]) {
+          res.header(params.labels.rateReset, ttlInSeconds);
+        }
+        if (params.addHeaders[params.labels.retryAfter]) {
+          res.header(params.labels.retryAfter, ttlInSeconds);
+        }
+        const respCtx = {
+          statusCode: 429,
+          ban: false,
+          max,
+          ttl,
+          after: format(ttlInSeconds * 1e3, true)
+        };
+        if (isBanned) {
+          respCtx.statusCode = 403;
+          respCtx.ban = true;
+          params.onBanReach(req, key);
+        }
+        throw params.errorResponseBuilder(req, respCtx);
+      };
+    }
+    module2.exports = fp(fastifyRateLimit, {
+      fastify: "5.x",
+      name: "@fastify/rate-limit"
+    });
+    module2.exports.default = fastifyRateLimit;
+    module2.exports.fastifyRateLimit = fastifyRateLimit;
   }
 });
 
@@ -38647,7 +40662,7 @@ var require_parser = __commonJS({
 });
 
 // backend/node_modules/pg-protocol/dist/index.js
-var require_dist5 = __commonJS({
+var require_dist6 = __commonJS({
   "backend/node_modules/pg-protocol/dist/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -38750,7 +40765,7 @@ var require_connection = __commonJS({
   "backend/node_modules/pg/lib/connection.js"(exports2, module2) {
     "use strict";
     var EventEmitter = require("events").EventEmitter;
-    var { parse: parse2, serialize } = require_dist5();
+    var { parse: parse2, serialize } = require_dist6();
     var stream = require_stream();
     var { getStream } = stream;
     var flushBuffer = serialize.flush();
@@ -40722,7 +42737,7 @@ var require_lib3 = __commonJS({
     var utils = require_utils2();
     var Pool2 = require_pg_pool();
     var TypeOverrides2 = require_type_overrides();
-    var { DatabaseError: DatabaseError2 } = require_dist5();
+    var { DatabaseError: DatabaseError2 } = require_dist6();
     var { escapeIdentifier: escapeIdentifier2, escapeLiteral: escapeLiteral2 } = require_utils2();
     var poolFactory = (Client3) => {
       return class BoundPool extends Pool2 {
@@ -40876,6 +42891,14 @@ var init_pg = __esm({
         const { rows } = await this.pool.query(`SELECT * FROM users WHERE tenant_id = $1 AND id = $2`, [tenantId, id]);
         return rows[0] ? userFromRow(rows[0]) : null;
       }
+      async listUsersByIds(tenantId, ids) {
+        if (ids.length === 0) return [];
+        const { rows } = await this.pool.query(`SELECT * FROM users WHERE tenant_id = $1 AND id = ANY($2::uuid[])`, [
+          tenantId,
+          [...ids]
+        ]);
+        return rows.map(userFromRow);
+      }
       async findUserByPhone(phone) {
         const { rows } = await this.pool.query(`SELECT * FROM users WHERE phone = $1 LIMIT 1`, [phone]);
         return rows[0] ? userFromRow(rows[0]) : null;
@@ -40921,6 +42944,23 @@ var init_pg = __esm({
           [t.token, t.tenant_id, t.user_id, t.device_id, t.expires_at]
         );
       }
+      async getRefreshToken(token) {
+        const { rows } = await this.pool.query(
+          `SELECT token, tenant_id, user_id, device_id, expires_at FROM refresh_tokens WHERE token = $1`,
+          [token]
+        );
+        const r = rows[0];
+        return r ? {
+          token: r.token,
+          tenant_id: r.tenant_id,
+          user_id: r.user_id,
+          device_id: r.device_id,
+          expires_at: r.expires_at instanceof Date ? r.expires_at.toISOString() : r.expires_at
+        } : null;
+      }
+      async deleteRefreshToken(token) {
+        await this.pool.query(`DELETE FROM refresh_tokens WHERE token = $1`, [token]);
+      }
       // --- locations
       async insertLocation(l) {
         await this.pool.query(
@@ -40953,6 +42993,14 @@ var init_pg = __esm({
       async getLocationById(tenantId, id) {
         const { rows } = await this.pool.query(`SELECT * FROM locations WHERE tenant_id = $1 AND id = $2`, [tenantId, id]);
         return rows[0] ? locationFromRow(rows[0]) : null;
+      }
+      async listLocationsByIds(tenantId, ids) {
+        if (ids.length === 0) return [];
+        const { rows } = await this.pool.query(`SELECT * FROM locations WHERE tenant_id = $1 AND id = ANY($2::uuid[])`, [
+          tenantId,
+          [...ids]
+        ]);
+        return rows.map(locationFromRow);
       }
       async findLocationByCode(tenantId, code) {
         const { rows } = await this.pool.query(`SELECT * FROM locations WHERE tenant_id = $1 AND code = $2 LIMIT 1`, [
@@ -41230,6 +43278,27 @@ var init_pg = __esm({
           ended_at: r.ended_at ? r.ended_at.toISOString() : null
         };
       }
+      async getAttendanceDaysForDcDates(tenantId, dcIds, istDates) {
+        if (dcIds.length === 0 || istDates.length === 0) return /* @__PURE__ */ new Map();
+        const { rows } = await this.pool.query(
+          `SELECT * FROM attendance_days
+       WHERE tenant_id = $1 AND dc_user_id = ANY($2::uuid[]) AND ist_date::text = ANY($3::text[])`,
+          [tenantId, [...dcIds], [...istDates]]
+        );
+        const out = /* @__PURE__ */ new Map();
+        for (const r of rows) {
+          const dc = r.dc_user_id;
+          const date = typeof r.ist_date === "string" ? r.ist_date : r.ist_date.toISOString().slice(0, 10);
+          out.set(`${dc}|${date}`, {
+            tenant_id: r.tenant_id,
+            dc_user_id: dc,
+            ist_date: date,
+            started_at: r.started_at ? r.started_at.toISOString() : null,
+            ended_at: r.ended_at ? r.ended_at.toISOString() : null
+          });
+        }
+        return out;
+      }
       // --- CSP change requests (v0.8.0 — admin records)
       async insertCspChangeRequest(r) {
         await this.pool.query(
@@ -41304,6 +43373,12 @@ var init_pg = __esm({
           ]
         );
       }
+      async updateUserHomeLocation(tenantId, userId, homeLat, homeLng) {
+        await this.pool.query(
+          `UPDATE users SET home_lat = $3, home_lng = $4 WHERE tenant_id = $1 AND id = $2`,
+          [tenantId, userId, homeLat, homeLng]
+        );
+      }
       async lastVisitDatesForDc(tenantId, dcUserId) {
         const { rows } = await this.pool.query(
           `SELECT location_id, MAX(occurred_ist_date) AS d FROM visits
@@ -41334,15 +43409,26 @@ var init_pg = __esm({
         );
       }
       async listTrackPointsForDcDate(tenantId, dcUserId, istDate) {
+        return (await this.listTrackPointsForDcsDate(tenantId, [dcUserId], istDate)).get(dcUserId) ?? [];
+      }
+      async listTrackPointsForDcsDate(tenantId, dcIds, istDate) {
+        const out = /* @__PURE__ */ new Map();
+        if (dcIds.length === 0) return out;
         const { rows } = await this.pool.query(
-          `SELECT p.point FROM track_chunks c,
+          `SELECT c.dc_user_id, p.point FROM track_chunks c,
               LATERAL jsonb_array_elements(c.points) AS p(point)
-       WHERE c.tenant_id = $1 AND c.dc_user_id = $2
+       WHERE c.tenant_id = $1 AND c.dc_user_id = ANY($2::uuid[])
          AND ((p.point->>'t')::timestamptz AT TIME ZONE 'Asia/Kolkata')::date = $3::date
-       ORDER BY p.point->>'t'`,
-          [tenantId, dcUserId, istDate]
+       ORDER BY c.dc_user_id, p.point->>'t'`,
+          [tenantId, [...dcIds], istDate]
         );
-        return rows.map((r) => r.point);
+        for (const r of rows) {
+          const dc = r.dc_user_id;
+          const bucket = out.get(dc) ?? [];
+          bucket.push(r.point);
+          out.set(dc, bucket);
+        }
+        return out;
       }
       // --- CSP assignment mutations (design 0001 §6; effective-dating, not history edits)
       async endActiveCspAssignment(tenantId, cspLocationId, validTo) {
@@ -41405,6 +43491,74 @@ var init_pg = __esm({
             istDateOf(v.occurred_at)
           ]
         );
+      }
+      async insertVisitPhotoIfAbsent(p) {
+        await this.pool.query(
+          `INSERT INTO visit_photos (id, tenant_id, visit_id, dc_user_id, device_id, category, sha256,
+                                 width, height, bytes_b64, watermark, sidecar_signature, fix, upload_state,
+                                 device_wall_time, monotonic_ms, server_received_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+       ON CONFLICT (id) DO NOTHING`,
+          [
+            p.id,
+            p.tenant_id,
+            p.visit_id,
+            p.dc_user_id,
+            p.device_id,
+            p.category,
+            p.sha256,
+            p.width ?? null,
+            p.height ?? null,
+            p.bytes_b64,
+            p.watermark ? JSON.stringify(p.watermark) : null,
+            p.sidecar_signature ?? null,
+            p.fix ? JSON.stringify(p.fix) : null,
+            p.upload_state,
+            p.timestamps.device_wall_time,
+            p.timestamps.monotonic_ms,
+            p.timestamps.server_received_at
+          ]
+        );
+      }
+      async countPhotosForVisits(tenantId, visitIds) {
+        if (visitIds.length === 0) return /* @__PURE__ */ new Map();
+        const { rows } = await this.pool.query(
+          `SELECT visit_id, count(*)::int AS n FROM visit_photos
+       WHERE tenant_id = $1 AND visit_id = ANY($2::uuid[]) GROUP BY visit_id`,
+          [tenantId, visitIds]
+        );
+        return new Map(rows.map((r) => [r.visit_id, r.n]));
+      }
+      async insertCheckoutEventIfAbsent(e) {
+        await this.pool.query(
+          `INSERT INTO visit_checkouts (id, tenant_id, visit_id, dc_user_id, device_id, fix, trigger,
+                                    device_wall_time, monotonic_ms, server_received_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (id) DO NOTHING`,
+          [
+            e.id,
+            e.tenant_id,
+            e.visit_id,
+            e.dc_user_id,
+            e.device_id,
+            e.fix ? JSON.stringify(e.fix) : null,
+            e.trigger ?? "MANUAL",
+            e.timestamps.device_wall_time,
+            e.timestamps.monotonic_ms,
+            e.timestamps.server_received_at
+          ]
+        );
+      }
+      async checkoutTimesForVisits(tenantId, visitIds) {
+        if (visitIds.length === 0) return /* @__PURE__ */ new Map();
+        const { rows } = await this.pool.query(
+          `SELECT DISTINCT ON (visit_id) visit_id, device_wall_time
+       FROM visit_checkouts
+       WHERE tenant_id = $1 AND visit_id = ANY($2::uuid[])
+       ORDER BY visit_id, device_wall_time ASC, id ASC`,
+          [tenantId, visitIds]
+        );
+        return new Map(rows.map((r) => [r.visit_id, r.device_wall_time.toISOString()]));
       }
       async listVisitsByIstDate(scope, istDate) {
         const values = [scope.tenant_id, istDate];
@@ -41487,8 +43641,10 @@ __export(index_exports, {
 module.exports = __toCommonJS(index_exports);
 
 // backend/src/server.ts
-var import_node_crypto7 = require("node:crypto");
+var import_node_crypto9 = require("node:crypto");
 var import_fastify = __toESM(require_fastify(), 1);
+var import_helmet = __toESM(require_helmet2(), 1);
+var import_rate_limit = __toESM(require_rate_limit(), 1);
 
 // backend/src/scope.ts
 init_geo();
@@ -41531,6 +43687,7 @@ async function resolveScope(repos, principal, now) {
 }
 
 // backend/src/sync/engine.ts
+var import_node_crypto = require("node:crypto");
 init_geo();
 
 // backend/src/validation/schemas.ts
@@ -41993,6 +44150,40 @@ var checkin_event_schema_default = {
   description: "Server derives per event: distance_from_master_m, geofence_result (INSIDE | OUTSIDE_FLAGGED), against the location coordinate version valid at capture time. Derived values live on the Visit read model, never mutate the event."
 };
 
+// contracts/c1-entities/checkout-event.schema.json
+var checkout_event_schema_default = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://contracts.eko-dc-visits/c1/checkout-event.schema.json",
+  title: "CheckoutEvent (evidence; append-only; sync op visit.checkout, tier T1)",
+  type: "object",
+  required: ["id", "visit_id", "dc_user_id", "device_id", "timestamps"],
+  properties: {
+    id: {
+      $ref: "common.schema.json#/$defs/uuid",
+      description: "Client UUIDv7. Idempotency key: resends are duplicates, never conflicts."
+    },
+    visit_id: {
+      $ref: "common.schema.json#/$defs/uuid",
+      description: "The visit.checkin id this closes. May arrive before or after that op (convergence-safe: linked by id, resolved at read time, never ordered)."
+    },
+    dc_user_id: { $ref: "common.schema.json#/$defs/uuid" },
+    device_id: { $ref: "common.schema.json#/$defs/uuid" },
+    fix: {
+      $ref: "common.schema.json#/$defs/geoPoint",
+      description: "LOGGED, never gated (ADR-0004) \u2014 same doctrine as check-in and attendance."
+    },
+    trigger: {
+      type: "string",
+      enum: ["MANUAL", "AUTO_GEOFENCE"],
+      default: "MANUAL",
+      description: "design 0001 \xA74: AUTO_GEOFENCE = dwell-matcher-emitted on sustained exit, back-dated to the last-inside fix."
+    },
+    timestamps: { $ref: "common.schema.json#/$defs/evidenceTimestamps" }
+  },
+  additionalProperties: false,
+  description: "Server derives Visit.checked_out_at + duration_minutes at READ time from the earliest matching checkout event (by device_wall_time, id tie-break) \u2014 deterministic regardless of arrival order, mirrors km_today/photo_count. The checkin event itself is never mutated."
+};
+
 // contracts/c1-entities/attendance-event.schema.json
 var attendance_event_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -42136,6 +44327,43 @@ var track_chunk_schema_default = {
   description: "Raw duty-session GPS points from the adaptive tracker (Start\u2192End Day only, DPDP). Stored append-only; daily km is DERIVED at read time from all points sorted by t (order-independent, preserving C3 \xA73 convergence) using distance algorithm track_straightline_v0 \u2014 PROVISIONAL, not for reimbursement (C7 distance rules; OSRM map-matching + dispute workflow are the M2 financial layer). Wire compaction (delta encoding) is an M2 optimization."
 };
 
+// contracts/c1-entities/visit-photo.schema.json
+var visit_photo_schema_default = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://contracts.eko-dc-visits/c1/visit-photo.schema.json",
+  title: "VisitPhoto (evidence; append-only; sync op visit.photo, tier T2)",
+  type: "object",
+  required: ["id", "visit_id", "dc_user_id", "device_id", "category", "sha256", "bytes_b64", "timestamps"],
+  properties: {
+    id: { $ref: "common.schema.json#/$defs/uuid", description: "Client UUIDv7; idempotency key." },
+    visit_id: { $ref: "common.schema.json#/$defs/uuid", description: "The visit.checkin id this photo belongs to. May arrive before or after the check-in op (convergence-safe: linked by id, never ordered)." },
+    dc_user_id: { $ref: "common.schema.json#/$defs/uuid" },
+    device_id: { $ref: "common.schema.json#/$defs/uuid" },
+    category: {
+      type: "string",
+      enum: ["SHOPFRONT", "INSIDE", "QR_DEVICE", "BRANDING", "OTHER"],
+      description: "Photo slot. Content is judged later; the slot being filled is what the check-out gate checks (BUILD_PLAN \xA77.2)."
+    },
+    sha256: { type: "string", pattern: "^[a-f0-9]{64}$", description: "Hex SHA-256 of the decoded bytes. Server re-hashes; a mismatch is flagged HASH_MISMATCH and still stored (evidence is never rejected, ADR-0003)." },
+    width: { type: "integer", minimum: 1 },
+    height: { type: "integer", minimum: 1 },
+    bytes_b64: {
+      type: "string",
+      description: "Base64 of the watermarked JPEG (per-category compression target 150\u2013500KB). M1 interim: the binary rides the sync op on tier T2; the M2 hardening moves it to pre-signed resumable upload direct to object storage (C3 \xA77)."
+    },
+    watermark: {
+      type: "object",
+      description: "The text burned into the pixels \u2014 recorded for the golden-kit audit cross-check (C4). The evidentiary claim rests on the server-verified sha256, never this text.",
+      additionalProperties: { type: "string" }
+    },
+    sidecar_signature: { type: "string", description: "base64 device-Keystore ECDSA over sha256 + monotonic_ms + fix (capture-time binding, back-dating defence)." },
+    fix: { $ref: "common.schema.json#/$defs/geoPoint" },
+    timestamps: { $ref: "common.schema.json#/$defs/evidenceTimestamps" }
+  },
+  additionalProperties: false,
+  description: "Server verifies sha256(bytes) and records the photo append-only, linked to visit_id. Upload state: STORED | HASH_MISMATCH. Orphan photos (no matching visit after N hours) are a monitored state (C3 \xA77)."
+};
+
 // contracts/c1-entities/csp-change-request.schema.json
 var csp_change_request_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -42188,11 +44416,13 @@ for (const schema of [
   user_device_schema_default,
   beat_plan_schema_default,
   checkin_event_schema_default,
+  checkout_event_schema_default,
   attendance_event_schema_default,
   bank_schema_default,
   circle_schema_default,
   csp_assignment_schema_default,
   track_chunk_schema_default,
+  visit_photo_schema_default,
   csp_change_request_schema_default
 ]) {
   ajv.addSchema(schema);
@@ -42204,8 +44434,10 @@ function getValidator(ref) {
   return v;
 }
 var validateCheckinEvent = getValidator("checkin-event.schema.json");
+var validateCheckoutEvent = getValidator("checkout-event.schema.json");
 var validateAttendanceEvent = getValidator("attendance-event.schema.json");
 var validateTrackChunk = getValidator("track-chunk.schema.json");
+var validateVisitPhoto = getValidator("visit-photo.schema.json");
 var validateLocation = getValidator("location.schema.json");
 var validateUser = getValidator("user-device.schema.json#/$defs/user");
 var validateDevice = getValidator("user-device.schema.json#/$defs/device");
@@ -42283,6 +44515,35 @@ async function applyNewOp(repos, principal, batch, opId, opType, payload, clock)
     await repos.insertTrackChunkIfAbsent(stored2);
     return { op_id: opId, result: "accepted" };
   }
+  if (opType === "visit.photo") {
+    if (!validateVisitPhoto(payload)) {
+      return quarantine("SCHEMA_INVALID", ajvErrorStrings(validateVisitPhoto));
+    }
+    const photo = payload;
+    const actualSha = (0, import_node_crypto.createHash)("sha256").update(Buffer.from(photo.bytes_b64, "base64")).digest("hex");
+    const matched = actualSha === photo.sha256;
+    const stored2 = {
+      ...photo,
+      tenant_id: tenant,
+      upload_state: matched ? "STORED" : "HASH_MISMATCH",
+      timestamps: { ...photo.timestamps, server_received_at: clock().toISOString() }
+    };
+    await repos.insertVisitPhotoIfAbsent(stored2);
+    return matched ? { op_id: opId, result: "accepted" } : { op_id: opId, result: "accepted-flagged", flags: ["HASH_MISMATCH"] };
+  }
+  if (opType === "visit.checkout") {
+    if (!validateCheckoutEvent(payload)) {
+      return quarantine("SCHEMA_INVALID", ajvErrorStrings(validateCheckoutEvent));
+    }
+    const event2 = payload;
+    const stored2 = {
+      ...event2,
+      tenant_id: tenant,
+      timestamps: { ...event2.timestamps, server_received_at: clock().toISOString() }
+    };
+    await repos.insertCheckoutEventIfAbsent(stored2);
+    return { op_id: opId, result: "accepted" };
+  }
   if (opType !== "visit.checkin") {
     return quarantine("UNSUPPORTED_TYPE", [`unknown op type "${opType}"`]);
   }
@@ -42356,7 +44617,7 @@ async function applyAttendanceOp(repos, principal, opId, opType, payload, clock,
 }
 
 // backend/src/auth/tokens.ts
-var import_node_crypto6 = require("node:crypto");
+var import_node_crypto7 = require("node:crypto");
 
 // backend/node_modules/jose/dist/node/esm/runtime/base64url.js
 var import_node_buffer = require("node:buffer");
@@ -42636,7 +44897,7 @@ function isObject(input) {
 }
 
 // backend/node_modules/jose/dist/node/esm/runtime/get_named_curve.js
-var import_node_crypto = require("node:crypto");
+var import_node_crypto2 = require("node:crypto");
 
 // backend/node_modules/jose/dist/node/esm/lib/is_jwk.js
 function isJWK(key) {
@@ -42670,7 +44931,7 @@ var namedCurveToJOSE = (namedCurve) => {
 var getNamedCurve2 = (kee, raw) => {
   let key;
   if (isCryptoKey(kee)) {
-    key = import_node_crypto.KeyObject.from(kee);
+    key = import_node_crypto2.KeyObject.from(kee);
   } else if (is_key_object_default(kee)) {
     key = kee;
   } else if (isJWK(kee)) {
@@ -42702,11 +44963,11 @@ var getNamedCurve2 = (kee, raw) => {
 var get_named_curve_default = getNamedCurve2;
 
 // backend/node_modules/jose/dist/node/esm/runtime/check_key_length.js
-var import_node_crypto2 = require("node:crypto");
+var import_node_crypto3 = require("node:crypto");
 var check_key_length_default = (key, alg) => {
   let modulusLength;
   try {
-    if (key instanceof import_node_crypto2.KeyObject) {
+    if (key instanceof import_node_crypto3.KeyObject) {
       modulusLength = key.asymmetricKeyDetails?.modulusLength;
     } else {
       modulusLength = Buffer.from(key.n, "base64url").byteLength << 3;
@@ -42719,12 +44980,12 @@ var check_key_length_default = (key, alg) => {
 };
 
 // backend/node_modules/jose/dist/node/esm/runtime/jwk_to_key.js
-var import_node_crypto3 = require("node:crypto");
+var import_node_crypto4 = require("node:crypto");
 var parse = (key) => {
   if (key.d) {
-    return (0, import_node_crypto3.createPrivateKey)({ format: "jwk", key });
+    return (0, import_node_crypto4.createPrivateKey)({ format: "jwk", key });
   }
-  return (0, import_node_crypto3.createPublicKey)({ format: "jwk", key });
+  return (0, import_node_crypto4.createPublicKey)({ format: "jwk", key });
 };
 var jwk_to_key_default = parse;
 
@@ -42897,7 +45158,7 @@ function dsaDigest(alg) {
 }
 
 // backend/node_modules/jose/dist/node/esm/runtime/node_key.js
-var import_node_crypto4 = require("node:crypto");
+var import_node_crypto5 = require("node:crypto");
 var ecCurveAlgMap = /* @__PURE__ */ new Map([
   ["ES256", "P-256"],
   ["ES256K", "secp256k1"],
@@ -42908,7 +45169,7 @@ function keyForCrypto(alg, key) {
   let asymmetricKeyType;
   let asymmetricKeyDetails;
   let isJWK2;
-  if (key instanceof import_node_crypto4.KeyObject) {
+  if (key instanceof import_node_crypto5.KeyObject) {
     asymmetricKeyType = key.asymmetricKeyType;
     asymmetricKeyDetails = key.asymmetricKeyDetails;
   } else {
@@ -42972,8 +45233,8 @@ function keyForCrypto(alg, key) {
       }
       check_key_length_default(key, alg);
       options = {
-        padding: import_node_crypto4.constants.RSA_PKCS1_PSS_PADDING,
-        saltLength: import_node_crypto4.constants.RSA_PSS_SALTLEN_DIGEST
+        padding: import_node_crypto5.constants.RSA_PKCS1_PSS_PADDING,
+        saltLength: import_node_crypto5.constants.RSA_PSS_SALTLEN_DIGEST
       };
       break;
     case "ES256":
@@ -43019,24 +45280,24 @@ function hmacDigest(alg) {
 }
 
 // backend/node_modules/jose/dist/node/esm/runtime/get_sign_verify_key.js
-var import_node_crypto5 = require("node:crypto");
+var import_node_crypto6 = require("node:crypto");
 function getSignVerifyKey(alg, key, usage) {
   if (key instanceof Uint8Array) {
     if (!alg.startsWith("HS")) {
       throw new TypeError(invalid_key_input_default(key, ...types3));
     }
-    return (0, import_node_crypto5.createSecretKey)(key);
+    return (0, import_node_crypto6.createSecretKey)(key);
   }
-  if (key instanceof import_node_crypto5.KeyObject) {
+  if (key instanceof import_node_crypto6.KeyObject) {
     return key;
   }
   if (isCryptoKey(key)) {
     checkSigCryptoKey(key, alg, usage);
-    return import_node_crypto5.KeyObject.from(key);
+    return import_node_crypto6.KeyObject.from(key);
   }
   if (isJWK(key)) {
     if (alg.startsWith("HS")) {
-      return (0, import_node_crypto5.createSecretKey)(Buffer.from(key.k, "base64url"));
+      return (0, import_node_crypto6.createSecretKey)(Buffer.from(key.k, "base64url"));
     }
     return key;
   }
@@ -43566,9 +45827,9 @@ var DEV_TOKEN_CONFIG = {
 async function signAccessToken(cfg, p, now) {
   return new SignJWT({ tenant: p.tenant_id, role: p.role, device_id: p.device_id }).setProtectedHeader({ alg: "HS256" }).setSubject(p.user_id).setIssuedAt(Math.floor(now.getTime() / 1e3)).setExpirationTime(Math.floor(now.getTime() / 1e3) + cfg.accessTtlSeconds).sign(encoder2.encode(cfg.secret));
 }
-async function verifyAccessToken(cfg, token) {
+async function verifyAccessToken(cfg, token, now = /* @__PURE__ */ new Date()) {
   try {
-    const { payload } = await jwtVerify(token, encoder2.encode(cfg.secret), { algorithms: ["HS256"] });
+    const { payload } = await jwtVerify(token, encoder2.encode(cfg.secret), { algorithms: ["HS256"], currentDate: now });
     if (typeof payload.sub !== "string" || typeof payload.tenant !== "string" || typeof payload.role !== "string" || typeof payload.device_id !== "string") {
       return null;
     }
@@ -43583,7 +45844,71 @@ async function verifyAccessToken(cfg, token) {
   }
 }
 function newRefreshToken() {
-  return (0, import_node_crypto6.randomBytes)(32).toString("hex");
+  return (0, import_node_crypto7.randomBytes)(32).toString("hex");
+}
+
+// backend/src/auth/eko.ts
+var import_node_crypto8 = require("node:crypto");
+function loadEkoConfig(env = process.env) {
+  const developerKey = env.EKO_DEVELOPER_KEY;
+  const accessKey = env.EKO_ACCESS_KEY;
+  const initiatorId = env.EKO_INITIATOR_ID;
+  if (!developerKey || !accessKey || !initiatorId) return null;
+  return {
+    baseUrl: env.EKO_BASE_URL ?? "https://staging.eko.in/ekoapi/v3",
+    developerKey,
+    accessKey,
+    initiatorId,
+    cspId: env.EKO_CSP_ID
+  };
+}
+function authHeaders(accessKey) {
+  const encodedKey = Buffer.from(accessKey).toString("base64");
+  const timestamp = Date.now();
+  const hmac = (0, import_node_crypto8.createHmac)("sha256", Buffer.from(encodedKey, "base64"));
+  hmac.update(String(timestamp));
+  return { "secret-key": hmac.digest("base64"), "secret-key-timestamp": String(timestamp) };
+}
+function clientRefId() {
+  return (0, import_node_crypto8.randomUUID)().replace(/-/g, "").slice(0, 20);
+}
+async function call(cfg, method, path3, body) {
+  try {
+    const res = await fetch(`${cfg.baseUrl}${path3}`, {
+      method,
+      headers: {
+        developer_key: cfg.developerKey,
+        "content-type": "application/json",
+        ...authHeaders(cfg.accessKey)
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(8e3)
+    });
+    const json = await res.json().catch(() => ({}));
+    return { status: res.status, json };
+  } catch (err) {
+    return { networkError: err instanceof Error ? err.message : "network error" };
+  }
+}
+function outcomeOf(r) {
+  if ("networkError" in r) return { ok: false, reason: r.networkError };
+  if (r.json.status === 0) return { ok: true };
+  const message2 = typeof r.json.message === "string" ? r.json.message : `eko http ${r.status}`;
+  return { ok: false, reason: message2 };
+}
+async function ekoSendOtp(cfg, mobile) {
+  const body = { initiator_id: cfg.initiatorId, client_ref_id: clientRefId(), mobile };
+  if (cfg.cspId) body.csp_id = cfg.cspId;
+  return outcomeOf(await call(cfg, "POST", "/tools/kyc/mobile/otp", body));
+}
+async function ekoVerifyOtp(cfg, mobile, otp) {
+  const body = { initiator_id: cfg.initiatorId, client_ref_id: clientRefId(), otp, mobile };
+  const r = await call(cfg, "PUT", "/tools/kyc/mobile/otp/verify", body);
+  const outcome = outcomeOf(r);
+  if (outcome.ok && !("networkError" in r) && typeof r.json.data !== "object") {
+    return { ok: false, reason: "eko verify-otp: missing data.otp_verification_token" };
+  }
+  return outcome;
 }
 
 // backend/src/server.ts
@@ -43680,8 +46005,56 @@ function deriveAttendance(day2, istDate, now) {
 // backend/src/server.ts
 var DEV_OTP = "000000";
 var OTP_CODE = process.env.PILOT_OTP ?? DEV_OTP;
+var EKO = loadEkoConfig();
 var PHONE_PATTERN = /^[6-9][0-9]{9}$/;
 var DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+var CSP_CORE_FIELDS = ["name", "address", "lat", "lng"];
+var CSP_PROFILE_FIELDS = [
+  "gender",
+  "csp_mail_id",
+  "mobile_number",
+  "alternative_mobile_number",
+  "relationship_manager",
+  "district",
+  "ao",
+  "ao_email",
+  "branch_code",
+  "branch_name",
+  "branch_email",
+  "rbo_name",
+  "rbo_email",
+  "state",
+  "circle_head_name",
+  "lho_name",
+  "lho_mail_id",
+  "population",
+  "pin_code"
+];
+function diffCspFields(loc, proposed) {
+  const changes = {};
+  for (const [field, value] of Object.entries(proposed)) {
+    if (typeof value !== "string" && typeof value !== "number") continue;
+    if (CSP_CORE_FIELDS.includes(field)) {
+      const old = field === "name" ? loc.name : field === "address" ? loc.address ?? null : field === "lat" ? loc.coordinates.lat : loc.coordinates.lng;
+      if (String(old ?? "") !== String(value)) changes[field] = { old, new: value };
+    } else if (CSP_PROFILE_FIELDS.includes(field)) {
+      const old = loc.csp_profile?.[field] ?? null;
+      if (String(old ?? "") !== String(value)) changes[field] = { old, new: value };
+    }
+  }
+  return changes;
+}
+function patchFromDiff(changes, updated_at) {
+  const patch = { updated_at };
+  for (const [field, ch] of Object.entries(changes)) {
+    if (field === "name") patch.name = String(ch.new);
+    else if (field === "address") patch.address = String(ch.new);
+    else if (field === "lat") patch.lat = Number(ch.new);
+    else if (field === "lng") patch.lng = Number(ch.new);
+    else (patch.profile ??= {})[field] = String(ch.new);
+  }
+  return patch;
+}
 function problem(reply, status, title, detail) {
   return reply.code(status).type("application/problem+json").send({ type: "about:blank", title, status, ...detail ? { detail } : {} });
 }
@@ -43689,14 +46062,37 @@ function buildServer(deps) {
   const repos = deps.repos;
   const clock = deps.clock ?? (() => /* @__PURE__ */ new Date());
   const tokens = deps.tokens ?? DEV_TOKEN_CONFIG;
-  const app = (0, import_fastify.default)({ logger: process.env.LOG_LEVEL ? { level: process.env.LOG_LEVEL } : false });
+  const app = (0, import_fastify.default)({
+    logger: process.env.LOG_LEVEL ? { level: process.env.LOG_LEVEL } : false,
+    // Behind a TLS-terminating reverse proxy (infra/self-hosted Caddy) the real
+    // client IP arrives in X-Forwarded-For — opt in per deployment.
+    trustProxy: process.env.TRUST_PROXY === "1" || process.env.TRUST_PROXY === "true",
+    // Sync batches carry base64 photos (visit.photo, T2). 16 MiB matches the
+    // client's per-photo ceiling with headroom.
+    bodyLimit: Number.parseInt(process.env.BODY_LIMIT_BYTES ?? "", 10) || 16 * 1024 * 1024
+  });
+  app.register(import_helmet.default, { contentSecurityPolicy: false, crossOriginResourcePolicy: false });
+  app.register(import_rate_limit.default, {
+    global: false,
+    allowList: ["127.0.0.1", "::1"],
+    max: Number.parseInt(process.env.RATE_LIMIT_MAX ?? "", 10) || 20,
+    timeWindow: process.env.RATE_LIMIT_WINDOW ?? "1 minute"
+  });
+  app.setErrorHandler((err, req, reply) => {
+    if (reply.statusCode === 429 || err.statusCode === 429) {
+      return problem(reply, 429, "Too Many Requests", "Slow down and retry shortly");
+    }
+    req.log.error({ err, reqId: req.id }, "unhandled route error");
+    return problem(reply, err.statusCode && err.statusCode < 500 ? err.statusCode : 500, "Internal Server Error");
+  });
+  app.get("/healthz", async () => ({ status: "ok", ts: (/* @__PURE__ */ new Date()).toISOString() }));
   async function requireAuth(req, reply) {
     const header = req.headers.authorization;
     if (!header?.startsWith("Bearer ")) {
       problem(reply, 401, "Unauthorized", "Missing bearer token");
       return;
     }
-    const principal = await verifyAccessToken(tokens, header.slice("Bearer ".length));
+    const principal = await verifyAccessToken(tokens, header.slice("Bearer ".length), clock());
     if (!principal) {
       problem(reply, 401, "Unauthorized", "Invalid or expired token");
       return;
@@ -43710,25 +46106,42 @@ function buildServer(deps) {
   }
   app.register(
     async (api) => {
-      api.post("/auth/otp/request", async (req, reply) => {
+      api.post("/auth/otp/request", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (req, reply) => {
         const body = req.body ?? {};
         if (typeof body.phone !== "string" || !PHONE_PATTERN.test(body.phone)) {
           return problem(reply, 400, "Bad Request", "phone must match ^[6-9][0-9]{9}$");
         }
+        if (EKO) {
+          const sent = await ekoSendOtp(EKO, body.phone);
+          if (!sent.ok) {
+            req.log.error({ reason: sent.reason }, "eko send-otp failed");
+            return problem(reply, 502, "Bad Gateway", "Could not send the OTP right now \u2014 try again shortly");
+          }
+          return reply.code(204).send();
+        }
         return reply.code(204).send();
       });
-      api.post("/auth/otp/verify", async (req, reply) => {
+      api.post("/auth/otp/verify", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (req, reply) => {
         const body = req.body ?? {};
         if (typeof body.phone !== "string" || typeof body.otp !== "string" || typeof body.device !== "object" || body.device === null) {
           return problem(reply, 400, "Bad Request", "phone, otp and device are required");
         }
         const user = await repos.findUserByPhone(body.phone);
-        if (!user || user.status !== "ACTIVE" || body.otp !== OTP_CODE) {
+        if (!user || user.status !== "ACTIVE") {
+          return problem(reply, 401, "Unauthorized", "OTP verification failed");
+        }
+        if (EKO) {
+          const verified = await ekoVerifyOtp(EKO, body.phone, body.otp);
+          if (!verified.ok) {
+            req.log.error({ reason: verified.reason }, "eko verify-otp failed");
+            return problem(reply, 401, "Unauthorized", "OTP verification failed");
+          }
+        } else if (body.otp !== OTP_CODE) {
           return problem(reply, 401, "Unauthorized", "OTP verification failed");
         }
         await repos.markUserDevicesReplaced(user.tenant_id, user.id);
         const device = {
-          id: (0, import_node_crypto7.randomUUID)(),
+          id: (0, import_node_crypto9.randomUUID)(),
           tenant_id: user.tenant_id,
           user_id: user.id,
           hardware: body.device.hardware,
@@ -43754,6 +46167,44 @@ function buildServer(deps) {
           expires_at: new Date(now.getTime() + 30 * 24 * 3600 * 1e3).toISOString()
         });
         return reply.code(200).send({ access_token, refresh_token, device_id: device.id, user });
+      });
+      api.post("/auth/token/refresh", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req, reply) => {
+        const body = req.body ?? {};
+        if (typeof body.refresh_token !== "string" || body.refresh_token.length === 0) {
+          return problem(reply, 400, "Bad Request", "refresh_token is required");
+        }
+        const existing = await repos.getRefreshToken(body.refresh_token);
+        if (!existing || new Date(existing.expires_at).getTime() < clock().getTime()) {
+          return problem(reply, 401, "Unauthorized", "Refresh token invalid or expired");
+        }
+        const [device, user] = await Promise.all([
+          repos.getDeviceById(existing.tenant_id, existing.device_id),
+          repos.getUserById(existing.tenant_id, existing.user_id)
+        ]);
+        if (!device || device.binding_state === "REVOKED") {
+          return problem(reply, 401, "Unauthorized", "Device binding revoked (HG3)");
+        }
+        if (!user || user.status !== "ACTIVE") {
+          return problem(reply, 401, "Unauthorized", "User is not active");
+        }
+        const principal = {
+          user_id: user.id,
+          tenant_id: user.tenant_id,
+          role: user.role,
+          device_id: device.id
+        };
+        const now = clock();
+        const access_token = await signAccessToken(tokens, principal, now);
+        await repos.deleteRefreshToken(existing.token);
+        const refresh_token = newRefreshToken();
+        await repos.insertRefreshToken({
+          token: refresh_token,
+          tenant_id: user.tenant_id,
+          user_id: user.id,
+          device_id: device.id,
+          expires_at: new Date(now.getTime() + 30 * 24 * 3600 * 1e3).toISOString()
+        });
+        return reply.code(200).send({ access_token, refresh_token });
       });
       api.get("/master-data/locations", { preHandler: requireAuth }, async (req, reply) => {
         const principal = req.principal;
@@ -43828,7 +46279,7 @@ function buildServer(deps) {
         const yesterday = istDateOf(new Date(clock().getTime() - 24 * 3600 * 1e3));
         const ended_assignment_id = await repos.endActiveCspAssignment(principal.tenant_id, csp.id, yesterday);
         const assignment = {
-          id: (0, import_node_crypto7.randomUUID)(),
+          id: (0, import_node_crypto9.randomUUID)(),
           tenant_id: principal.tenant_id,
           circle_id: circleId,
           csp_location_id: csp.id,
@@ -43855,26 +46306,25 @@ function buildServer(deps) {
           const self = await repos.getUserById(scope.tenant_id, principal.user_id);
           if (self) people.unshift(self);
         }
-        const items = await Promise.all(
-          people.map(async (person) => {
-            const [day2, points] = await Promise.all([
-              repos.getAttendanceDay(scope.tenant_id, person.id, q.date),
-              repos.listTrackPointsForDcDate(scope.tenant_id, person.id, q.date)
-            ]);
-            const d = deriveAttendance(day2, q.date, clock());
-            return {
-              dc_user_id: person.id,
-              dc_name: person.name,
-              status: d.status,
-              started_at: d.started_at,
-              ended_at: d.ended_at,
-              auto_closed: d.auto_closed,
-              hours_worked: d.hours_worked,
-              km_today: kmForPoints(points)
-              // track_straightline_v0 — PROVISIONAL (C7)
-            };
-          })
-        );
+        const personIds = people.map((p) => p.id);
+        const [days, pointsByDc] = await Promise.all([
+          repos.getAttendanceDaysForDcDates(scope.tenant_id, personIds, [q.date]),
+          repos.listTrackPointsForDcsDate(scope.tenant_id, personIds, q.date)
+        ]);
+        const items = people.map((person) => {
+          const d = deriveAttendance(days.get(`${person.id}|${q.date}`) ?? null, q.date, clock());
+          return {
+            dc_user_id: person.id,
+            dc_name: person.name,
+            status: d.status,
+            started_at: d.started_at,
+            ended_at: d.ended_at,
+            auto_closed: d.auto_closed,
+            hours_worked: d.hours_worked,
+            km_today: kmForPoints(pointsByDc.get(person.id) ?? [])
+            // track_straightline_v0 — PROVISIONAL (C7)
+          };
+        });
         return reply.code(200).send({ items });
       });
       api.post("/circle/csp-assignments/import", { preHandler: requireAuth }, async (req, reply) => {
@@ -43930,7 +46380,7 @@ function buildServer(deps) {
           }
           if (current) await repos.endActiveCspAssignment(principal.tenant_id, csp.id, yesterday);
           const assignment = {
-            id: (0, import_node_crypto7.randomUUID)(),
+            id: (0, import_node_crypto9.randomUUID)(),
             tenant_id: principal.tenant_id,
             circle_id: circleId,
             csp_location_id: csp.id,
@@ -43960,6 +46410,117 @@ function buildServer(deps) {
         };
         return reply.code(200).send({ summary, results });
       });
+      api.post("/circle/csp-details/import", { preHandler: requireAuth }, async (req, reply) => {
+        const principal = req.principal;
+        if (principal.role !== "CIRCLE_HEAD" && principal.role !== "CORPORATE_ADMIN") {
+          return problem(reply, 403, "Forbidden", "Only a Circle Head (or admin) may bulk-update CSP details");
+        }
+        const body = req.body ?? {};
+        if (!Array.isArray(body.rows) || body.rows.length === 0 || body.rows.length > 500) {
+          return problem(reply, 400, "Bad Request", "rows[] (1\u2013500) is required");
+        }
+        const dryRun = body.dry_run === true;
+        const today = istDateOf(clock());
+        const scope = await resolveScope(repos, principal, clock());
+        const activeByCsp = new Map(
+          (await repos.listActiveCspAssignments(principal.tenant_id, "ALL", today)).map((a) => [a.csp_location_id, a])
+        );
+        const results = [];
+        for (const [i, raw] of body.rows.entries()) {
+          const r = raw ?? {};
+          const cspCode = String(r.csp_code ?? "").trim();
+          const reject = (reason) => {
+            results.push({ row: i + 1, csp_code: cspCode, result: "rejected", reason });
+          };
+          if (!cspCode) {
+            reject("csp_code is required");
+            continue;
+          }
+          const csp = await repos.findLocationByCode(principal.tenant_id, cspCode);
+          if (!csp || csp.type !== "CSP") {
+            reject(`unknown CSP code "${cspCode}"`);
+            continue;
+          }
+          const assignment = activeByCsp.get(csp.id);
+          if (scope.dc_user_ids !== "ALL") {
+            if (!assignment || !scope.dc_user_ids.has(assignment.dc_user_id)) {
+              reject("CSP is not in your circle");
+              continue;
+            }
+          }
+          const { csp_code: _drop, ...fields } = r;
+          void _drop;
+          const changes = diffCspFields(csp, fields);
+          if (Object.keys(changes).length === 0) {
+            results.push({ row: i + 1, csp_code: cspCode, result: "unchanged" });
+            continue;
+          }
+          if (!dryRun) {
+            await repos.updateLocationFields(principal.tenant_id, csp.id, patchFromDiff(changes, clock().toISOString()));
+          }
+          results.push({ row: i + 1, csp_code: cspCode, result: "updated", changes });
+        }
+        const summary = {
+          total: results.length,
+          updated: results.filter((x) => x.result === "updated").length,
+          unchanged: results.filter((x) => x.result === "unchanged").length,
+          rejected: results.filter((x) => x.result === "rejected").length,
+          dry_run: dryRun
+        };
+        return reply.code(200).send({ summary, results });
+      });
+      api.post("/circle/home-locations/import", { preHandler: requireAuth }, async (req, reply) => {
+        const principal = req.principal;
+        if (principal.role !== "CIRCLE_HEAD" && principal.role !== "CORPORATE_ADMIN") {
+          return problem(reply, 403, "Forbidden", "Only a Circle Head (or admin) may set home locations");
+        }
+        const body = req.body ?? {};
+        if (!Array.isArray(body.rows) || body.rows.length === 0 || body.rows.length > 500) {
+          return problem(reply, 400, "Bad Request", "rows[] (1\u2013500 of {phone, home_lat, home_lng}) is required");
+        }
+        const scope = await resolveScope(repos, principal, clock());
+        const results = [];
+        for (const [i, raw] of body.rows.entries()) {
+          const r = raw ?? {};
+          const phone = String(r.phone ?? "").trim();
+          const lat = Number(r.home_lat);
+          const lng = Number(r.home_lng);
+          const reject = (reason) => {
+            results.push({ row: i + 1, phone, result: "rejected", reason });
+          };
+          if (!PHONE_PATTERN.test(phone)) {
+            reject("phone must be 10 digits");
+            continue;
+          }
+          if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+            reject("home_lat / home_lng out of range");
+            continue;
+          }
+          const user = await repos.findUserByPhone(phone);
+          if (!user || user.tenant_id !== principal.tenant_id || user.status !== "ACTIVE" || user.role !== "DC" && user.role !== "CIRCLE_HEAD") {
+            reject(`no active DC/Circle-Head with phone ${phone}`);
+            continue;
+          }
+          const inScope = scope.dc_user_ids === "ALL" || user.id === principal.user_id || scope.dc_user_ids.has(user.id);
+          if (!inScope) {
+            reject(`${user.name} is not in your circle`);
+            continue;
+          }
+          if (user.home_lat === lat && user.home_lng === lng) {
+            results.push({ row: i + 1, phone, result: "unchanged" });
+            continue;
+          }
+          await repos.updateUserHomeLocation(principal.tenant_id, user.id, lat, lng);
+          results.push({ row: i + 1, phone, result: "updated" });
+        }
+        const summary = {
+          total: results.length,
+          updated: results.filter((x) => x.result === "updated").length,
+          unchanged: results.filter((x) => x.result === "unchanged").length,
+          rejected: results.filter((x) => x.result === "rejected").length
+        };
+        return reply.code(200).send({ summary, results });
+      });
       api.get("/dc/csp-details", { preHandler: requireAuth }, async (req, reply) => {
         const principal = req.principal;
         if (principal.role !== "DC") {
@@ -43970,39 +46531,48 @@ function buildServer(deps) {
           repos.listActiveCspAssignments(principal.tenant_id, /* @__PURE__ */ new Set([principal.user_id]), today),
           repos.lastVisitDatesForDc(principal.tenant_id, principal.user_id)
         ]);
-        const items = (await Promise.all(
-          assignments.map(async (a) => {
-            const loc = await repos.getLocationById(principal.tenant_id, a.csp_location_id);
-            if (!loc) return null;
-            return {
-              csp_location_id: loc.id,
-              code: loc.code,
-              name: loc.name,
-              address: loc.address ?? "",
-              lat: loc.coordinates.lat,
-              lng: loc.coordinates.lng,
-              coordinate_confidence: loc.coordinate_confidence,
-              last_visit_date: lastVisits.get(loc.id) ?? null,
-              csp_profile: loc.csp_profile ?? {}
-            };
-          })
-        )).filter((x) => x !== null);
+        const byId = /* @__PURE__ */ new Map();
+        let frontier = assignments.map((a) => a.csp_location_id);
+        for (let depth = 0; depth < 4 && frontier.length > 0; depth++) {
+          const fetched = await repos.listLocationsByIds(principal.tenant_id, frontier);
+          const next = [];
+          for (const loc of fetched) {
+            byId.set(loc.id, loc);
+            if (loc.parent_id && !byId.has(loc.parent_id)) next.push(loc.parent_id);
+          }
+          frontier = next;
+        }
+        const hierarchyProfile = (loc) => {
+          const out = {};
+          let cur = loc.parent_id ? byId.get(loc.parent_id) : void 0;
+          const seen = /* @__PURE__ */ new Set();
+          while (cur && !seen.has(cur.id)) {
+            seen.add(cur.id);
+            if (cur.type === "BRANCH") {
+              out.branch_code = cur.code;
+              out.branch_name = cur.name;
+            } else if (cur.type === "RBO") {
+              out.rbo_name = cur.name;
+            } else if (cur.type === "LHO") {
+              out.lho_name = cur.name;
+            }
+            cur = cur.parent_id ? byId.get(cur.parent_id) : void 0;
+          }
+          return out;
+        };
+        const items = assignments.map((a) => byId.get(a.csp_location_id)).filter((loc) => loc != null).map((loc) => ({
+          csp_location_id: loc.id,
+          code: loc.code,
+          name: loc.name,
+          address: loc.address ?? "",
+          lat: loc.coordinates.lat,
+          lng: loc.coordinates.lng,
+          coordinate_confidence: loc.coordinate_confidence,
+          last_visit_date: lastVisits.get(loc.id) ?? null,
+          csp_profile: { ...hierarchyProfile(loc), ...loc.csp_profile ?? {} }
+        }));
         return reply.code(200).send({ items });
       });
-      const CR_CORE_FIELDS = ["name", "address", "lat", "lng"];
-      const CR_PROFILE_FIELDS = [
-        "gender",
-        "csp_mail_id",
-        "mobile_number",
-        "alternative_mobile_number",
-        "relationship_manager",
-        "district",
-        "ao",
-        "ao_email",
-        "branch_email",
-        "rbo_email",
-        "population"
-      ];
       api.post("/dc/csp-change-requests", { preHandler: requireAuth }, async (req, reply) => {
         const principal = req.principal;
         if (principal.role !== "DC") {
@@ -44019,22 +46589,12 @@ function buildServer(deps) {
         }
         const loc = await repos.getLocationById(principal.tenant_id, body.csp_location_id);
         if (!loc) return problem(reply, 422, "Unprocessable", "Unknown CSP");
-        const changes = {};
-        for (const [field, value] of Object.entries(body.changes)) {
-          if (typeof value !== "string" && typeof value !== "number") continue;
-          if (CR_CORE_FIELDS.includes(field)) {
-            const old = field === "name" ? loc.name : field === "address" ? loc.address ?? null : field === "lat" ? loc.coordinates.lat : loc.coordinates.lng;
-            if (String(old ?? "") !== String(value)) changes[field] = { old, new: value };
-          } else if (CR_PROFILE_FIELDS.includes(field)) {
-            const old = loc.csp_profile?.[field] ?? null;
-            if (String(old ?? "") !== String(value)) changes[field] = { old, new: value };
-          }
-        }
+        const changes = diffCspFields(loc, body.changes);
         if (Object.keys(changes).length === 0) {
           return problem(reply, 422, "Unprocessable", "No whitelisted field actually changes value");
         }
         const request = {
-          id: (0, import_node_crypto7.randomUUID)(),
+          id: (0, import_node_crypto9.randomUUID)(),
           tenant_id: principal.tenant_id,
           csp_location_id: loc.id,
           requested_by_user_id: principal.user_id,
@@ -44054,15 +46614,21 @@ function buildServer(deps) {
         const status = q.status === "PENDING" || q.status === "APPROVED" || q.status === "REJECTED" ? q.status : void 0;
         const scope = await resolveScope(repos, principal, clock());
         const requests = await repos.listCspChangeRequests(scope.tenant_id, scope.dc_user_ids, status);
-        const items = await Promise.all(
-          requests.map(async (r) => {
-            const [loc, requester] = await Promise.all([
-              repos.getLocationById(scope.tenant_id, r.csp_location_id),
-              repos.getUserById(scope.tenant_id, r.requested_by_user_id)
-            ]);
-            return { ...r, csp_code: loc?.code ?? "", csp_name: loc?.name ?? "", requested_by_name: requester?.name ?? "" };
-          })
-        );
+        const [locs, requesters] = await Promise.all([
+          repos.listLocationsByIds(scope.tenant_id, requests.map((r) => r.csp_location_id)),
+          repos.listUsersByIds(scope.tenant_id, requests.map((r) => r.requested_by_user_id))
+        ]);
+        const locById = new Map(locs.map((l) => [l.id, l]));
+        const userById = new Map(requesters.map((u) => [u.id, u]));
+        const items = requests.map((r) => {
+          const loc = locById.get(r.csp_location_id);
+          return {
+            ...r,
+            csp_code: loc?.code ?? "",
+            csp_name: loc?.name ?? "",
+            requested_by_name: userById.get(r.requested_by_user_id)?.name ?? ""
+          };
+        });
         return reply.code(200).send({ items });
       });
       api.post("/circle/csp-change-requests/decide", { preHandler: requireAuth }, async (req, reply) => {
@@ -44083,17 +46649,11 @@ function buildServer(deps) {
           return problem(reply, 422, "Unprocessable", "Request belongs to another circle");
         }
         if (body.decision === "APPROVED") {
-          const patch = {
-            updated_at: clock().toISOString()
-          };
-          for (const [field, ch] of Object.entries(request.changes)) {
-            if (field === "name") patch.name = String(ch.new);
-            else if (field === "address") patch.address = String(ch.new);
-            else if (field === "lat") patch.lat = Number(ch.new);
-            else if (field === "lng") patch.lng = Number(ch.new);
-            else (patch.profile ??= {})[field] = String(ch.new);
-          }
-          await repos.updateLocationFields(principal.tenant_id, request.csp_location_id, patch);
+          await repos.updateLocationFields(
+            principal.tenant_id,
+            request.csp_location_id,
+            patchFromDiff(request.changes, clock().toISOString())
+          );
         }
         const decided = {
           ...request,
@@ -44124,13 +46684,13 @@ function buildServer(deps) {
           repos.listActiveCspAssignments(scope.tenant_id, "ALL", q.date),
           repos.listAllLocations(scope.tenant_id)
         ]);
-        const attendanceByDc = new Map(
-          await Promise.all(
-            dcs.map(async (dc) => [dc.id, await repos.getAttendanceDay(scope.tenant_id, dc.id, q.date)])
-          )
-        );
+        const dcIds = dcs.map((d) => d.id);
+        const [attendanceDays, trackByDc] = await Promise.all([
+          repos.getAttendanceDaysForDcDates(scope.tenant_id, dcIds, [q.date]),
+          repos.listTrackPointsForDcsDate(scope.tenant_id, dcIds, q.date)
+        ]);
         const statusOf = (dcId) => {
-          const day2 = attendanceByDc.get(dcId);
+          const day2 = attendanceDays.get(`${dcId}|${q.date}`);
           return day2?.ended_at ? "ENDED" : day2?.started_at ? "ON_DUTY" : "NOT_STARTED";
         };
         const csps = locations.filter((l) => l.type === "CSP");
@@ -44143,25 +46703,26 @@ function buildServer(deps) {
           memberships.filter((m) => m.role_in_circle === "CIRCLE_HEAD").map((m) => [m.circle_id, m.user_id])
         );
         const usersById = dcById;
-        const circleRollups = await Promise.all(
-          circles.map(async (c) => {
-            const circleDcs = [...circleOfDc.entries()].filter(([, cid]) => cid === c.id).map(([dcId]) => dcId);
-            const headId = headOfCircle.get(c.id) ?? null;
-            const head = headId ? await repos.getUserById(scope.tenant_id, headId) : null;
-            return {
-              circle_id: c.id,
-              circle_name: c.name,
-              circle_head: head?.name ?? null,
-              dc_count: circleDcs.length,
-              on_duty: circleDcs.filter((id) => statusOf(id) === "ON_DUTY").length,
-              csp_count: assignments.filter((a) => a.circle_id === c.id).length,
-              visits_today: visits.filter((v) => circleDcs.includes(v.dc_user_id)).length,
-              flagged_today: visits.filter(
-                (v) => circleDcs.includes(v.dc_user_id) && v.geofence_result === "OUTSIDE_FLAGGED"
-              ).length
-            };
-          })
+        const headsById = new Map(
+          (await repos.listUsersByIds(scope.tenant_id, [...headOfCircle.values()])).map((u) => [u.id, u])
         );
+        const circleRollups = circles.map((c) => {
+          const circleDcs = [...circleOfDc.entries()].filter(([, cid]) => cid === c.id).map(([dcId]) => dcId);
+          const headId = headOfCircle.get(c.id) ?? null;
+          const head = headId ? headsById.get(headId) ?? null : null;
+          return {
+            circle_id: c.id,
+            circle_name: c.name,
+            circle_head: head?.name ?? null,
+            dc_count: circleDcs.length,
+            on_duty: circleDcs.filter((id) => statusOf(id) === "ON_DUTY").length,
+            csp_count: assignments.filter((a) => a.circle_id === c.id).length,
+            visits_today: visits.filter((v) => circleDcs.includes(v.dc_user_id)).length,
+            flagged_today: visits.filter(
+              (v) => circleDcs.includes(v.dc_user_id) && v.geofence_result === "OUTSIDE_FLAGGED"
+            ).length
+          };
+        });
         return reply.code(200).send({
           date: q.date,
           attendance: {
@@ -44190,16 +46751,14 @@ function buildServer(deps) {
             status: b.status,
             csp_count: csps.filter((c) => c.bank_id === b.id).length
           })),
-          assignments_by_dc: await Promise.all(
-            [...usersById.values()].map(async (dc) => ({
-              dc_user_id: dc.id,
-              dc_name: dc.name,
-              csp_count: assignments.filter((a) => a.dc_user_id === dc.id).length,
-              attendance: statusOf(dc.id),
-              visits_today: visits.filter((v) => v.dc_user_id === dc.id).length,
-              km_today: kmForPoints(await repos.listTrackPointsForDcDate(scope.tenant_id, dc.id, q.date))
-            }))
-          )
+          assignments_by_dc: [...usersById.values()].map((dc) => ({
+            dc_user_id: dc.id,
+            dc_name: dc.name,
+            csp_count: assignments.filter((a) => a.dc_user_id === dc.id).length,
+            attendance: statusOf(dc.id),
+            visits_today: visits.filter((v) => v.dc_user_id === dc.id).length,
+            km_today: kmForPoints(trackByDc.get(dc.id) ?? [])
+          }))
         });
       });
       api.get("/dashboard/scorecard", { preHandler: requireAuth }, async (req, reply) => {
@@ -44214,15 +46773,17 @@ function buildServer(deps) {
           repos.listVisitsByIstDate(scope, q.date)
         ]);
         const minusDays = (istDate, days) => new Date((/* @__PURE__ */ new Date(`${istDate}T00:00:00Z`)).getTime() - days * 864e5).toISOString().slice(0, 10);
-        const items = await Promise.all(
-          dcs.map(async (dc) => {
-            const week2 = await Promise.all(
-              Array.from({ length: 7 }, (_, i) => repos.getAttendanceDay(scope.tenant_id, dc.id, minusDays(q.date, i)))
-            );
-            const daysWithStart = week2.map((d) => d?.started_at != null);
-            return computeScorecard({ id: dc.id, name: dc.name }, visits, week2[0] ?? null, daysWithStart);
-          })
+        const week2 = Array.from({ length: 7 }, (_, i) => minusDays(q.date, i));
+        const attendance = await repos.getAttendanceDaysForDcDates(
+          scope.tenant_id,
+          dcs.map((d) => d.id),
+          week2
         );
+        const items = dcs.map((dc) => {
+          const dayFor = (date) => attendance.get(`${dc.id}|${date}`) ?? null;
+          const daysWithStart = week2.map((date) => dayFor(date)?.started_at != null);
+          return computeScorecard({ id: dc.id, name: dc.name }, visits, dayFor(q.date), daysWithStart);
+        });
         return reply.code(200).send({ formula_version: "dc_score_v1", items });
       });
       api.get("/dashboard/visits", { preHandler: requireAuth }, async (req, reply) => {
@@ -44232,7 +46793,17 @@ function buildServer(deps) {
           return problem(reply, 400, "Bad Request", "date (YYYY-MM-DD, IST calendar date) is required");
         }
         const scope = await resolveScope(repos, principal, clock());
-        const items = await repos.listVisitsByIstDate(scope, q.date);
+        const visits = await repos.listVisitsByIstDate(scope, q.date);
+        const visitIds = visits.map((v) => v.id);
+        const [photoCounts, checkoutTimes] = await Promise.all([
+          repos.countPhotosForVisits(scope.tenant_id, visitIds),
+          repos.checkoutTimesForVisits(scope.tenant_id, visitIds)
+        ]);
+        const items = visits.map((v) => {
+          const checked_out_at = checkoutTimes.get(v.id) ?? null;
+          const duration_minutes = checked_out_at ? Math.max(0, Math.round((new Date(checked_out_at).getTime() - new Date(v.checkin.occurred_at).getTime()) / 6e4)) : null;
+          return { ...v, photo_count: photoCounts.get(v.id) ?? 0, checked_out_at, duration_minutes };
+        });
         return reply.code(200).send({ items });
       });
     },
@@ -44262,6 +46833,8 @@ var MemoryRepos = class {
   checkinEvents = /* @__PURE__ */ new Map();
   attendanceEvents = /* @__PURE__ */ new Map();
   trackChunks = /* @__PURE__ */ new Map();
+  visitPhotos = /* @__PURE__ */ new Map();
+  checkoutEvents = /* @__PURE__ */ new Map();
   cspChangeRequests = /* @__PURE__ */ new Map();
   attendanceDays = /* @__PURE__ */ new Map();
   // key tenant:dc:istDate
@@ -44274,6 +46847,10 @@ var MemoryRepos = class {
   // --- users
   async insertUser(u) {
     this.users.set(this.key(u.tenant_id, u.id), u);
+  }
+  async listUsersByIds(tenantId, ids) {
+    const want = new Set(ids);
+    return [...this.users.values()].filter((u) => u.tenant_id === tenantId && want.has(u.id));
   }
   async getUserById(tenantId, id) {
     return this.users.get(this.key(tenantId, id)) ?? null;
@@ -44307,12 +46884,22 @@ var MemoryRepos = class {
   async insertRefreshToken(t) {
     this.refreshTokens.set(t.token, t);
   }
+  async getRefreshToken(token) {
+    return this.refreshTokens.get(token) ?? null;
+  }
+  async deleteRefreshToken(token) {
+    this.refreshTokens.delete(token);
+  }
   // --- locations
   async insertLocation(l) {
     this.locations.set(this.key(l.tenant_id, l.id), l);
   }
   async getLocationById(tenantId, id) {
     return this.locations.get(this.key(tenantId, id)) ?? null;
+  }
+  async listLocationsByIds(tenantId, ids) {
+    const want = new Set(ids);
+    return [...this.locations.values()].filter((l) => l.tenant_id === tenantId && want.has(l.id));
   }
   async findLocationByCode(tenantId, code) {
     for (const l of this.locations.values()) {
@@ -44405,6 +46992,17 @@ var MemoryRepos = class {
   async getAttendanceDay(tenantId, dcUserId, istDate) {
     return this.attendanceDays.get(`${tenantId}:${dcUserId}:${istDate}`) ?? null;
   }
+  async getAttendanceDaysForDcDates(tenantId, dcIds, istDates) {
+    const wantDc = new Set(dcIds);
+    const wantDate = new Set(istDates);
+    const out = /* @__PURE__ */ new Map();
+    for (const d of this.attendanceDays.values()) {
+      if (d.tenant_id === tenantId && wantDc.has(d.dc_user_id) && wantDate.has(d.ist_date)) {
+        out.set(`${d.dc_user_id}|${d.ist_date}`, d);
+      }
+    }
+    return out;
+  }
   // --- CSP change requests (v0.8.0 — admin records)
   async insertCspChangeRequest(r) {
     this.cspChangeRequests.set(this.key(r.tenant_id, r.id), r);
@@ -44433,6 +47031,11 @@ var MemoryRepos = class {
       updated_at: patch.updated_at
     });
   }
+  async updateUserHomeLocation(tenantId, userId, homeLat, homeLng) {
+    const k = this.key(tenantId, userId);
+    const cur = this.users.get(k);
+    if (cur) this.users.set(k, { ...cur, home_lat: homeLat, home_lng: homeLng });
+  }
   async lastVisitDatesForDc(tenantId, dcUserId) {
     const IST_OFFSET_MS3 = 5.5 * 3600 * 1e3;
     const istDateOf2 = (iso) => new Date(new Date(iso).getTime() + IST_OFFSET_MS3).toISOString().slice(0, 10);
@@ -44451,9 +47054,21 @@ var MemoryRepos = class {
     if (!this.trackChunks.has(k)) this.trackChunks.set(k, c);
   }
   async listTrackPointsForDcDate(tenantId, dcUserId, istDate) {
+    return (await this.listTrackPointsForDcsDate(tenantId, [dcUserId], istDate)).get(dcUserId) ?? [];
+  }
+  async listTrackPointsForDcsDate(tenantId, dcIds, istDate) {
     const IST_OFFSET_MS3 = 5.5 * 3600 * 1e3;
     const istDateOf2 = (iso) => new Date(new Date(iso).getTime() + IST_OFFSET_MS3).toISOString().slice(0, 10);
-    return [...this.trackChunks.values()].filter((c) => c.tenant_id === tenantId && c.dc_user_id === dcUserId).flatMap((c) => c.points).filter((p) => istDateOf2(p.t) === istDate).sort((a, b) => a.t.localeCompare(b.t));
+    const want = new Set(dcIds);
+    const out = /* @__PURE__ */ new Map();
+    for (const c of this.trackChunks.values()) {
+      if (c.tenant_id !== tenantId || !want.has(c.dc_user_id)) continue;
+      const bucket = out.get(c.dc_user_id) ?? [];
+      for (const p of c.points) if (istDateOf2(p.t) === istDate) bucket.push(p);
+      out.set(c.dc_user_id, bucket);
+    }
+    for (const list of out.values()) list.sort((a, b) => a.t.localeCompare(b.t));
+    return out;
   }
   // --- CSP assignment mutations (design 0001 §6)
   async endActiveCspAssignment(tenantId, cspLocationId, validTo) {
@@ -44476,6 +47091,36 @@ var MemoryRepos = class {
   async insertVisitIfAbsent(v) {
     const k = this.key(v.tenant_id, v.id);
     if (!this.visits.has(k)) this.visits.set(k, v);
+  }
+  async insertVisitPhotoIfAbsent(p) {
+    const k = this.key(p.tenant_id, p.id);
+    if (!this.visitPhotos.has(k)) this.visitPhotos.set(k, p);
+  }
+  async countPhotosForVisits(tenantId, visitIds) {
+    const want = new Set(visitIds);
+    const out = /* @__PURE__ */ new Map();
+    for (const p of this.visitPhotos.values()) {
+      if (p.tenant_id !== tenantId || !want.has(p.visit_id)) continue;
+      out.set(p.visit_id, (out.get(p.visit_id) ?? 0) + 1);
+    }
+    return out;
+  }
+  async insertCheckoutEventIfAbsent(e) {
+    const k = this.key(e.tenant_id, e.id);
+    if (!this.checkoutEvents.has(k)) this.checkoutEvents.set(k, e);
+  }
+  async checkoutTimesForVisits(tenantId, visitIds) {
+    const want = new Set(visitIds);
+    const best = /* @__PURE__ */ new Map();
+    for (const e of this.checkoutEvents.values()) {
+      if (e.tenant_id !== tenantId || !want.has(e.visit_id)) continue;
+      const wall = e.timestamps.device_wall_time;
+      const cur = best.get(e.visit_id);
+      if (!cur || wall < cur.wall || wall === cur.wall && e.id < cur.id) {
+        best.set(e.visit_id, { wall, id: e.id });
+      }
+    }
+    return new Map([...best].map(([visitId, v]) => [visitId, v.wall]));
   }
   async listVisitsByIstDate(scope, istDate) {
     const IST_OFFSET_MS3 = 5.5 * 3600 * 1e3;
