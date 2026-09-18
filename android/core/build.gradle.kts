@@ -1,10 +1,11 @@
 plugins {
-    kotlin("jvm") version "2.1.21"
+    // Version comes from the root build's plugin classpath (see ../build.gradle.kts
+    // + gradle/libs.versions.toml). Kept version-less so `:core` and `:app` can't
+    // request the Kotlin plugin at two versions.
+    kotlin("jvm")
 }
 
-repositories {
-    mavenCentral()
-}
+// Repositories come from settings.gradle.kts (dependencyResolutionManagement).
 
 dependencies {
     testImplementation(kotlin("test"))

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Evidence + session are not backed up: the local journal is the system of
+     record until server ack, and a restored token would rebind a stale device. -->
+<full-backup-content>
+    <exclude domain="database" path="eko-dc-visits.db" />
+    <exclude domain="file" path="datastore/" />
+</full-backup-content>
