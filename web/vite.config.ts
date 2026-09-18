@@ -11,4 +11,19 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    // Keep the two heavy libraries in their own stable, long-cacheable chunks.
+    // Both are reached only through dynamic import() (day.ts → leaflet,
+    // workbench.ts → xlsx), so these stay OFF the entry bundle — the login →
+    // overview path downloads neither.
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/leaflet')) return 'leaflet';
+          if (id.includes('node_modules/xlsx')) return 'xlsx';
+          return undefined;
+        },
+      },
+    },
+  },
 });
