@@ -27,9 +27,15 @@ export async function signAccessToken(cfg: TokenConfig, p: Principal, now: Date)
     .sign(encoder.encode(cfg.secret));
 }
 
-export async function verifyAccessToken(cfg: TokenConfig, token: string): Promise<Principal | null> {
+/**
+ * `now` defaults to real time (production). Tests that inject a pinned
+ * `clock` into buildServer must thread it here too — jose checks `exp`
+ * against `currentDate`, which used to silently default to the real system
+ * clock regardless of what `now` the rest of the server was pinned to.
+ */
+export async function verifyAccessToken(cfg: TokenConfig, token: string, now: Date = new Date()): Promise<Principal | null> {
   try {
-    const { payload } = await jwtVerify(token, encoder.encode(cfg.secret), { algorithms: ["HS256"] });
+    const { payload } = await jwtVerify(token, encoder.encode(cfg.secret), { algorithms: ["HS256"], currentDate: now });
     if (
       typeof payload.sub !== "string" ||
       typeof payload.tenant !== "string" ||

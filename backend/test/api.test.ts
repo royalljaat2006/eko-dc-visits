@@ -24,10 +24,10 @@ const TODAY_IST = istDateOf(NOW);
 let uuidN = 0;
 const uuid = (): string => `018f5a00-2222-7000-8000-${String(++uuidN).padStart(12, "0")}`;
 
-async function makeApp(): Promise<{ app: FastifyInstance; repos: MemoryRepos }> {
+async function makeApp(clock: () => Date = () => NOW): Promise<{ app: FastifyInstance; repos: MemoryRepos }> {
   const repos = new MemoryRepos();
-  await seedFixtures(repos, { now: NOW });
-  const app = buildServer({ repos, clock: () => NOW });
+  await seedFixtures(repos, { now: clock() });
+  const app = buildServer({ repos, clock });
   return { app, repos };
 }
 
@@ -239,7 +239,14 @@ function attendanceBatch(dcUserId: string, deviceId: string, kind: "START" | "EN
 }
 
 test("attendance board (design 0001 §7): NH + HR see tenant-wide incl. NOT_STARTED; HR still sees zero visits", async () => {
-  const { app } = await makeApp();
+  // Pinned to a safe mid-day IST instant so this test is deterministic
+  // regardless of what real wall-clock time the suite happens to run at —
+  // otherwise a run after the 21:00 IST auto-close cutoff would correctly
+  // (but confusingly, for this test's purposes) derive AUTO_CLOSED instead
+  // of ON_DUTY for a session that "just started".
+  const SAFE_NOW = new Date(`${TODAY_IST}T09:00:00+05:30`);
+  const safeClock = (): Date => SAFE_NOW;
+  const { app } = await makeApp(safeClock);
   const asha = await login(app, PHONES.asha);
 
   // asha starts her day; syncs the start event
@@ -247,7 +254,7 @@ test("attendance board (design 0001 §7): NH + HR see tenant-wide incl. NOT_STAR
     method: "POST",
     url: "/api/v1/sync/batches",
     headers: { authorization: `Bearer ${asha.token}` },
-    payload: attendanceBatch(asha.user_id, asha.device_id, "START", NOW.toISOString()),
+    payload: attendanceBatch(asha.user_id, asha.device_id, "START", SAFE_NOW.toISOString()),
   });
   assert.equal((start.json() as { results: Array<{ result: string }> }).results[0]!.result, "accepted");
 
@@ -270,7 +277,7 @@ test("attendance board (design 0001 §7): NH + HR see tenant-wide incl. NOT_STAR
     method: "POST",
     url: "/api/v1/sync/batches",
     headers: { authorization: `Bearer ${asha.token}` },
-    payload: attendanceBatch(asha.user_id, asha.device_id, "END", new Date(NOW.getTime() + 60_000).toISOString()),
+    payload: attendanceBatch(asha.user_id, asha.device_id, "END", new Date(SAFE_NOW.getTime() + 60_000).toISOString()),
   });
   const hr = await login(app, PHONES.hr);
   const hrBoard = await app.inject({
@@ -480,4 +487,245 @@ test("bulk import (C2 v0.6.0): per-row dispositions via the audited transfer pat
     payload: { rows: [{ csp_code: "CSP-ND-1001", dc_phone: "9800000001" }] },
   });
   assert.equal(forbidden.statusCode, 403);
+});
+
+test("auth/token/refresh (v0.9.0): rotates single-use; old refresh token is then rejected", async () => {
+  const { app } = await makeApp();
+  await app.inject({ method: "POST", url: "/api/v1/auth/otp/request", payload: { phone: PHONES.asha } });
+  const verify = await app.inject({
+    method: "POST",
+    url: "/api/v1/auth/otp/verify",
+    payload: { phone: PHONES.asha, otp: DEV_OTP, device: { hardware: { manufacturer: "T", model: "I", os_version: "14" } } },
+  });
+  const first = verify.json() as { access_token: string; refresh_token: string };
+
+  const r1 = await app.inject({
+    method: "POST",
+    url: "/api/v1/auth/token/refresh",
+    payload: { refresh_token: first.refresh_token },
+  });
+  assert.equal(r1.statusCode, 200);
+  const next = r1.json() as { access_token: string; refresh_token: string };
+  assert.notEqual(next.refresh_token, first.refresh_token, "refresh token is rotated");
+  assert.equal(typeof next.access_token, "string");
+
+  // The new access token works on an authed endpoint.
+  const ok = await app.inject({
+    method: "GET",
+    url: `/api/v1/dashboard/attendance?date=${TODAY_IST}`,
+    headers: { authorization: `Bearer ${next.access_token}` },
+  });
+  assert.equal(ok.statusCode, 200);
+
+  // The consumed refresh token is now dead (single-use).
+  const replay = await app.inject({
+    method: "POST",
+    url: "/api/v1/auth/token/refresh",
+    payload: { refresh_token: first.refresh_token },
+  });
+  assert.equal(replay.statusCode, 401);
+
+  // Garbage refresh token → 401, not 500.
+  const bad = await app.inject({
+    method: "POST",
+    url: "/api/v1/auth/token/refresh",
+    payload: { refresh_token: "not-a-real-token" },
+  });
+  assert.equal(bad.statusCode, 401);
+});
+
+test("visit.checkout (v0.10.0) over HTTP: /dashboard/visits shows checked_out_at + duration_minutes", async () => {
+  const { app } = await makeApp();
+  const asha = await login(app, PHONES.asha);
+
+  const checkinId = uuid();
+  const checkinWall = NOW.toISOString();
+  const checkoutWall = new Date(NOW.getTime() + 18 * 60_000).toISOString(); // +18 min
+
+  const batch1 = {
+    batch_id: uuid(),
+    device_id: asha.device_id,
+    seq_from: 1,
+    seq_to: 1,
+    client_time: NOW.toISOString(),
+    app_version: "0.10.0-test",
+    contract_version: "0.10.0",
+    ops: [
+      {
+        op_id: checkinId,
+        seq: 1,
+        type: "visit.checkin",
+        payload: {
+          id: checkinId,
+          dc_user_id: asha.user_id,
+          device_id: asha.device_id,
+          location_id: CSP_KISHANGANJ,
+          planned_stop_id: null,
+          fix: { lat: 25.3602, lng: 85.7591, accuracy_m: 12, provider: "fused" },
+          timestamps: { device_wall_time: checkinWall, monotonic_ms: 1 },
+        },
+      },
+    ],
+  };
+  const checkoutRes = await app.inject({
+    method: "POST",
+    url: "/api/v1/sync/batches",
+    headers: { authorization: `Bearer ${asha.token}` },
+    payload: batch1,
+  });
+  assert.equal(checkoutRes.statusCode, 200);
+
+  const batch2 = {
+    batch_id: uuid(),
+    device_id: asha.device_id,
+    seq_from: 2,
+    seq_to: 2,
+    client_time: NOW.toISOString(),
+    app_version: "0.10.0-test",
+    contract_version: "0.10.0",
+    ops: [
+      {
+        op_id: uuid(),
+        seq: 2,
+        type: "visit.checkout",
+        payload: {
+          id: uuid(),
+          visit_id: checkinId,
+          dc_user_id: asha.user_id,
+          device_id: asha.device_id,
+          trigger: "MANUAL",
+          timestamps: { device_wall_time: checkoutWall, monotonic_ms: 2 },
+        },
+      },
+    ],
+  };
+  const post2 = await app.inject({
+    method: "POST",
+    url: "/api/v1/sync/batches",
+    headers: { authorization: `Bearer ${asha.token}` },
+    payload: batch2,
+  });
+  assert.equal(post2.statusCode, 200);
+  assert.equal((post2.json() as { results: Array<{ result: string }> }).results[0]!.result, "accepted");
+
+  const visits = await app.inject({
+    method: "GET",
+    url: `/api/v1/dashboard/visits?date=${TODAY_IST}`,
+    headers: { authorization: `Bearer ${asha.token}` },
+  });
+  assert.equal(visits.statusCode, 200);
+  const item = (visits.json() as { items: Array<Record<string, unknown>> }).items.find((v) => v.id === checkinId);
+  assert.ok(item, "the checked-out visit must be present");
+  assert.equal(item!.checked_out_at, checkoutWall);
+  assert.equal(item!.duration_minutes, 18);
+});
+
+test("csp-details bulk import (v0.11.0): dry_run diffs without writing; commit applies whitelisted fields; unlisted ignored", async () => {
+  const { app } = await makeApp();
+  const ch = await login(app, PHONES.amPriya); // heads circle 501 → CSP-ND-1001 is in it
+
+  const rows = [
+    { csp_code: "CSP-ND-1001", address: "New Market Rd, Kishanganj", branch_name: "Kishanganj Main Branch", not_a_field: "ignored" },
+    { csp_code: "CSP-XX-9999", address: "nowhere" },
+  ];
+
+  // dry run: reports the diff, writes nothing
+  const dry = await app.inject({
+    method: "POST",
+    url: "/api/v1/circle/csp-details/import",
+    headers: { authorization: `Bearer ${ch.token}` },
+    payload: { dry_run: true, rows },
+  });
+  assert.equal(dry.statusCode, 200);
+  const dryBody = dry.json() as { summary: { updated: number; rejected: number; dry_run: boolean }; results: Array<Record<string, unknown>> };
+  assert.equal(dryBody.summary.dry_run, true);
+  assert.equal(dryBody.summary.updated, 1);
+  assert.equal(dryBody.summary.rejected, 1);
+  const dryRow = dryBody.results.find((r) => r.csp_code === "CSP-ND-1001")!;
+  assert.equal(dryRow.result, "updated");
+  const dryChanges = dryRow.changes as Record<string, { new: string } | undefined>;
+  assert.equal(dryChanges.address?.new, "New Market Rd, Kishanganj");
+  assert.equal(dryChanges.branch_name?.new, "Kishanganj Main Branch");
+  assert.ok(!("not_a_field" in dryChanges), "unlisted fields are never applied");
+
+  // the DC's view is unchanged after a dry run
+  const asha1 = await login(app, PHONES.asha);
+  const before = await app.inject({ method: "GET", url: "/api/v1/dc/csp-details", headers: { authorization: `Bearer ${asha1.token}` } });
+  const b1001 = (before.json() as { items: Array<Record<string, unknown>> }).items.find((c) => c.code === "CSP-ND-1001")!;
+  assert.notEqual(b1001.address, "New Market Rd, Kishanganj");
+
+  // commit
+  const commit = await app.inject({
+    method: "POST",
+    url: "/api/v1/circle/csp-details/import",
+    headers: { authorization: `Bearer ${ch.token}` },
+    payload: { rows },
+  });
+  assert.equal((commit.json() as { summary: { updated: number } }).summary.updated, 1);
+
+  const after = await app.inject({ method: "GET", url: "/api/v1/dc/csp-details", headers: { authorization: `Bearer ${asha1.token}` } });
+  const a1001 = (after.json() as { items: Array<{ code: string; address: string; csp_profile: Record<string, string> }> }).items.find((c) => c.code === "CSP-ND-1001")!;
+  assert.equal(a1001.address, "New Market Rd, Kishanganj");
+  assert.equal(a1001.csp_profile.branch_name, "Kishanganj Main Branch");
+});
+
+test("home-locations bulk import (v0.11.0): sets DC + own home; re-send unchanged; out-of-circle + bad phone rejected", async () => {
+  const { app } = await makeApp();
+  const ch = await login(app, PHONES.amPriya);
+
+  const first = await app.inject({
+    method: "POST",
+    url: "/api/v1/circle/home-locations/import",
+    headers: { authorization: `Bearer ${ch.token}` },
+    payload: {
+      rows: [
+        { phone: PHONES.asha, home_lat: 25.36, home_lng: 85.76 },      // her circle DC → updated
+        { phone: PHONES.amPriya, home_lat: 25.40, home_lng: 85.70 },   // her own → updated
+        { phone: PHONES.vikram, home_lat: 25.1, home_lng: 85.1 },      // circle 502 → rejected
+        { phone: "12345", home_lat: 25.1, home_lng: 85.1 },            // bad phone → rejected
+        { phone: PHONES.asha, home_lat: 999, home_lng: 0 },            // bad lat → rejected
+      ],
+    },
+  });
+  assert.equal(first.statusCode, 200);
+  const body = first.json() as { summary: { updated: number; rejected: number }; results: Array<{ phone: string; result: string }> };
+  assert.equal(body.summary.updated, 2);
+  assert.equal(body.summary.rejected, 3);
+  assert.equal(body.results.find((r) => r.phone === PHONES.vikram)!.result, "rejected");
+
+  // idempotent: identical re-send is "unchanged"
+  const again = await app.inject({
+    method: "POST",
+    url: "/api/v1/circle/home-locations/import",
+    headers: { authorization: `Bearer ${ch.token}` },
+    payload: { rows: [{ phone: PHONES.asha, home_lat: 25.36, home_lng: 85.76 }] },
+  });
+  assert.equal((again.json() as { summary: { unchanged: number } }).summary.unchanged, 1);
+
+  // DCs can't call it
+  const asha = await login(app, PHONES.asha);
+  const forbidden = await app.inject({
+    method: "POST",
+    url: "/api/v1/circle/home-locations/import",
+    headers: { authorization: `Bearer ${asha.token}` },
+    payload: { rows: [{ phone: PHONES.asha, home_lat: 1, home_lng: 1 }] },
+  });
+  assert.equal(forbidden.statusCode, 403);
+});
+
+test("seedCircle1A85 (spec §7): 7 real DCs with phones + own dashboard_url, in Circle 1A85", async () => {
+  const { seedCircle1A85 } = await import("../src/seed/loader.js");
+  const { MemoryRepos } = await import("../src/repos/memory.js");
+  const repos = new MemoryRepos();
+  const { circle, users } = await seedCircle1A85(repos);
+
+  assert.equal(circle.name, "Circle 1A85");
+  assert.equal(users.length, 7);
+  const munna = users.find((u) => u.name === "Munna Pathak")!;
+  assert.equal(munna.phone, "9000000000");
+  assert.equal(munna.dashboard_url, "https://example.test/redacted");
+  assert.equal(munna.role, "DC");
+  // each DC resolves as their own login identity
+  const byPhone = await repos.findUserByPhone("9000000000");
+  assert.equal(byPhone?.name, "Vijay");
 });
