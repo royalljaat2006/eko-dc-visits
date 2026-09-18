@@ -8,9 +8,13 @@
  * account — every Send OTP call sends a real SMS at real cost.
  *
  * Auth scheme (per-request, not a bearer token): `developer_key` is a static
- * header; `secret-key` is HMAC-SHA256(base64(access_key), timestamp), base64
- * encoded, sent alongside `secret-key-timestamp`. The access_key itself never
- * goes over the wire.
+ * header; `secret-key` is base64(HMAC-SHA256(key = base64-encoded access_key
+ * STRING itself, msg = timestamp)) — the base64 encoding of access_key is
+ * the literal HMAC key, not decoded back to bytes. (Confirmed live: decoding
+ * it back — the natural-looking reading of Eko's own public snippet — gets a
+ * 401 every time; using the base64 string as-is is what the account actually
+ * accepts.) Sent alongside `secret-key-timestamp`. The access_key itself
+ * never goes over the wire, only its base64 form.
  *
  * `initiator_id` and `user_code` are FIXED account credentials (never a
  * phone number). `source` is a fixed literal. `csp_id`/`mobile` are the
@@ -45,7 +49,8 @@ export function loadEkoConfig(env: NodeJS.ProcessEnv = process.env): EkoConfig |
 function authHeaders(accessKey: string): Record<string, string> {
   const encodedKey = Buffer.from(accessKey).toString("base64");
   const timestamp = Date.now();
-  const hmac = createHmac("sha256", Buffer.from(encodedKey, "base64"));
+  // The base64 STRING is the HMAC key as-is — do not decode it back to bytes.
+  const hmac = createHmac("sha256", encodedKey);
   hmac.update(String(timestamp));
   return { "secret-key": hmac.digest("base64"), "secret-key-timestamp": String(timestamp) };
 }
