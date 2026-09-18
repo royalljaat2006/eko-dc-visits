@@ -7,4 +7,16 @@
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">127.0.0.1</domain>
     </domain-config>
+
+    <!-- TEMPORARY, dev/test only: the R730 rack server serves a self-signed
+         cert until a real domain + Let's Encrypt cert exists (no CA trusts
+         a bare-IP self-signed cert by default). Scoped to this one IP only —
+         every other host still goes through the normal system trust store.
+         Remove this block once infra/self-hosted gets a real domain. -->
+    <domain-config>
+        <domain includeSubdomains="false">122.176.147.78</domain>
+        <trust-anchors>
+            <certificates src="@raw/dc_visits_server_cert" />
+        </trust-anchors>
+    </domain-config>
 </network-security-config>

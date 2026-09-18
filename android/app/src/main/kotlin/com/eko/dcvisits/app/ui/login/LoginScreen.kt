@@ -141,10 +141,22 @@ fun LoginScreen(
                                             label = "6-digit OTP",
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                                         )
+                                        if (s.needsName) {
+                                            Text(
+                                                "New number — you're registering as a DC. What's your name?",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                            GlassTextField(
+                                                value = s.name,
+                                                onValueChange = vm::onName,
+                                                label = "Full name",
+                                            )
+                                        }
                                         GlowButton(
                                             text = "Verify & sign in",
                                             onClick = { vm.verify(onSignedIn) },
-                                            enabled = s.otpValid && !s.loading,
+                                            enabled = s.canVerify && !s.loading,
                                             loading = s.loading,
                                             modifier = Modifier.fillMaxWidth(),
                                         )
