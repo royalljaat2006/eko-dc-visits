@@ -51,7 +51,7 @@ data class HardwareDto(
 data class DeviceDto(val hardware: HardwareDto, val public_key: String? = null)
 
 @Serializable
-data class OtpVerifyBody(val phone: String, val otp: String, val device: DeviceDto)
+data class OtpVerifyBody(val phone: String, val otp: String, val name: String? = null, val device: DeviceDto)
 
 @Serializable
 data class LoginResponse(

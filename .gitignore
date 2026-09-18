@@ -18,3 +18,4 @@ infra/self-hosted/.env
 *.keystore
 android/keystore/
 keystore.properties
+*.apk

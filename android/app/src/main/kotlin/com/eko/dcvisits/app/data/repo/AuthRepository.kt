@@ -31,8 +31,14 @@ class AuthRepository(
         }
     }
 
-    /** POST /auth/otp/verify — establishes the session and binds this device. */
-    suspend fun verifyOtp(phone: String, otp: String): Session {
+    /**
+     * POST /auth/otp/verify — establishes the session and binds this device.
+     * [name] is only required the first time a brand-new number logs in (the
+     * server self-registers it as a DC); omit it for a returning user. A 422
+     * ([com.eko.dcvisits.app.data.net.ApiException.status]) means the server
+     * needs a name — the caller should re-invoke with one.
+     */
+    suspend fun verifyOtp(phone: String, otp: String, name: String? = null): Session {
         val device = DeviceDto(
             hardware = HardwareDto(
                 manufacturer = Build.MANUFACTURER ?: "unknown",
@@ -41,7 +47,7 @@ class AuthRepository(
             ),
             public_key = DeviceKey.publicKeyBase64(),
         )
-        val res = api.verifyOtp(OtpVerifyBody(phone, otp, device)).bodyOrThrow()
+        val res = api.verifyOtp(OtpVerifyBody(phone, otp, name, device)).bodyOrThrow()
         val s = Session(res.access_token, res.refresh_token, res.device_id, res.user)
         session.save(s)
         return s
