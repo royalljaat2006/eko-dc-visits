@@ -53,6 +53,64 @@
 - C2: attendance board rows + overview per-DC rows gain km_today
   (track_straightline_v0 — PROVISIONAL, never for reimbursement per C7/ADR-0005).
 
+## v0.11.0 — close the spec's data gaps
+
+- C2: 0.11.0; + POST /circle/csp-details/import (Circle Head/admin bulk-update
+  of CSP master details — address + §3.1 profile fields — for own-circle CSPs;
+  `dry_run` returns the per-row diff so the web upload previews before commit;
+  spec §4 P1); + POST /circle/home-locations/import ("Excel sheet for Lat Long",
+  spec §3 — bulk-set DC/Circle-Head reference home locations; attendance is
+  logged against home, never gated per ADR-0004).
+- C1: the §3.1 CSP master template whitelist grows to the full set —
+  `branch_code`, `branch_name`, `rbo_name`, `state`, `circle_head_name`,
+  `lho_name`, `lho_mail_id`, `pin_code` join the free-form `csp_profile` map
+  (used by both DC change-requests and the CH bulk import). No schema bump —
+  `csp_profile` is `additionalProperties: string` by design.
+- C2: /dc/csp-details `csp_profile` now backfills `branch_code`/`branch_name`/
+  `rbo_name`/`lho_name` from the CSP→Branch→RBO→LHO hierarchy when not
+  explicitly overridden.
+- Seed: `npm run seed:pilot` loads the real Circle 1A85 roster
+  (fixtures/circle-1a85-roster.json — spec §7) into a "Circle 1A85": 7 DC users
+  with their phones + per-user dashboard_url, DC memberships. Never in the
+  public demo seed.
+
+## v0.10.0 — visit checkout
+
+- C1: + checkout-event.schema.json (sync op `visit.checkout`, tier T1).
+  Append-only; links a checkin by `visit_id`, never mutates it; may arrive
+  before its checkin (different batches can race).
+- C2: 0.10.0; `/dashboard/visits` Visit gains `checked_out_at` +
+  `duration_minutes` (derived at read time, like `photo_count`/`km_today` —
+  earliest (device_wall_time, id) checkout per visit, order-independent);
+  `/sync/batches` op-type enum += `visit.checkout`.
+- C3: `visit.checkout` documented; op-types line updated to v0.10.0.
+- Android `:app`: manual "Check out" action (replaces the old "Done/Skip
+  photos" button — checking out is now the visit's natural close, with or
+  without photos attached first); the design-0001 DwellMatcher's `CheckOut`
+  event now actually emits `visit.checkout` (`trigger=AUTO_GEOFENCE`) instead
+  of being logged-only, correlated to the matcher's own `visit.checkin` by a
+  local cspId→visit_id map kept for the tracking-service session.
+- Migration: 007_visit_checkouts.sql.
+
+## v0.9.0 — native app M1 slice: photos, route capture, signed envelopes
+
+- C1: + visit-photo.schema.json (sync op `visit.photo`, tier T2). Append-only;
+  watermarked JPEG inline as base64 (M1 interim — object-storage + pre-signed
+  upload is the M2 hardening, C3 §7). Server re-hashes bytes: mismatch is
+  `accepted-flagged` HASH_MISMATCH, never rejected (ADR-0003).
+- C2: 0.9.0; `/dashboard/visits` Visit gains `photo_count` (derived at read
+  time, like `km_today`); `/sync/batches` op-type enum widened to the real set
+  (`visit.checkin` | `visit.photo` | `attendance.start` | `attendance.end` |
+  `track.chunk`) — the engine already accepted these, the spec now says so.
+- C3: `visit.photo` op documented; op-types line updated to v0.9.0.
+- Android `:app` (BUILD_PLAN M1): foreground route-capture service (Start→End
+  Day only, 21:00 IST hard stop) emitting `track.chunk`; `:core` DwellMatcher
+  wired to the live fix stream → auto `visit.checkin` (AUTO_GEOFENCE); CameraX +
+  in-pixel watermark + signed sidecar → `visit.photo`; every sync envelope
+  ECDSA-signed with a per-device AndroidKeyStore key (public key registered at
+  enrollment; server records, enforces later).
+- Migration: 006_visit_photos.sql.
+
 ## v0.8.0 — CSP Visit Mobile App spec (docs/specs/csp-visit-mobile-app-draft.md)
 - C1: user + dashboard_url (per-user "My Dashboard", self-only) + home_lat/home_lng
   (logged reference, never a gate — ADR-0004; spec's geofence question stays open);

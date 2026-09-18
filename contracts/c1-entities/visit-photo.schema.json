@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.eko-dc-visits/c1/visit-photo.schema.json",
+  "title": "VisitPhoto (evidence; append-only; sync op visit.photo, tier T2)",
+  "type": "object",
+  "required": ["id", "visit_id", "dc_user_id", "device_id", "category", "sha256", "bytes_b64", "timestamps"],
+  "properties": {
+    "id": { "$ref": "common.schema.json#/$defs/uuid", "description": "Client UUIDv7; idempotency key." },
+    "visit_id": { "$ref": "common.schema.json#/$defs/uuid", "description": "The visit.checkin id this photo belongs to. May arrive before or after the check-in op (convergence-safe: linked by id, never ordered)." },
+    "dc_user_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "device_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "category": {
+      "type": "string",
+      "enum": ["SHOPFRONT", "INSIDE", "QR_DEVICE", "BRANDING", "OTHER"],
+      "description": "Photo slot. Content is judged later; the slot being filled is what the check-out gate checks (BUILD_PLAN §7.2)."
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$", "description": "Hex SHA-256 of the decoded bytes. Server re-hashes; a mismatch is flagged HASH_MISMATCH and still stored (evidence is never rejected, ADR-0003)." },
+    "width": { "type": "integer", "minimum": 1 },
+    "height": { "type": "integer", "minimum": 1 },
+    "bytes_b64": {
+      "type": "string",
+      "description": "Base64 of the watermarked JPEG (per-category compression target 150–500KB). M1 interim: the binary rides the sync op on tier T2; the M2 hardening moves it to pre-signed resumable upload direct to object storage (C3 §7)."
+    },
+    "watermark": {
+      "type": "object",
+      "description": "The text burned into the pixels — recorded for the golden-kit audit cross-check (C4). The evidentiary claim rests on the server-verified sha256, never this text.",
+      "additionalProperties": { "type": "string" }
+    },
+    "sidecar_signature": { "type": "string", "description": "base64 device-Keystore ECDSA over sha256 + monotonic_ms + fix (capture-time binding, back-dating defence)." },
+    "fix": { "$ref": "common.schema.json#/$defs/geoPoint" },
+    "timestamps": { "$ref": "common.schema.json#/$defs/evidenceTimestamps" }
+  },
+  "additionalProperties": false,
+  "description": "Server verifies sha256(bytes) and records the photo append-only, linked to visit_id. Upload state: STORED | HASH_MISMATCH. Orphan photos (no matching visit after N hours) are a monitored state (C3 §7)."
+}
