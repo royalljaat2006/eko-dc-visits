@@ -60,6 +60,28 @@ function clientRefId(): string {
   return randomUUID().replace(/-/g, "").slice(0, 20);
 }
 
+/**
+ * Eko correlates the pending OTP to the `client_ref_id` from Send, not just
+ * the mobile number — Verify with a fresh, unrelated ref comes back "OTP not
+ * found" even with the correct code (confirmed live). Send and Verify are two
+ * separate HTTP calls into this backend with nothing else connecting them, so
+ * the ref from Send is remembered here, per mobile, for Verify to reuse.
+ * In-process only — fine for this single-container deployment; would need a
+ * shared store (Postgres/Redis) behind multiple backend instances.
+ */
+const PENDING_REF_TTL_MS = 10 * 60 * 1000; // generous vs. Eko's own OTP expiry
+const pendingRefs = new Map<string, { ref: string; expiresAt: number }>();
+
+function rememberRef(mobile: string, ref: string): void {
+  pendingRefs.set(mobile, { ref, expiresAt: Date.now() + PENDING_REF_TTL_MS });
+}
+
+function refFor(mobile: string): string {
+  const entry = pendingRefs.get(mobile);
+  if (entry && entry.expiresAt > Date.now()) return entry.ref;
+  return clientRefId(); // no pending Send for this number — fresh ref, Eko will report the real reason
+}
+
 type EkoOutcome = { ok: true } | { ok: false; reason: string };
 
 async function call(
@@ -94,15 +116,18 @@ function outcomeOf(r: { status: number; json: Record<string, unknown> } | { netw
 }
 
 export async function ekoSendOtp(cfg: EkoConfig, mobile: string): Promise<EkoOutcome> {
+  const ref = clientRefId();
   const body = {
     initiator_id: cfg.initiatorId,
     user_code: cfg.userCode,
     source: "API",
-    client_ref_id: clientRefId(),
+    client_ref_id: ref,
     csp_id: mobile,
     mobile,
   };
-  return outcomeOf(await call(cfg, "POST", "/tools/kyc/mobile/otp", body));
+  const outcome = outcomeOf(await call(cfg, "POST", "/tools/kyc/mobile/otp", body));
+  if (outcome.ok) rememberRef(mobile, ref);
+  return outcome;
 }
 
 export async function ekoVerifyOtp(cfg: EkoConfig, mobile: string, otp: string): Promise<EkoOutcome> {
@@ -110,7 +135,7 @@ export async function ekoVerifyOtp(cfg: EkoConfig, mobile: string, otp: string):
     initiator_id: cfg.initiatorId,
     user_code: cfg.userCode,
     source: "API",
-    client_ref_id: clientRefId(),
+    client_ref_id: refFor(mobile),
     mobile,
     otp,
   };
