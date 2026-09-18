@@ -9,3 +9,12 @@ android/build/
 android/local.properties
 .netlify/
 .vercel
+android/.kotlin/
+infra/self-hosted/download/
+infra/self-hosted/.env
+
+# Signing material — never commit a keystore or its passwords
+*.jks
+*.keystore
+android/keystore/
+keystore.properties

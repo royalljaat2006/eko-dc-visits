@@ -1,0 +1,70 @@
+# Self-hosted stack for one central backend on your own server.
+#
+#   phones ──HTTP──▶ caddy (:80, IP+path — no domain configured) ──▶ api (:3000) ──▶ postgres+postgis
+#
+# Every APK you distribute is built with  -PapiBaseUrl=http://<server-ip>/api/v1/
+# and they all talk to this one stack. See Caddyfile for switching to a real
+# domain + automatic HTTPS later.
+#
+# First run:
+#   cp .env.example .env      # then edit it
+#   docker compose up -d --build
+#   docker compose exec api npm run migrate     # once
+#   docker compose exec api npm run seed        # once (or load your real users/CSPs)
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dcvisits}
+      POSTGRES_USER: ${POSTGRES_USER:-dcvisits}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dcvisits}"]
+      interval: 5s
+      retries: 10
+    # Not exposed to the host — only the api container reaches it.
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/self-hosted/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATABASE_URL: postgres://${POSTGRES_USER:-dcvisits}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dcvisits}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      PILOT_OTP: ${PILOT_OTP:?set PILOT_OTP in .env}
+      # Real SMS OTP — all four required together to switch on; unset (default) keeps using PILOT_OTP above.
+      EKO_DEVELOPER_KEY: ${EKO_DEVELOPER_KEY:-}
+      EKO_ACCESS_KEY: ${EKO_ACCESS_KEY:-}
+      EKO_INITIATOR_ID: ${EKO_INITIATOR_ID:-}
+      EKO_USER_CODE: ${EKO_USER_CODE:-}
+      EKO_BASE_URL: ${EKO_BASE_URL:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    # Not exposed to the host — Caddy is the only public entry point.
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [api]
+    ports:
+      - "80:80"
+      # 443 stays closed until there's a domain to certify — add it back
+      # (and set API_DOMAIN in the Caddyfile) once one exists.
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+
+volumes:
+  pgdata: {}
+  caddydata: {}
+  caddyconfig: {}
