@@ -58,6 +58,16 @@ const PHONE_PATTERN = /^[6-9][0-9]{9}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** Tenant a self-registered DC lands in — matches the seed fixtures' tenant so scoping stays consistent. */
 const SELF_REGISTER_TENANT_ID = "eko";
+/**
+ * Eko's OTP is single-use: once ekoVerifyOtp succeeds, that code is consumed
+ * on Eko's side. Self-registration can need a second /verify call (phone
+ * proven, then a 422 asking for a name, then the client resubmits) — the
+ * second call must NOT re-ask Eko to verify the same already-spent code.
+ * Remembers "this phone just proved ownership with this exact OTP" so the
+ * follow-up request skips re-verification instead of failing as "not found".
+ */
+const PENDING_NAME_TTL_MS = 5 * 60 * 1000;
+const pendingName = new Map<string, { otp: string; expiresAt: number }>();
 
 /**
  * Editable CSP master fields (spec §3.1 template). CORE = first-class Location
@@ -227,14 +237,21 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
 
         // Prove phone ownership first — independent of whether the number is
         // already a known user. A wrong/expired OTP never reveals account state.
-        if (EKO) {
-          const verified = await ekoVerifyOtp(EKO, body.phone, body.otp);
-          if (!verified.ok) {
-            req.log.error({ reason: verified.reason }, "eko verify-otp failed");
+        // Skip re-verifying with Eko if this exact phone+otp pair already
+        // proved ownership moments ago (the pending-name retry) — Eko's OTP
+        // is single-use, so asking again would fail as "not found."
+        const pending = pendingName.get(body.phone);
+        const alreadyProven = pending !== undefined && pending.otp === body.otp && pending.expiresAt > Date.now();
+        if (!alreadyProven) {
+          if (EKO) {
+            const verified = await ekoVerifyOtp(EKO, body.phone, body.otp);
+            if (!verified.ok) {
+              req.log.error({ reason: verified.reason }, "eko verify-otp failed");
+              return problem(reply, 401, "Unauthorized", "OTP verification failed");
+            }
+          } else if (body.otp !== OTP_CODE) {
             return problem(reply, 401, "Unauthorized", "OTP verification failed");
           }
-        } else if (body.otp !== OTP_CODE) {
-          return problem(reply, 401, "Unauthorized", "OTP verification failed");
         }
 
         // Self-registration: a brand-new number that just proved ownership
@@ -244,8 +261,10 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         if (!user) {
           const name = typeof body.name === "string" ? body.name.trim().slice(0, 120) : "";
           if (name.length < 2) {
+            pendingName.set(body.phone, { otp: body.otp, expiresAt: Date.now() + PENDING_NAME_TTL_MS });
             return problem(reply, 422, "Name Required", "New number — provide a name to register as a DC");
           }
+          pendingName.delete(body.phone);
           user = {
             id: randomUUID(),
             tenant_id: SELF_REGISTER_TENANT_ID,
@@ -257,6 +276,8 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           await repos.insertUser(user);
         } else if (user.status !== "ACTIVE") {
           return problem(reply, 401, "Unauthorized", "Account inactive");
+        } else {
+          pendingName.delete(body.phone);
         }
 
         // Register device; M0 auto-binds (C2: PENDING→BOUND is admin policy).
