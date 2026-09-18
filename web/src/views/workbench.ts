@@ -11,10 +11,11 @@
  * every guardrail (role, in-circle target) — this UI never pre-filters beyond
  * what the API returned.
  */
-import * as XLSX from 'xlsx';
 import {
   ApiError,
   importCspAssignments,
+  importCspDetails,
+  importHomeLocations,
   listAttendance,
   listCspAssignments,
   listLocations,
@@ -22,10 +23,39 @@ import {
   type CspAssignment,
   type Location,
 } from '../api/client.ts';
-import { rowsFromSheetObjects } from '../lib/importRows.ts';
+import { rowsFromSheetObjects, normalizePhone } from '../lib/importRows.ts';
 import { todayIstDate } from '../lib/format.ts';
 
 const TEMPLATE_CSV = 'csp_code,dc_phone\nCSP-ND-1001,9800000001\nCSP-ND-1002,9800000006\n';
+const DETAILS_TEMPLATE_CSV = 'csp_code,address,branch_name,mobile_number,population\nCSP-ND-1001,New Market Rd,Kishanganj Main,9876543210,4200\n';
+const HOME_TEMPLATE_CSV = 'phone,home_lat,home_lng\n9800000001,25.3602,85.7591\n';
+
+/**
+ * SheetJS (`xlsx`) is ~400 kB minified and only the Circle Head's bulk-upload
+ * path touches it. Load it on demand so nobody else pays for it — the import()
+ * lands in its own chunk (see vite.config.ts manualChunks).
+ */
+async function readFirstSheetObjects(file: File): Promise<Array<Record<string, unknown>>> {
+  const { read, utils } = await import('xlsx');
+  const workbook = read(await file.arrayBuffer());
+  const sheetName = workbook.SheetNames[0];
+  const sheet = sheetName ? workbook.Sheets[sheetName] : undefined;
+  if (!sheet) throw new Error('The file has no sheets');
+  return utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+}
+
+/** Lowercase + trim + spaces→underscores on sheet header keys ("Branch Name" → "branch_name"). */
+function normalizeSheetRows(objects: Array<Record<string, unknown>>): Array<Record<string, string>> {
+  return objects
+    .map((o) => {
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(o)) {
+        out[k.trim().toLowerCase().replace(/\s+/g, '_')] = String(v ?? '').trim();
+      }
+      return out;
+    })
+    .filter((o) => Object.values(o).some((v) => v !== ''));
+}
 
 interface Roster {
   dc_user_id: string;
@@ -38,9 +68,15 @@ export function renderWorkbenchView(root: HTMLElement): () => void {
       <header class="topbar">
         <h1>CSP Workbench</h1>
         <button id="wb-refresh" type="button">Refresh</button>
-        <button id="wb-upload" type="button" class="btn-primary">Upload Excel</button>
-        <a id="wb-template" download="csp-assignments-template.csv">Download template</a>
+        <button id="wb-upload" type="button" class="btn-primary">Upload assignments</button>
+        <button id="wb-upload-details" type="button">Bulk CSP details</button>
+        <button id="wb-upload-home" type="button">Home locations</button>
+        <a id="wb-template" download="csp-assignments-template.csv">Templates:</a>
+        <a id="wb-template-details" download="csp-details-template.csv">details</a>
+        <a id="wb-template-home" download="home-locations-template.csv">home</a>
         <input id="wb-file" type="file" accept=".xlsx,.xls,.csv" hidden />
+        <input id="wb-file-details" type="file" accept=".xlsx,.xls,.csv" hidden />
+        <input id="wb-file-home" type="file" accept=".xlsx,.xls,.csv" hidden />
       </header>
       <p id="wb-import-report" class="status"></p>
       <p id="wb-status" class="status" role="status"></p>
@@ -181,13 +217,7 @@ export function renderWorkbenchView(root: HTMLElement): () => void {
     if (!file) return;
     void (async () => {
       try {
-        const workbook = XLSX.read(await file.arrayBuffer());
-        const sheetName = workbook.SheetNames[0];
-        const sheet = sheetName ? workbook.Sheets[sheetName] : undefined;
-        if (!sheet) throw new Error('The file has no sheets');
-        const { rows, errors } = rowsFromSheetObjects(
-          XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' }),
-        );
+        const { rows, errors } = rowsFromSheetObjects(await readFirstSheetObjects(file));
         if (rows.length === 0) throw new Error(errors.join(' · ') || 'No valid rows found');
         const skipped = errors.length > 0 ? ` (${errors.length} unreadable row${errors.length === 1 ? '' : 's'} skipped)` : '';
         if (!window.confirm(`Apply ${rows.length} assignment${rows.length === 1 ? '' : 's'} from "${file.name}"${skipped}?`)) return;
@@ -207,6 +237,78 @@ export function renderWorkbenchView(root: HTMLElement): () => void {
             ...rejected.map((r) => `Row ${r.row} (${r.csp_code}): ${r.reason}`),
             ...errors,
           ].join(' — ');
+        }
+      } catch (err) {
+        importReport.textContent = '';
+        showError(err);
+      }
+    })();
+  });
+
+  // ---- Bulk CSP-details update (C2 v0.11.0, spec §4): dry-run diff → confirm → commit.
+  const detailsFile = root.querySelector<HTMLInputElement>('#wb-file-details')!;
+  root.querySelector<HTMLAnchorElement>('#wb-template-details')!.href =
+    `data:text/csv;charset=utf-8,${encodeURIComponent(DETAILS_TEMPLATE_CSV)}`;
+  root.querySelector<HTMLButtonElement>('#wb-upload-details')!.addEventListener('click', () => detailsFile.click());
+  detailsFile.addEventListener('change', () => {
+    const file = detailsFile.files?.[0];
+    detailsFile.value = '';
+    if (!file) return;
+    void (async () => {
+      try {
+        const rows = normalizeSheetRows(await readFirstSheetObjects(file)).filter((r) => r.csp_code);
+        if (rows.length === 0) throw new Error('No rows with a csp_code column');
+
+        const dry = await importCspDetails(rows, true);
+        const lines = dry.results
+          .filter((r) => r.result === 'updated')
+          .map((r) => `${r.csp_code}: ` + Object.entries(r.changes ?? {}).map(([f, c]) => `${f} "${c.old ?? ''}"→"${c.new}"`).join(', '));
+        const rejected = dry.results.filter((r) => r.result === 'rejected');
+        const preview =
+          `Preview — ${dry.summary.updated} CSP(s) will change, ${dry.summary.unchanged} unchanged, ${dry.summary.rejected} rejected.\n\n` +
+          lines.slice(0, 25).join('\n') + (lines.length > 25 ? `\n… +${lines.length - 25} more` : '') +
+          (rejected.length ? `\n\nRejected: ${rejected.map((r) => `${r.csp_code} (${r.reason})`).join('; ')}` : '');
+        if (dry.summary.updated === 0 || !window.confirm(preview + '\n\nApply?')) {
+          importReport.textContent = `Preview only: ${dry.summary.updated} would change, ${dry.summary.rejected} rejected.`;
+          return;
+        }
+        const res = await importCspDetails(rows, false);
+        importReport.textContent = `CSP details: ${res.summary.updated} updated · ${res.summary.unchanged} unchanged · ${res.summary.rejected} rejected`;
+        await refresh(false);
+      } catch (err) {
+        importReport.textContent = '';
+        showError(err);
+      }
+    })();
+  });
+
+  // ---- Home locations (C2 v0.11.0, spec §3: "Excel sheet for Lat Long").
+  const homeFile = root.querySelector<HTMLInputElement>('#wb-file-home')!;
+  root.querySelector<HTMLAnchorElement>('#wb-template-home')!.href =
+    `data:text/csv;charset=utf-8,${encodeURIComponent(HOME_TEMPLATE_CSV)}`;
+  root.querySelector<HTMLButtonElement>('#wb-upload-home')!.addEventListener('click', () => homeFile.click());
+  homeFile.addEventListener('change', () => {
+    const file = homeFile.files?.[0];
+    homeFile.value = '';
+    if (!file) return;
+    void (async () => {
+      try {
+        const raw = normalizeSheetRows(await readFirstSheetObjects(file));
+        const rows = raw
+          .map((r) => ({
+            phone: normalizePhone(r.phone ?? r.mobile ?? r.dc_phone ?? ''),
+            home_lat: Number(r.home_lat ?? r.lat ?? r.latitude),
+            home_lng: Number(r.home_lng ?? r.lng ?? r.longitude),
+          }))
+          .filter((r) => r.phone.length === 10 && Number.isFinite(r.home_lat) && Number.isFinite(r.home_lng));
+        if (rows.length === 0) throw new Error('No rows with phone + home_lat + home_lng');
+        if (!window.confirm(`Set home location for ${rows.length} user(s) from "${file.name}"?`)) return;
+        const res = await importHomeLocations(rows);
+        importReport.textContent = `Home locations: ${res.summary.updated} updated · ${res.summary.unchanged} unchanged · ${res.summary.rejected} rejected`;
+        const rej = res.results.filter((r) => r.result === 'rejected');
+        if (rej.length) {
+          errorBox.hidden = false;
+          errorMsg.textContent = rej.map((r) => `${r.phone}: ${r.reason}`).join(' — ');
         }
       } catch (err) {
         importReport.textContent = '';

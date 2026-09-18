@@ -562,6 +562,52 @@ export async function importCspAssignments(rows: Array<{ csp_code: string; dc_ph
   })) as ImportResponse;
 }
 
+/** C2 POST /circle/csp-details/import (v0.11.0) — CH bulk-update of CSP master details. */
+export interface CspDetailsImportRow {
+  row: number;
+  csp_code: string;
+  result: 'updated' | 'unchanged' | 'rejected';
+  reason?: string;
+  changes?: Record<string, { old: string | number | null; new: string | number }>;
+}
+export interface CspDetailsImportResponse {
+  summary: { total: number; updated: number; unchanged: number; rejected: number; dry_run: boolean };
+  results: CspDetailsImportRow[];
+}
+export async function importCspDetails(
+  rows: Array<Record<string, string | number>>,
+  dryRun: boolean,
+): Promise<CspDetailsImportResponse> {
+  return (await request({
+    method: 'POST',
+    path: '/circle/csp-details/import',
+    body: { rows, dry_run: dryRun },
+    auth: true,
+  })) as CspDetailsImportResponse;
+}
+
+/** C2 POST /circle/home-locations/import (v0.11.0) — "Excel sheet for Lat Long". */
+export interface HomeImportRow {
+  row: number;
+  phone: string;
+  result: 'updated' | 'unchanged' | 'rejected';
+  reason?: string;
+}
+export interface HomeImportResponse {
+  summary: { total: number; updated: number; unchanged: number; rejected: number };
+  results: HomeImportRow[];
+}
+export async function importHomeLocations(
+  rows: Array<{ phone: string; home_lat: number; home_lng: number }>,
+): Promise<HomeImportResponse> {
+  return (await request({
+    method: 'POST',
+    path: '/circle/home-locations/import',
+    body: { rows },
+    auth: true,
+  })) as HomeImportResponse;
+}
+
 /** GET /master-data/locations (C2). Single page is sufficient for a circle-sized territory. */
 export async function listLocations(signal?: AbortSignal): Promise<LocationsResponse> {
   return (await request({
