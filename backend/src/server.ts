@@ -4,12 +4,15 @@
  * against the spec in both directions.
  */
 import { randomUUID } from "node:crypto";
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
-import type { Principal, SyncBatch } from "./domain/types.js";
+import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import helmet from "@fastify/helmet";
+import rateLimit from "@fastify/rate-limit";
+import type { LocationNode, Principal, SyncBatch } from "./domain/types.js";
 import type { Repos } from "./repos/types.js";
 import { resolveScope } from "./scope.js";
 import { applySyncBatch, type Clock } from "./sync/engine.js";
 import { DEV_TOKEN_CONFIG, newRefreshToken, signAccessToken, verifyAccessToken, type TokenConfig } from "./auth/tokens.js";
+import { ekoSendOtp, ekoVerifyOtp, loadEkoConfig } from "./auth/eko.js";
 import { istDateOf } from "./geo.js";
 import { computeScorecard } from "./scorecard.js";
 import { kmForPoints } from "./distance.js";
@@ -19,12 +22,15 @@ import { deriveAttendance } from "./attendance.js";
 export const IMPLEMENTED_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
   { method: "post", path: "/auth/otp/request" },
   { method: "post", path: "/auth/otp/verify" },
+  { method: "post", path: "/auth/token/refresh" },
   { method: "get", path: "/master-data/locations" },
   { method: "get", path: "/master-data/csp-assignments" },
   { method: "get", path: "/master-data/beat-plans" },
   { method: "post", path: "/sync/batches" },
   { method: "post", path: "/circle/csp-assignments/transfer" },
   { method: "post", path: "/circle/csp-assignments/import" },
+  { method: "post", path: "/circle/csp-details/import" },
+  { method: "post", path: "/circle/home-locations/import" },
   { method: "get", path: "/dashboard/visits" },
   { method: "get", path: "/dashboard/attendance" },
   { method: "get", path: "/dashboard/scorecard" },
@@ -39,11 +45,70 @@ export const DEV_OTP = "000000"; // C2: M0 stub gateway always sends '000000' in
 /**
  * Pilot hardening: on public deployments PILOT_OTP overrides the dev stub —
  * a per-deployment secret distributed to enrolled pilot users out-of-band.
- * The real SMS-OTP gateway replaces this in M1 (BUILD_PLAN watch list).
+ * Superseded by the real Eko SMS-OTP gateway (below) once EKO_* env vars are set.
  */
 const OTP_CODE = process.env.PILOT_OTP ?? DEV_OTP;
+/**
+ * Real SMS OTP (Eko Mobile/OTP Verification API). null when EKO_DEVELOPER_KEY
+ * / EKO_ACCESS_KEY / EKO_INITIATOR_ID aren't all set, in which case the routes
+ * below fall back to OTP_CODE — same as every environment before this.
+ */
+const EKO = loadEkoConfig();
 const PHONE_PATTERN = /^[6-9][0-9]{9}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Editable CSP master fields (spec §3.1 template). CORE = first-class Location
+ * columns; PROFILE = the free-form `csp_profile` string map (template growth
+ * never needs a schema bump — location.schema.json). The same whitelist gates
+ * DC change-requests and the Circle Head bulk detail import; anything not
+ * listed is silently ignored, never applied.
+ */
+const CSP_CORE_FIELDS = ["name", "address", "lat", "lng"] as const;
+const CSP_PROFILE_FIELDS = [
+  "gender", "csp_mail_id", "mobile_number", "alternative_mobile_number",
+  "relationship_manager", "district", "ao", "ao_email", "branch_code", "branch_name",
+  "branch_email", "rbo_name", "rbo_email", "state", "circle_head_name",
+  "lho_name", "lho_mail_id", "population", "pin_code",
+] as const;
+
+type CspFieldDiff = Record<string, { old: string | number | null; new: string | number }>;
+
+/** Diff a proposed field map against a Location — whitelist-filtered, only real changes. */
+function diffCspFields(
+  loc: { name: string; address?: string; coordinates: { lat: number; lng: number }; csp_profile?: Record<string, string> },
+  proposed: Record<string, unknown>,
+): CspFieldDiff {
+  const changes: CspFieldDiff = {};
+  for (const [field, value] of Object.entries(proposed)) {
+    if (typeof value !== "string" && typeof value !== "number") continue;
+    if ((CSP_CORE_FIELDS as readonly string[]).includes(field)) {
+      const old =
+        field === "name" ? loc.name
+        : field === "address" ? (loc.address ?? null)
+        : field === "lat" ? loc.coordinates.lat
+        : loc.coordinates.lng;
+      if (String(old ?? "") !== String(value)) changes[field] = { old, new: value };
+    } else if ((CSP_PROFILE_FIELDS as readonly string[]).includes(field)) {
+      const old = loc.csp_profile?.[field] ?? null;
+      if (String(old ?? "") !== String(value)) changes[field] = { old, new: value };
+    }
+  }
+  return changes;
+}
+
+/** Turn an approved/committed diff into an updateLocationFields patch. */
+function patchFromDiff(changes: CspFieldDiff, updated_at: string) {
+  const patch: { name?: string; address?: string; lat?: number; lng?: number; profile?: Record<string, string>; updated_at: string } = { updated_at };
+  for (const [field, ch] of Object.entries(changes)) {
+    if (field === "name") patch.name = String(ch.new);
+    else if (field === "address") patch.address = String(ch.new);
+    else if (field === "lat") patch.lat = Number(ch.new);
+    else if (field === "lng") patch.lng = Number(ch.new);
+    else (patch.profile ??= {})[field] = String(ch.new);
+  }
+  return patch;
+}
 
 export interface ServerDeps {
   repos: Repos;
@@ -67,7 +132,41 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   const clock: Clock = deps.clock ?? (() => new Date());
   const tokens = deps.tokens ?? DEV_TOKEN_CONFIG;
 
-  const app = Fastify({ logger: process.env.LOG_LEVEL ? { level: process.env.LOG_LEVEL } : false });
+  const app = Fastify({
+    logger: process.env.LOG_LEVEL ? { level: process.env.LOG_LEVEL } : false,
+    // Behind a TLS-terminating reverse proxy (infra/self-hosted Caddy) the real
+    // client IP arrives in X-Forwarded-For — opt in per deployment.
+    trustProxy: process.env.TRUST_PROXY === "1" || process.env.TRUST_PROXY === "true",
+    // Sync batches carry base64 photos (visit.photo, T2). 16 MiB matches the
+    // client's per-photo ceiling with headroom.
+    bodyLimit: Number.parseInt(process.env.BODY_LIMIT_BYTES ?? "", 10) || 16 * 1024 * 1024,
+  });
+
+  // Security headers. CSP is off — this is a JSON API, not an HTML origin.
+  app.register(helmet, { contentSecurityPolicy: false, crossOriginResourcePolicy: false });
+
+  // Rate limiting is opt-in per route (global:false) so the only limited
+  // surface is credential entry. Loopback is exempt: local dev + the test
+  // suite's app.inject calls, and (without TRUST_PROXY) a same-host proxy.
+  app.register(rateLimit, {
+    global: false,
+    allowList: ["127.0.0.1", "::1"],
+    max: Number.parseInt(process.env.RATE_LIMIT_MAX ?? "", 10) || 20,
+    timeWindow: process.env.RATE_LIMIT_WINDOW ?? "1 minute",
+  });
+
+  // Uncaught handler errors return problem+json (not Fastify's default shape)
+  // and are logged with the request id for correlation.
+  app.setErrorHandler((err: FastifyError, req, reply) => {
+    if (reply.statusCode === 429 || err.statusCode === 429) {
+      return problem(reply, 429, "Too Many Requests", "Slow down and retry shortly");
+    }
+    req.log.error({ err, reqId: req.id }, "unhandled route error");
+    return problem(reply, err.statusCode && err.statusCode < 500 ? err.statusCode : 500, "Internal Server Error");
+  });
+
+  // Liveness/readiness probe — unauthenticated, no tenant data.
+  app.get("/healthz", async () => ({ status: "ok", ts: new Date().toISOString() }));
 
   /** Bearer auth + hard gate HG3 (C6): no session from a REVOKED device binding. */
   async function requireAuth(req: AuthedRequest, reply: FastifyReply): Promise<void> {
@@ -76,7 +175,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       problem(reply, 401, "Unauthorized", "Missing bearer token");
       return;
     }
-    const principal = await verifyAccessToken(tokens, header.slice("Bearer ".length));
+    const principal = await verifyAccessToken(tokens, header.slice("Bearer ".length), clock());
     if (!principal) {
       problem(reply, 401, "Unauthorized", "Invalid or expired token");
       return;
@@ -92,17 +191,25 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   app.register(
     async (api) => {
       // ---- auth (C2 /auth/otp/request) -------------------------------------
-      api.post("/auth/otp/request", async (req, reply) => {
+      api.post("/auth/otp/request", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (req, reply) => {
         const body = (req.body ?? {}) as { phone?: unknown };
         if (typeof body.phone !== "string" || !PHONE_PATTERN.test(body.phone)) {
           return problem(reply, 400, "Bad Request", "phone must match ^[6-9][0-9]{9}$");
         }
-        // M0 dev stub: OTP gateway always "sends" 000000; nothing to persist.
+        if (EKO) {
+          const sent = await ekoSendOtp(EKO, body.phone);
+          if (!sent.ok) {
+            req.log.error({ reason: sent.reason }, "eko send-otp failed");
+            return problem(reply, 502, "Bad Gateway", "Could not send the OTP right now — try again shortly");
+          }
+          return reply.code(204).send();
+        }
+        // No Eko config: dev stub / PILOT_OTP — gateway "sends" OTP_CODE; nothing to persist.
         return reply.code(204).send();
       });
 
       // ---- auth (C2 /auth/otp/verify) --------------------------------------
-      api.post("/auth/otp/verify", async (req, reply) => {
+      api.post("/auth/otp/verify", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (req, reply) => {
         const body = (req.body ?? {}) as {
           phone?: unknown;
           otp?: unknown;
@@ -115,7 +222,16 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           return problem(reply, 400, "Bad Request", "phone, otp and device are required");
         }
         const user = await repos.findUserByPhone(body.phone);
-        if (!user || user.status !== "ACTIVE" || body.otp !== OTP_CODE) {
+        if (!user || user.status !== "ACTIVE") {
+          return problem(reply, 401, "Unauthorized", "OTP verification failed");
+        }
+        if (EKO) {
+          const verified = await ekoVerifyOtp(EKO, body.phone, body.otp);
+          if (!verified.ok) {
+            req.log.error({ reason: verified.reason }, "eko verify-otp failed");
+            return problem(reply, 401, "Unauthorized", "OTP verification failed");
+          }
+        } else if (body.otp !== OTP_CODE) {
           return problem(reply, 401, "Unauthorized", "OTP verification failed");
         }
 
@@ -151,6 +267,49 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         });
 
         return reply.code(200).send({ access_token, refresh_token, device_id: device.id, user });
+      });
+
+      // ---- auth (C2 /auth/token/refresh, v0.9.0) ---------------------------
+      // Silent re-auth for the ~1h access token. The refresh token is
+      // single-use (rotated on every call); a REVOKED device or non-ACTIVE
+      // user cannot refresh (HG3).
+      api.post("/auth/token/refresh", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req, reply) => {
+        const body = (req.body ?? {}) as { refresh_token?: unknown };
+        if (typeof body.refresh_token !== "string" || body.refresh_token.length === 0) {
+          return problem(reply, 400, "Bad Request", "refresh_token is required");
+        }
+        const existing = await repos.getRefreshToken(body.refresh_token);
+        if (!existing || new Date(existing.expires_at).getTime() < clock().getTime()) {
+          return problem(reply, 401, "Unauthorized", "Refresh token invalid or expired");
+        }
+        const [device, user] = await Promise.all([
+          repos.getDeviceById(existing.tenant_id, existing.device_id),
+          repos.getUserById(existing.tenant_id, existing.user_id),
+        ]);
+        if (!device || device.binding_state === "REVOKED") {
+          return problem(reply, 401, "Unauthorized", "Device binding revoked (HG3)");
+        }
+        if (!user || user.status !== "ACTIVE") {
+          return problem(reply, 401, "Unauthorized", "User is not active");
+        }
+        const principal: Principal = {
+          user_id: user.id,
+          tenant_id: user.tenant_id,
+          role: user.role,
+          device_id: device.id,
+        };
+        const now = clock();
+        const access_token = await signAccessToken(tokens, principal, now);
+        await repos.deleteRefreshToken(existing.token); // single-use rotation
+        const refresh_token = newRefreshToken();
+        await repos.insertRefreshToken({
+          token: refresh_token,
+          tenant_id: user.tenant_id,
+          user_id: user.id,
+          device_id: device.id,
+          expires_at: new Date(now.getTime() + 30 * 24 * 3600 * 1000).toISOString(),
+        });
+        return reply.code(200).send({ access_token, refresh_token });
       });
 
       // ---- master-data (C2 /master-data/locations, C3 §6 delta pull) --------
@@ -291,25 +450,26 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           const self = await repos.getUserById(scope.tenant_id, principal.user_id);
           if (self) people.unshift(self);
         }
-        const items = await Promise.all(
-          people.map(async (person) => {
-            const [day, points] = await Promise.all([
-              repos.getAttendanceDay(scope.tenant_id, person.id, q.date!),
-              repos.listTrackPointsForDcDate(scope.tenant_id, person.id, q.date!),
-            ]);
-            const d = deriveAttendance(day, q.date!, clock());
-            return {
-              dc_user_id: person.id,
-              dc_name: person.name,
-              status: d.status,
-              started_at: d.started_at,
-              ended_at: d.ended_at,
-              auto_closed: d.auto_closed,
-              hours_worked: d.hours_worked,
-              km_today: kmForPoints(points), // track_straightline_v0 — PROVISIONAL (C7)
-            };
-          }),
-        );
+        // Two batched reads for the whole board — not 2×N (industrialised for
+        // the 1000-DC national roster).
+        const personIds = people.map((p) => p.id);
+        const [days, pointsByDc] = await Promise.all([
+          repos.getAttendanceDaysForDcDates(scope.tenant_id, personIds, [q.date]),
+          repos.listTrackPointsForDcsDate(scope.tenant_id, personIds, q.date),
+        ]);
+        const items = people.map((person) => {
+          const d = deriveAttendance(days.get(`${person.id}|${q.date!}`) ?? null, q.date!, clock());
+          return {
+            dc_user_id: person.id,
+            dc_name: person.name,
+            status: d.status,
+            started_at: d.started_at,
+            ended_at: d.ended_at,
+            auto_closed: d.auto_closed,
+            hours_worked: d.hours_worked,
+            km_today: kmForPoints(pointsByDc.get(person.id) ?? []), // track_straightline_v0 — PROVISIONAL (C7)
+          };
+        });
         return reply.code(200).send({ items });
       });
 
@@ -417,6 +577,134 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         return reply.code(200).send({ summary, results });
       });
 
+      // ---- circle workbench (C2 /circle/csp-details/import, spec §4 P1) ------
+      // Bulk-update CSP master details (address / §3.1 profile fields) for CSPs
+      // in the caller's own circle. `dry_run` returns the per-row diff without
+      // writing — the web upload screen previews that before committing.
+      api.post("/circle/csp-details/import", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
+        const principal = req.principal!;
+        if (principal.role !== "CIRCLE_HEAD" && principal.role !== "CORPORATE_ADMIN") {
+          return problem(reply, 403, "Forbidden", "Only a Circle Head (or admin) may bulk-update CSP details");
+        }
+        const body = (req.body ?? {}) as { rows?: unknown; dry_run?: unknown };
+        if (!Array.isArray(body.rows) || body.rows.length === 0 || body.rows.length > 500) {
+          return problem(reply, 400, "Bad Request", "rows[] (1–500) is required");
+        }
+        const dryRun = body.dry_run === true;
+        const today = istDateOf(clock());
+        const scope = await resolveScope(repos, principal, clock());
+        const activeByCsp = new Map(
+          (await repos.listActiveCspAssignments(principal.tenant_id, "ALL", today)).map((a) => [a.csp_location_id, a]),
+        );
+
+        type DetailRow = {
+          row: number;
+          csp_code: string;
+          result: "updated" | "unchanged" | "rejected";
+          reason?: string;
+          changes?: CspFieldDiff;
+        };
+        const results: DetailRow[] = [];
+
+        for (const [i, raw] of body.rows.entries()) {
+          const r = (raw ?? {}) as Record<string, unknown>;
+          const cspCode = String(r.csp_code ?? "").trim();
+          const reject = (reason: string): void => {
+            results.push({ row: i + 1, csp_code: cspCode, result: "rejected", reason });
+          };
+          if (!cspCode) { reject("csp_code is required"); continue; }
+          const csp = await repos.findLocationByCode(principal.tenant_id, cspCode);
+          if (!csp || csp.type !== "CSP") { reject(`unknown CSP code "${cspCode}"`); continue; }
+
+          // Circle guardrail: the CSP's active-assignment DC must be in the head's circle.
+          const assignment = activeByCsp.get(csp.id);
+          if (scope.dc_user_ids !== "ALL") {
+            if (!assignment || !scope.dc_user_ids.has(assignment.dc_user_id)) {
+              reject("CSP is not in your circle");
+              continue;
+            }
+          }
+
+          const { csp_code: _drop, ...fields } = r;
+          void _drop;
+          const changes = diffCspFields(csp, fields);
+          if (Object.keys(changes).length === 0) {
+            results.push({ row: i + 1, csp_code: cspCode, result: "unchanged" });
+            continue;
+          }
+          if (!dryRun) {
+            await repos.updateLocationFields(principal.tenant_id, csp.id, patchFromDiff(changes, clock().toISOString()));
+          }
+          results.push({ row: i + 1, csp_code: cspCode, result: "updated", changes });
+        }
+
+        const summary = {
+          total: results.length,
+          updated: results.filter((x) => x.result === "updated").length,
+          unchanged: results.filter((x) => x.result === "unchanged").length,
+          rejected: results.filter((x) => x.result === "rejected").length,
+          dry_run: dryRun,
+        };
+        return reply.code(200).send({ summary, results });
+      });
+
+      // ---- circle workbench (C2 /circle/home-locations/import, spec §3) ------
+      // "Excel sheet for Lat Long": bulk-set DC / Circle-Head reference home
+      // locations. Attendance is LOGGED against home, never gated (ADR-0004).
+      api.post("/circle/home-locations/import", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
+        const principal = req.principal!;
+        if (principal.role !== "CIRCLE_HEAD" && principal.role !== "CORPORATE_ADMIN") {
+          return problem(reply, 403, "Forbidden", "Only a Circle Head (or admin) may set home locations");
+        }
+        const body = (req.body ?? {}) as { rows?: unknown };
+        if (!Array.isArray(body.rows) || body.rows.length === 0 || body.rows.length > 500) {
+          return problem(reply, 400, "Bad Request", "rows[] (1–500 of {phone, home_lat, home_lng}) is required");
+        }
+        const scope = await resolveScope(repos, principal, clock());
+
+        type HomeRow = { row: number; phone: string; result: "updated" | "unchanged" | "rejected"; reason?: string };
+        const results: HomeRow[] = [];
+
+        for (const [i, raw] of body.rows.entries()) {
+          const r = (raw ?? {}) as { phone?: unknown; home_lat?: unknown; home_lng?: unknown };
+          const phone = String(r.phone ?? "").trim();
+          const lat = Number(r.home_lat);
+          const lng = Number(r.home_lng);
+          const reject = (reason: string): void => {
+            results.push({ row: i + 1, phone, result: "rejected", reason });
+          };
+          if (!PHONE_PATTERN.test(phone)) { reject("phone must be 10 digits"); continue; }
+          if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+            reject("home_lat / home_lng out of range");
+            continue;
+          }
+          const user = await repos.findUserByPhone(phone);
+          if (!user || user.tenant_id !== principal.tenant_id || user.status !== "ACTIVE" ||
+              (user.role !== "DC" && user.role !== "CIRCLE_HEAD")) {
+            reject(`no active DC/Circle-Head with phone ${phone}`);
+            continue;
+          }
+          // Scope: a Circle Head may set their own home + their circle DCs' homes.
+          const inScope = scope.dc_user_ids === "ALL" || user.id === principal.user_id || scope.dc_user_ids.has(user.id);
+          if (!inScope) { reject(`${user.name} is not in your circle`); continue; }
+
+          if (user.home_lat === lat && user.home_lng === lng) {
+            results.push({ row: i + 1, phone, result: "unchanged" });
+            continue;
+          }
+          await repos.updateUserHomeLocation(principal.tenant_id, user.id, lat, lng);
+          results.push({ row: i + 1, phone, result: "updated" });
+        }
+
+        const summary = {
+          total: results.length,
+          updated: results.filter((x) => x.result === "updated").length,
+          unchanged: results.filter((x) => x.result === "unchanged").length,
+          rejected: results.filter((x) => x.result === "rejected").length,
+        };
+        return reply.code(200).send({ summary, results });
+      });
+
       // ---- DC CSP Details (C2 /dc/csp-details, spec §3) ----------------------
       api.get("/dc/csp-details", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
         const principal = req.principal!;
@@ -428,35 +716,54 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           repos.listActiveCspAssignments(principal.tenant_id, new Set([principal.user_id]), today),
           repos.lastVisitDatesForDc(principal.tenant_id, principal.user_id),
         ]);
-        const items = (
-          await Promise.all(
-            assignments.map(async (a) => {
-              const loc = await repos.getLocationById(principal.tenant_id, a.csp_location_id);
-              if (!loc) return null;
-              return {
-                csp_location_id: loc.id,
-                code: loc.code,
-                name: loc.name,
-                address: loc.address ?? "",
-                lat: loc.coordinates.lat,
-                lng: loc.coordinates.lng,
-                coordinate_confidence: loc.coordinate_confidence,
-                last_visit_date: lastVisits.get(loc.id) ?? null,
-                csp_profile: loc.csp_profile ?? {},
-              };
-            }),
-          )
-        ).filter((x) => x !== null);
+
+        // Load the assigned CSPs plus their ancestor chain (CSP→Branch→RBO→LHO)
+        // in a bounded number of batched reads — never one query per row/level.
+        const byId = new Map<string, LocationNode>();
+        let frontier = assignments.map((a) => a.csp_location_id);
+        for (let depth = 0; depth < 4 && frontier.length > 0; depth++) {
+          const fetched = await repos.listLocationsByIds(principal.tenant_id, frontier);
+          const next: string[] = [];
+          for (const loc of fetched) {
+            byId.set(loc.id, loc);
+            if (loc.parent_id && !byId.has(loc.parent_id)) next.push(loc.parent_id);
+          }
+          frontier = next;
+        }
+        // §3.1 template fields Branch/RBO/LHO come from the hierarchy unless
+        // explicitly overridden in the CSP's own csp_profile.
+        const hierarchyProfile = (loc: LocationNode): Record<string, string> => {
+          const out: Record<string, string> = {};
+          let cur = loc.parent_id ? byId.get(loc.parent_id) : undefined;
+          const seen = new Set<string>();
+          while (cur && !seen.has(cur.id)) {
+            seen.add(cur.id);
+            if (cur.type === "BRANCH") { out.branch_code = cur.code; out.branch_name = cur.name; }
+            else if (cur.type === "RBO") { out.rbo_name = cur.name; }
+            else if (cur.type === "LHO") { out.lho_name = cur.name; }
+            cur = cur.parent_id ? byId.get(cur.parent_id) : undefined;
+          }
+          return out;
+        };
+
+        const items = assignments
+          .map((a) => byId.get(a.csp_location_id))
+          .filter((loc): loc is LocationNode => loc != null)
+          .map((loc) => ({
+            csp_location_id: loc.id,
+            code: loc.code,
+            name: loc.name,
+            address: loc.address ?? "",
+            lat: loc.coordinates.lat,
+            lng: loc.coordinates.lng,
+            coordinate_confidence: loc.coordinate_confidence,
+            last_visit_date: lastVisits.get(loc.id) ?? null,
+            csp_profile: { ...hierarchyProfile(loc), ...(loc.csp_profile ?? {}) },
+          }));
         return reply.code(200).send({ items });
       });
 
       // ---- DC change requests (C2 /dc/csp-change-requests, spec §3) ----------
-      const CR_CORE_FIELDS = ["name", "address", "lat", "lng"] as const;
-      const CR_PROFILE_FIELDS = [
-        "gender", "csp_mail_id", "mobile_number", "alternative_mobile_number",
-        "relationship_manager", "district", "ao", "ao_email", "branch_email",
-        "rbo_email", "population",
-      ] as const;
       api.post("/dc/csp-change-requests", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
         const principal = req.principal!;
         if (principal.role !== "DC") {
@@ -474,22 +781,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         const loc = await repos.getLocationById(principal.tenant_id, body.csp_location_id);
         if (!loc) return problem(reply, 422, "Unprocessable", "Unknown CSP");
 
-        const changes: Record<string, { old: string | number | null; new: string | number }> = {};
-        for (const [field, value] of Object.entries(body.changes as Record<string, unknown>)) {
-          if (typeof value !== "string" && typeof value !== "number") continue;
-          if ((CR_CORE_FIELDS as readonly string[]).includes(field)) {
-            const old =
-              field === "name" ? loc.name
-              : field === "address" ? (loc.address ?? null)
-              : field === "lat" ? loc.coordinates.lat
-              : loc.coordinates.lng;
-            if (String(old ?? "") !== String(value)) changes[field] = { old, new: value };
-          } else if ((CR_PROFILE_FIELDS as readonly string[]).includes(field)) {
-            const old = loc.csp_profile?.[field] ?? null;
-            if (String(old ?? "") !== String(value)) changes[field] = { old, new: value };
-          }
-          // unknown fields are ignored (whitelist), never applied
-        }
+        const changes = diffCspFields(loc, body.changes as Record<string, unknown>);
         if (Object.keys(changes).length === 0) {
           return problem(reply, 422, "Unprocessable", "No whitelisted field actually changes value");
         }
@@ -517,15 +809,21 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           q.status === "PENDING" || q.status === "APPROVED" || q.status === "REJECTED" ? q.status : undefined;
         const scope = await resolveScope(repos, principal, clock());
         const requests = await repos.listCspChangeRequests(scope.tenant_id, scope.dc_user_ids, status);
-        const items = await Promise.all(
-          requests.map(async (r) => {
-            const [loc, requester] = await Promise.all([
-              repos.getLocationById(scope.tenant_id, r.csp_location_id),
-              repos.getUserById(scope.tenant_id, r.requested_by_user_id),
-            ]);
-            return { ...r, csp_code: loc?.code ?? "", csp_name: loc?.name ?? "", requested_by_name: requester?.name ?? "" };
-          }),
-        );
+        const [locs, requesters] = await Promise.all([
+          repos.listLocationsByIds(scope.tenant_id, requests.map((r) => r.csp_location_id)),
+          repos.listUsersByIds(scope.tenant_id, requests.map((r) => r.requested_by_user_id)),
+        ]);
+        const locById = new Map(locs.map((l) => [l.id, l]));
+        const userById = new Map(requesters.map((u) => [u.id, u]));
+        const items = requests.map((r) => {
+          const loc = locById.get(r.csp_location_id);
+          return {
+            ...r,
+            csp_code: loc?.code ?? "",
+            csp_name: loc?.name ?? "",
+            requested_by_name: userById.get(r.requested_by_user_id)?.name ?? "",
+          };
+        });
         return reply.code(200).send({ items });
       });
 
@@ -550,17 +848,11 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         }
 
         if (body.decision === "APPROVED") {
-          const patch: { name?: string; address?: string; lat?: number; lng?: number; profile?: Record<string, string>; updated_at: string } = {
-            updated_at: clock().toISOString(),
-          };
-          for (const [field, ch] of Object.entries(request.changes)) {
-            if (field === "name") patch.name = String(ch.new);
-            else if (field === "address") patch.address = String(ch.new);
-            else if (field === "lat") patch.lat = Number(ch.new);
-            else if (field === "lng") patch.lng = Number(ch.new);
-            else (patch.profile ??= {})[field] = String(ch.new);
-          }
-          await repos.updateLocationFields(principal.tenant_id, request.csp_location_id, patch);
+          await repos.updateLocationFields(
+            principal.tenant_id,
+            request.csp_location_id,
+            patchFromDiff(request.changes, clock().toISOString()),
+          );
         }
         const decided = {
           ...request,
@@ -599,13 +891,14 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           repos.listAllLocations(scope.tenant_id),
         ]);
 
-        const attendanceByDc = new Map(
-          await Promise.all(
-            dcs.map(async (dc) => [dc.id, await repos.getAttendanceDay(scope.tenant_id, dc.id, q.date!)] as const),
-          ),
-        );
+        const dcIds = dcs.map((d) => d.id);
+        // One batched read for the whole tenant's attendance + km — not 2×N.
+        const [attendanceDays, trackByDc] = await Promise.all([
+          repos.getAttendanceDaysForDcDates(scope.tenant_id, dcIds, [q.date]),
+          repos.listTrackPointsForDcsDate(scope.tenant_id, dcIds, q.date),
+        ]);
         const statusOf = (dcId: string): "NOT_STARTED" | "ON_DUTY" | "ENDED" => {
-          const day = attendanceByDc.get(dcId);
+          const day = attendanceDays.get(`${dcId}|${q.date!}`);
           return day?.ended_at ? "ENDED" : day?.started_at ? "ON_DUTY" : "NOT_STARTED";
         };
 
@@ -620,11 +913,13 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         );
         const usersById = dcById; // heads resolved separately below
 
-        const circleRollups = await Promise.all(
-          circles.map(async (c) => {
+        const headsById = new Map(
+          (await repos.listUsersByIds(scope.tenant_id, [...headOfCircle.values()])).map((u) => [u.id, u]),
+        );
+        const circleRollups = circles.map((c) => {
             const circleDcs = [...circleOfDc.entries()].filter(([, cid]) => cid === c.id).map(([dcId]) => dcId);
             const headId = headOfCircle.get(c.id) ?? null;
-            const head = headId ? await repos.getUserById(scope.tenant_id, headId) : null;
+            const head = headId ? headsById.get(headId) ?? null : null;
             return {
               circle_id: c.id,
               circle_name: c.name,
@@ -637,8 +932,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
                 (v) => circleDcs.includes(v.dc_user_id) && v.geofence_result === "OUTSIDE_FLAGGED",
               ).length,
             };
-          }),
-        );
+          });
 
         return reply.code(200).send({
           date: q.date,
@@ -668,16 +962,14 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
             status: b.status,
             csp_count: csps.filter((c) => c.bank_id === b.id).length,
           })),
-          assignments_by_dc: await Promise.all(
-            [...usersById.values()].map(async (dc) => ({
-              dc_user_id: dc.id,
-              dc_name: dc.name,
-              csp_count: assignments.filter((a) => a.dc_user_id === dc.id).length,
-              attendance: statusOf(dc.id),
-              visits_today: visits.filter((v) => v.dc_user_id === dc.id).length,
-              km_today: kmForPoints(await repos.listTrackPointsForDcDate(scope.tenant_id, dc.id, q.date!)),
-            })),
-          ),
+          assignments_by_dc: [...usersById.values()].map((dc) => ({
+            dc_user_id: dc.id,
+            dc_name: dc.name,
+            csp_count: assignments.filter((a) => a.dc_user_id === dc.id).length,
+            attendance: statusOf(dc.id),
+            visits_today: visits.filter((v) => v.dc_user_id === dc.id).length,
+            km_today: kmForPoints(trackByDc.get(dc.id) ?? []),
+          })),
         });
       });
 
@@ -697,15 +989,19 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         const minusDays = (istDate: string, days: number): string =>
           new Date(new Date(`${istDate}T00:00:00Z`).getTime() - days * 86_400_000).toISOString().slice(0, 10);
 
-        const items = await Promise.all(
-          dcs.map(async (dc) => {
-            const week = await Promise.all(
-              Array.from({ length: 7 }, (_, i) => repos.getAttendanceDay(scope.tenant_id, dc.id, minusDays(q.date!, i))),
-            );
-            const daysWithStart = week.map((d) => d?.started_at != null);
-            return computeScorecard({ id: dc.id, name: dc.name }, visits, week[0] ?? null, daysWithStart);
-          }),
+        // The 7-day streak window for the whole circle/tenant in ONE batched
+        // read — was 7×N getAttendanceDay round-trips.
+        const week = Array.from({ length: 7 }, (_, i) => minusDays(q.date!, i));
+        const attendance = await repos.getAttendanceDaysForDcDates(
+          scope.tenant_id,
+          dcs.map((d) => d.id),
+          week,
         );
+        const items = dcs.map((dc) => {
+          const dayFor = (date: string) => attendance.get(`${dc.id}|${date}`) ?? null;
+          const daysWithStart = week.map((date) => dayFor(date)?.started_at != null);
+          return computeScorecard({ id: dc.id, name: dc.name }, visits, dayFor(q.date!), daysWithStart);
+        });
         return reply.code(200).send({ formula_version: "dc_score_v1", items });
       });
 
@@ -719,7 +1015,22 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         // Scoping is server-side (C2) and applied in the repository query via
         // the single choke point — the handler does no filtering of its own.
         const scope = await resolveScope(repos, principal, clock());
-        const items = await repos.listVisitsByIstDate(scope, q.date);
+        const visits = await repos.listVisitsByIstDate(scope, q.date);
+        // photo_count and checked_out_at are derived at READ time (like
+        // km_today) — visit.photo / visit.checkout ops arrive on their own
+        // tiers and link by visit_id, never by order.
+        const visitIds = visits.map((v) => v.id);
+        const [photoCounts, checkoutTimes] = await Promise.all([
+          repos.countPhotosForVisits(scope.tenant_id, visitIds),
+          repos.checkoutTimesForVisits(scope.tenant_id, visitIds),
+        ]);
+        const items = visits.map((v) => {
+          const checked_out_at = checkoutTimes.get(v.id) ?? null;
+          const duration_minutes = checked_out_at
+            ? Math.max(0, Math.round((new Date(checked_out_at).getTime() - new Date(v.checkin.occurred_at).getTime()) / 60000))
+            : null;
+          return { ...v, photo_count: photoCounts.get(v.id) ?? 0, checked_out_at, duration_minutes };
+        });
         return reply.code(200).send({ items });
       });
     },

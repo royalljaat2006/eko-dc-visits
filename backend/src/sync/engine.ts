@@ -17,21 +17,33 @@
  * - Convergence (C3 §3): every write below is insert-if-absent keyed on
  *   client ids, so any permutation + duplication of batches converges.
  */
+import { createHash } from "node:crypto";
 import type {
   AttendanceEvent,
   CheckInEvent,
+  CheckoutEvent,
   OpDisposition,
   Principal,
   StoredAttendanceEvent,
+  StoredCheckoutEvent,
   StoredTrackChunk,
+  StoredVisitPhoto,
   TrackChunk,
   StoredCheckInEvent,
   SyncBatch,
   Visit,
+  VisitPhoto,
 } from "../domain/types.js";
 import type { Repos } from "../repos/types.js";
 import { haversineMeters, istDateOf } from "../geo.js";
-import { ajvErrorStrings, validateAttendanceEvent, validateCheckinEvent, validateTrackChunk } from "../validation/schemas.js";
+import {
+  ajvErrorStrings,
+  validateAttendanceEvent,
+  validateCheckinEvent,
+  validateCheckoutEvent,
+  validateTrackChunk,
+  validateVisitPhoto,
+} from "../validation/schemas.js";
 
 export type Clock = () => Date;
 
@@ -137,6 +149,46 @@ async function applyNewOp(
     await repos.insertTrackChunkIfAbsent(stored);
     return { op_id: opId, result: "accepted" };
   }
+  if (opType === "visit.photo") {
+    if (!validateVisitPhoto(payload)) {
+      return quarantine("SCHEMA_INVALID", ajvErrorStrings(validateVisitPhoto));
+    }
+    const photo = payload as VisitPhoto;
+    // Re-hash the decoded bytes. A mismatch is FLAGGED, never rejected — an
+    // audit system keeps every byte a device swears it captured (ADR-0003).
+    // The visit_id is linked, never ordered: the photo may arrive before its
+    // check-in and still converge (C3 §3).
+    const actualSha = createHash("sha256").update(Buffer.from(photo.bytes_b64, "base64")).digest("hex");
+    const matched = actualSha === photo.sha256;
+    const stored: StoredVisitPhoto = {
+      ...photo,
+      tenant_id: tenant,
+      upload_state: matched ? "STORED" : "HASH_MISMATCH",
+      timestamps: { ...photo.timestamps, server_received_at: clock().toISOString() },
+    };
+    await repos.insertVisitPhotoIfAbsent(stored);
+    return matched
+      ? { op_id: opId, result: "accepted" }
+      : { op_id: opId, result: "accepted-flagged", flags: ["HASH_MISMATCH"] };
+  }
+
+  if (opType === "visit.checkout") {
+    if (!validateCheckoutEvent(payload)) {
+      return quarantine("SCHEMA_INVALID", ajvErrorStrings(validateCheckoutEvent));
+    }
+    const event = payload as CheckoutEvent;
+    const stored: StoredCheckoutEvent = {
+      ...event,
+      tenant_id: tenant,
+      timestamps: { ...event.timestamps, server_received_at: clock().toISOString() },
+    };
+    // Append-only, linked by visit_id — may legitimately arrive before its
+    // checkin op (different tiers can race). checked_out_at is derived at
+    // READ time from the earliest such event, never mutates the checkin.
+    await repos.insertCheckoutEventIfAbsent(stored);
+    return { op_id: opId, result: "accepted" };
+  }
+
   if (opType !== "visit.checkin") {
     return quarantine("UNSUPPORTED_TYPE", [`unknown op type "${opType}"`]);
   }

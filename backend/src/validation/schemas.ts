@@ -14,11 +14,13 @@ import locationSchema from "../../../contracts/c1-entities/location.schema.json"
 import userDeviceSchema from "../../../contracts/c1-entities/user-device.schema.json" with { type: "json" };
 import beatPlanSchema from "../../../contracts/c1-entities/beat-plan.schema.json" with { type: "json" };
 import checkinEventSchema from "../../../contracts/c1-entities/checkin-event.schema.json" with { type: "json" };
+import checkoutEventSchema from "../../../contracts/c1-entities/checkout-event.schema.json" with { type: "json" };
 import attendanceEventSchema from "../../../contracts/c1-entities/attendance-event.schema.json" with { type: "json" };
 import bankSchema from "../../../contracts/c1-entities/bank.schema.json" with { type: "json" };
 import circleSchema from "../../../contracts/c1-entities/circle.schema.json" with { type: "json" };
 import cspAssignmentSchema from "../../../contracts/c1-entities/csp-assignment.schema.json" with { type: "json" };
 import trackChunkSchema from "../../../contracts/c1-entities/track-chunk.schema.json" with { type: "json" };
+import visitPhotoSchema from "../../../contracts/c1-entities/visit-photo.schema.json" with { type: "json" };
 import cspChangeRequestSchema from "../../../contracts/c1-entities/csp-change-request.schema.json" with { type: "json" };
 
 // NodeNext/CJS interop: ajv-formats ships `module.exports.default = fn`.
@@ -45,11 +47,13 @@ for (const schema of [
   userDeviceSchema,
   beatPlanSchema,
   checkinEventSchema,
+  checkoutEventSchema,
   attendanceEventSchema,
   bankSchema,
   circleSchema,
   cspAssignmentSchema,
   trackChunkSchema,
+  visitPhotoSchema,
   cspChangeRequestSchema,
 ]) {
   ajv.addSchema(schema as Record<string, unknown>);
@@ -64,8 +68,10 @@ function getValidator(ref: string): ValidateFunction {
 }
 
 export const validateCheckinEvent = getValidator("checkin-event.schema.json");
+export const validateCheckoutEvent = getValidator("checkout-event.schema.json");
 export const validateAttendanceEvent = getValidator("attendance-event.schema.json");
 export const validateTrackChunk = getValidator("track-chunk.schema.json");
+export const validateVisitPhoto = getValidator("visit-photo.schema.json");
 export const validateLocation = getValidator("location.schema.json");
 export const validateUser = getValidator("user-device.schema.json#/$defs/user");
 export const validateDevice = getValidator("user-device.schema.json#/$defs/device");

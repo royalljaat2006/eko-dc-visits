@@ -10,7 +10,9 @@ import type {
   Device,
   LocationNode,
   StoredAttendanceEvent,
+  StoredCheckoutEvent,
   StoredTrackChunk,
+  StoredVisitPhoto,
   TrackPoint,
   OpDisposition,
   QuarantinedOp,
@@ -49,6 +51,8 @@ export interface Repos {
   // users (admin records)
   insertUser(u: User): Promise<void>;
   getUserById(tenantId: TenantId, id: string): Promise<User | null>;
+  /** Batch lookup — one round-trip instead of N (dashboard joins). */
+  listUsersByIds(tenantId: TenantId, ids: readonly string[]): Promise<User[]>;
   findUserByPhone(phone: string): Promise<User | null>;
 
   // devices (admin records; binding_state transitions allowed)
@@ -59,10 +63,14 @@ export interface Repos {
 
   // sessions
   insertRefreshToken(t: RefreshToken): Promise<void>;
+  getRefreshToken(token: string): Promise<RefreshToken | null>;
+  deleteRefreshToken(token: string): Promise<void>;
 
   // locations (server→client master data, C3 §6)
   insertLocation(l: LocationNode): Promise<void>;
   getLocationById(tenantId: TenantId, id: string): Promise<LocationNode | null>;
+  /** Batch lookup — one round-trip instead of N (CSP-details / dashboards). */
+  listLocationsByIds(tenantId: TenantId, ids: readonly string[]): Promise<LocationNode[]>;
   /** Lookup by external code (bulk import rows reference CSPs by code, not uuid). */
   findLocationByCode(tenantId: TenantId, code: string): Promise<LocationNode | null>;
   listAllLocations(tenantId: TenantId): Promise<LocationNode[]>;
@@ -108,6 +116,8 @@ export interface Repos {
    */
   mergeAttendanceDay(tenantId: TenantId, dcUserId: string, istDate: string, kind: "START" | "END", occurredAt: string): Promise<void>;
   getAttendanceDay(tenantId: TenantId, dcUserId: string, istDate: string): Promise<AttendanceDay | null>;
+  /** Batch: one row per (dc, date) that has any events. Keyed `${dcUserId}|${istDate}`. */
+  getAttendanceDaysForDcDates(tenantId: TenantId, dcIds: readonly string[], istDates: readonly string[]): Promise<Map<string, AttendanceDay>>;
 
   // CSP assignment mutations (design 0001 §6 — end-old + start-new, never edit)
   /** Ends the active assignment for a CSP (sets valid_to). Returns the ended assignment's id, or null if none was active. */
@@ -128,6 +138,8 @@ export interface Repos {
     locationId: string,
     patch: { name?: string; address?: string; lat?: number; lng?: number; profile?: Record<string, string>; updated_at: string },
   ): Promise<void>;
+  /** Sets a user's reference home location (spec §3 — "Excel sheet for Lat Long"). Admin data. */
+  updateUserHomeLocation(tenantId: TenantId, userId: string, homeLat: number, homeLng: number): Promise<void>;
   /** Per-CSP most recent visit IST date for a DC (spec §3: last-visit date on each card). */
   lastVisitDatesForDc(tenantId: TenantId, dcUserId: string): Promise<Map<string, string>>;
 
@@ -136,6 +148,8 @@ export interface Repos {
   insertTrackChunkIfAbsent(c: StoredTrackChunk): Promise<void>;
   /** All points for a DC whose fix time falls on the IST date, sorted by t. */
   listTrackPointsForDcDate(tenantId: TenantId, dcUserId: string, istDate: string): Promise<TrackPoint[]>;
+  /** Batch: points per DC for one IST date, each list sorted by t. Keyed by dcUserId. */
+  listTrackPointsForDcsDate(tenantId: TenantId, dcIds: readonly string[], istDate: string): Promise<Map<string, TrackPoint[]>>;
 
   // evidence — append-only (no update methods, ever)
   insertCheckinEventIfAbsent(e: StoredCheckInEvent): Promise<void>;
@@ -143,6 +157,16 @@ export interface Repos {
   insertVisitIfAbsent(v: Visit): Promise<void>;
   /** Scoped read: filtering happens HERE, in the query layer — never post-filtered in handlers. */
   listVisitsByIstDate(scope: Scope, istDate: string): Promise<VisitView[]>;
+
+  // visit photos (v0.9.0; append-only; T2). Linked by visit_id, never ordered.
+  insertVisitPhotoIfAbsent(p: StoredVisitPhoto): Promise<void>;
+  /** photo count per visit id, for the dashboard read model (computed at READ time like km). */
+  countPhotosForVisits(tenantId: TenantId, visitIds: string[]): Promise<Map<string, number>>;
+
+  // visit checkout (v0.10.0; append-only; T1). Linked by visit_id, never ordered.
+  insertCheckoutEventIfAbsent(e: StoredCheckoutEvent): Promise<void>;
+  /** Earliest checkout device_wall_time per visit id — deterministic regardless of arrival order. */
+  checkoutTimesForVisits(tenantId: TenantId, visitIds: string[]): Promise<Map<string, string>>;
 
   // sync op dedupe (C3 §3: duplicate replays byte-identical dispositions)
   getOpDisposition(tenantId: TenantId, opId: string): Promise<OpDisposition | null>;
