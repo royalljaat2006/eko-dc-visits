@@ -766,3 +766,269 @@ test("seedCircle1A85 (spec §7): 7 real DCs with phones + own dashboard_url, in 
   const byPhone = await repos.findUserByPhone("8623992217");
   assert.equal(byPhone?.name, "Vijay");
 });
+
+// ---- DC live tracking + smart CSP navigation (new) -------------------------
+// Asha holds all 5 Nandpur CSPs (fixtures/nandpur/csp-assignments.json):
+const CSP_KISHANGANJ_CHOWK = "018f5a00-0000-7000-8000-000000000105"; // 25.3602, 85.7591
+const CSP_MAHUA_TOLA = "018f5a00-0000-7000-8000-000000000106"; // 25.3721, 85.7488
+const CSP_BANIYA_GHAT = "018f5a00-0000-7000-8000-000000000107"; // 25.2955, 85.8103
+const CSP_SONPUR_DIARA = "018f5a00-0000-7000-8000-000000000108"; // 25.2810, 85.8322
+const CSP_RAMPUR_KHAJURIA = "018f5a00-0000-7000-8000-000000000109"; // 25.2688, 85.8455
+const ALL_NANDPUR_CSPS = [CSP_KISHANGANJ_CHOWK, CSP_MAHUA_TOLA, CSP_BANIYA_GHAT, CSP_SONPUR_DIARA, CSP_RAMPUR_KHAJURIA];
+
+function trackChunkBatch(dcUserId: string, deviceId: string, points: Array<{ lat: number; lng: number; t: string }>): object {
+  return {
+    batch_id: uuid(),
+    device_id: deviceId,
+    seq_from: 1,
+    seq_to: 1,
+    client_time: NOW.toISOString(),
+    app_version: "0.1.0-test",
+    contract_version: "0.7.0",
+    ops: [
+      {
+        op_id: uuid(),
+        seq: 1,
+        type: "track.chunk",
+        payload: {
+          id: uuid(),
+          dc_user_id: dcUserId,
+          device_id: deviceId,
+          points,
+          timestamps: { device_wall_time: NOW.toISOString(), monotonic_ms: 7 },
+        },
+      },
+    ],
+  };
+}
+
+test("GET /dc/nearest-csp: inactive session, no-fix, stored-fix recommendation, eligibility exclusion, DC-only", async () => {
+  const SAFE_NOW = new Date(`${TODAY_IST}T09:00:00+05:30`);
+  const safeClock = (): Date => SAFE_NOW;
+  const { app } = await makeApp(safeClock);
+  const asha = await login(app, PHONES.asha);
+
+  // Circle Head may not call this DC-only recommendation endpoint.
+  const ch = await login(app, PHONES.amPriya);
+  const chRes = await app.inject({
+    method: "GET",
+    url: "/api/v1/dc/nearest-csp",
+    headers: { authorization: `Bearer ${ch.token}` },
+  });
+  assert.equal(chRes.statusCode, 403);
+
+  // Before Check-In (attendance.start): no active session → no recommendation.
+  const beforeStart = await app.inject({
+    method: "GET",
+    url: "/api/v1/dc/nearest-csp",
+    headers: { authorization: `Bearer ${asha.token}` },
+  });
+  assert.equal(beforeStart.statusCode, 200);
+  assert.deepEqual(beforeStart.json(), { state: "inactive_session", items: [] });
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/sync/batches",
+    headers: { authorization: `Bearer ${asha.token}` },
+    payload: attendanceBatch(asha.user_id, asha.device_id, "START", SAFE_NOW.toISOString()),
+  });
+
+  // On duty, no GPS fix stored or supplied yet → all 5 eligible CSPs listed, undistanced.
+  const noFix = await app.inject({
+    method: "GET",
+    url: "/api/v1/dc/nearest-csp",
+    headers: { authorization: `Bearer ${asha.token}` },
+  });
+  assert.equal(noFix.statusCode, 200);
+  const noFixBody = noFix.json() as { state: string; items: Array<{ csp_location_id: string; distance_m: number | null }> };
+  assert.equal(noFixBody.state, "no_fix");
+  assert.equal(noFixBody.items.length, 5);
+  assert.ok(noFixBody.items.every((i) => i.distance_m === null));
+
+  // A client-supplied fresh fix right next to Kishanganj Chowk recommends it first.
+  const withQuery = await app.inject({
+    method: "GET",
+    url: "/api/v1/dc/nearest-csp?lat=25.3602&lng=85.7591",
+    headers: { authorization: `Bearer ${asha.token}` },
+  });
+  const withQueryBody = withQuery.json() as {
+    state: string;
+    items: Array<{ csp_location_id: string; distance_m: number; distance_basis: string }>;
+  };
+  assert.equal(withQueryBody.state, "ok");
+  assert.equal(withQueryBody.items[0]!.csp_location_id, CSP_KISHANGANJ_CHOWK);
+  assert.equal(withQueryBody.items[0]!.distance_basis, "straight_line");
+  assert.ok(withQueryBody.items[0]!.distance_m < withQueryBody.items[1]!.distance_m, "sorted nearest-first");
+
+  // A stored (synced) fix is used when no query fix is supplied, and is fresh (<10min old).
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/sync/batches",
+    headers: { authorization: `Bearer ${asha.token}` },
+    payload: trackChunkBatch(asha.user_id, asha.device_id, [{ lat: 25.2688, lng: 85.8455, t: SAFE_NOW.toISOString() }]),
+  });
+  const storedFix = await app.inject({
+    method: "GET",
+    url: "/api/v1/dc/nearest-csp",
+    headers: { authorization: `Bearer ${asha.token}` },
+  });
+  const storedFixBody = storedFix.json() as { state: string; items: Array<{ csp_location_id: string }> };
+  assert.equal(storedFixBody.state, "ok");
+  assert.equal(storedFixBody.items[0]!.csp_location_id, CSP_RAMPUR_KHAJURIA, "nearest to the stored fix, not Kishanganj");
+
+  // Eligibility excludes CSPs already visited today (design 0001 §6); once every
+  // assigned CSP has been visited today, the recommender has nothing left to offer.
+  for (const cspId of ALL_NANDPUR_CSPS) {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/sync/batches",
+      headers: { authorization: `Bearer ${asha.token}` },
+      payload: syncBatch(asha.user_id, asha.device_id, cspId),
+    });
+    // syncBatch()'s fixed GPS fix is only inside a few CSPs' geofences; the
+    // rest land OUTSIDE_RADIUS (ADR-0004: advisory, never rejected). Either
+    // way the visit is recorded and counts toward today's eligibility.
+    const result = (res.json() as { results: Array<{ result: string }> }).results[0]!.result;
+    assert.ok(result === "accepted" || result === "accepted-flagged", `expected an accepted visit, got ${result}`);
+  }
+  const allVisited = await app.inject({
+    method: "GET",
+    url: "/api/v1/dc/nearest-csp",
+    headers: { authorization: `Bearer ${asha.token}` },
+  });
+  assert.deepEqual(allVisited.json(), { state: "no_eligible_csp", items: [] });
+});
+
+test("GET /dashboard/live-locations: no_fix / stale / live / off_duty states, scoped to the Circle Head's own circle", async () => {
+  const SAFE_NOW = new Date(`${TODAY_IST}T09:00:00+05:30`);
+  const safeClock = (): Date => SAFE_NOW;
+  const { app } = await makeApp(safeClock);
+  const asha = await login(app, PHONES.asha);
+  await login(app, PHONES.vikram); // never starts duty, never sends a fix
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/sync/batches",
+    headers: { authorization: `Bearer ${asha.token}` },
+    payload: attendanceBatch(asha.user_id, asha.device_id, "START", SAFE_NOW.toISOString()),
+  });
+  // A fix captured 2 minutes ago is stale under the default 60s threshold.
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/sync/batches",
+    headers: { authorization: `Bearer ${asha.token}` },
+    payload: trackChunkBatch(asha.user_id, asha.device_id, [
+      { lat: 25.36, lng: 85.75, t: new Date(SAFE_NOW.getTime() - 120_000).toISOString() },
+    ]),
+  });
+
+  const admin = await login(app, PHONES.admin);
+  const staleView = await app.inject({
+    method: "GET",
+    url: "/api/v1/dashboard/live-locations",
+    headers: { authorization: `Bearer ${admin.token}` },
+  });
+  assert.equal(staleView.statusCode, 200);
+  type LiveRow = { dc_user_id: string; name: string; on_duty: boolean; state: string };
+  const staleRows = (staleView.json() as { items: LiveRow[] }).items;
+  const ashaStale = staleRows.find((r) => r.dc_user_id === asha.user_id)!;
+  assert.equal(ashaStale.on_duty, true);
+  assert.equal(ashaStale.state, "stale");
+  const vikramRow = staleRows.find((r) => r.name === "Vikram Singh")!;
+  assert.equal(vikramRow.state, "no_fix");
+  assert.equal(vikramRow.on_duty, false);
+
+  // A fresh fix (captured "now") flips Asha to live.
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/sync/batches",
+    headers: { authorization: `Bearer ${asha.token}` },
+    payload: trackChunkBatch(asha.user_id, asha.device_id, [{ lat: 25.361, lng: 85.76, t: SAFE_NOW.toISOString() }]),
+  });
+  const liveView = await app.inject({
+    method: "GET",
+    url: "/api/v1/dashboard/live-locations",
+    headers: { authorization: `Bearer ${admin.token}` },
+  });
+  const ashaLive = (liveView.json() as { items: LiveRow[] }).items.find((r) => r.dc_user_id === asha.user_id)!;
+  assert.equal(ashaLive.state, "live");
+
+  // Ending the day flips her to off_duty even though the last fix is still on file.
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/sync/batches",
+    headers: { authorization: `Bearer ${asha.token}` },
+    payload: attendanceBatch(asha.user_id, asha.device_id, "END", new Date(SAFE_NOW.getTime() + 1000).toISOString()),
+  });
+  const offDutyView = await app.inject({
+    method: "GET",
+    url: "/api/v1/dashboard/live-locations",
+    headers: { authorization: `Bearer ${admin.token}` },
+  });
+  const ashaOffDuty = (offDutyView.json() as { items: LiveRow[] }).items.find((r) => r.dc_user_id === asha.user_id)!;
+  assert.equal(ashaOffDuty.state, "off_duty");
+
+  // Circle Head (Priya, Nandpur circle = Asha + Manoj) sees only her circle's
+  // DCs, never Vikram (Betwa circle — a different Circle Head's territory).
+  const ch = await login(app, PHONES.amPriya);
+  const chView = await app.inject({
+    method: "GET",
+    url: "/api/v1/dashboard/live-locations",
+    headers: { authorization: `Bearer ${ch.token}` },
+  });
+  const chItems = (chView.json() as { items: LiveRow[] }).items;
+  assert.equal(chItems.length, 2, "Circle Head's live-location board is scoped to her own circle (Asha + Manoj)");
+  assert.ok(chItems.some((r) => r.dc_user_id === asha.user_id));
+  assert.ok(chItems.every((r) => r.dc_user_id !== vikramRow.dc_user_id), "Vikram (other circle) must never appear");
+});
+
+test("GET /dashboard/route-history: requires date + dc_user_id, enforces scope, returns the synced points", async () => {
+  const { app } = await makeApp();
+  const asha = await login(app, PHONES.asha);
+  const vikram = await login(app, PHONES.vikram);
+
+  const missingParams = await app.inject({
+    method: "GET",
+    url: `/api/v1/dashboard/route-history?date=${TODAY_IST}`,
+    headers: { authorization: `Bearer ${asha.token}` },
+  });
+  assert.equal(missingParams.statusCode, 400);
+
+  const points = [
+    { lat: 25.36, lng: 85.75, t: NOW.toISOString() },
+    { lat: 25.361, lng: 85.751, t: new Date(NOW.getTime() + 60_000).toISOString() },
+  ];
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/sync/batches",
+    headers: { authorization: `Bearer ${asha.token}` },
+    payload: trackChunkBatch(asha.user_id, asha.device_id, points),
+  });
+
+  const ownHistory = await app.inject({
+    method: "GET",
+    url: `/api/v1/dashboard/route-history?date=${TODAY_IST}&dc_user_id=${asha.user_id}`,
+    headers: { authorization: `Bearer ${asha.token}` },
+  });
+  assert.equal(ownHistory.statusCode, 200);
+  const ownBody = ownHistory.json() as { dc_user_id: string; date: string; points: Array<{ lat: number; lng: number }> };
+  assert.equal(ownBody.dc_user_id, asha.user_id);
+  assert.equal(ownBody.points.length, 2);
+
+  // Circle Head Priya (Nandpur) may read Asha's route (her own circle)...
+  const ch = await login(app, PHONES.amPriya);
+  const chOk = await app.inject({
+    method: "GET",
+    url: `/api/v1/dashboard/route-history?date=${TODAY_IST}&dc_user_id=${asha.user_id}`,
+    headers: { authorization: `Bearer ${ch.token}` },
+  });
+  assert.equal(chOk.statusCode, 200);
+
+  // ...but never Vikram's (Betwa circle, outside her scope).
+  const chForbidden = await app.inject({
+    method: "GET",
+    url: `/api/v1/dashboard/route-history?date=${TODAY_IST}&dc_user_id=${vikram.user_id}`,
+    headers: { authorization: `Bearer ${ch.token}` },
+  });
+  assert.equal(chForbidden.statusCode, 403);
+});

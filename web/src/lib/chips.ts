@@ -2,7 +2,7 @@
  * Chip mappings for Visit fields (C2 Visit.geofence_result / Visit.sync_state).
  * Pure functions — unit-tested via node:test.
  */
-import type { AttendanceStatus, GeofenceResult, SyncState } from '../api/client.ts';
+import type { AttendanceStatus, GeofenceResult, LiveLocationState, SyncState } from '../api/client.ts';
 
 export interface Chip {
   label: string;
@@ -56,5 +56,23 @@ export function attendanceChip(status: AttendanceStatus): Chip {
       return { label: 'NOT STARTED', className: 'chip chip-amber', title: 'No Start Day event synced for this date' };
     case 'AUTO_CLOSED':
       return { label: 'AUTO-CLOSED', className: 'chip chip-amber', title: 'Auto-closed at 21:00 IST — not confirmed by user' };
+  }
+}
+
+/**
+ * Live-tracking map chips (C2 /dashboard/live-locations, v0.12.0).
+ * live = green (fresh fix, on duty); stale = amber (on duty, fix older than
+ * the threshold); off_duty / no_fix are neutral — nothing to flag, just status.
+ */
+export function liveLocationChip(state: LiveLocationState): Chip {
+  switch (state) {
+    case 'live':
+      return { label: 'LIVE', className: 'chip chip-green', title: '' };
+    case 'stale':
+      return { label: 'STALE', className: 'chip chip-amber', title: 'Last fix is older than the freshness threshold' };
+    case 'off_duty':
+      return { label: 'OFF DUTY', className: 'chip chip-neutral', title: 'Not currently Checked In' };
+    case 'no_fix':
+      return { label: 'NO FIX', className: 'chip chip-neutral', title: 'No location reported yet' };
   }
 }

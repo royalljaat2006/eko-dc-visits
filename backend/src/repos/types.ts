@@ -7,6 +7,7 @@ import type {
   CircleMembership,
   CspAssignment,
   CspChangeRequest,
+  DcLiveLocation,
   Device,
   LocationNode,
   StoredAttendanceEvent,
@@ -150,6 +151,13 @@ export interface Repos {
   listTrackPointsForDcDate(tenantId: TenantId, dcUserId: string, istDate: string): Promise<TrackPoint[]>;
   /** Batch: points per DC for one IST date, each list sorted by t. Keyed by dcUserId. */
   listTrackPointsForDcsDate(tenantId: TenantId, dcIds: readonly string[], istDate: string): Promise<Map<string, TrackPoint[]>>;
+
+  // live location — derived read projection (migration 008), not evidence.
+  // Upserted from the same track.chunk op already being processed; newest
+  // captured_at always wins, regardless of arrival order (C3 §3).
+  upsertDcLiveLocationIfNewer(loc: DcLiveLocation): Promise<void>;
+  /** Batch: latest known position per DC, for the DCs that have one. Keyed by dcUserId. */
+  listLiveLocationsForDcs(tenantId: TenantId, dcIds: "ALL" | ReadonlySet<string>): Promise<Map<string, DcLiveLocation>>;
 
   // evidence — append-only (no update methods, ever)
   insertCheckinEventIfAbsent(e: StoredCheckInEvent): Promise<void>;

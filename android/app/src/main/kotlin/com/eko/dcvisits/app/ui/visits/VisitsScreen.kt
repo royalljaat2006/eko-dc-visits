@@ -63,6 +63,7 @@ import com.eko.dcvisits.app.ui.components.GlassTag
 import com.eko.dcvisits.app.ui.components.GlowButton
 import com.eko.dcvisits.app.ui.components.dashedBorder
 import com.eko.dcvisits.app.ui.theme.EkoAmber
+import com.eko.dcvisits.app.ui.theme.EkoBlue
 import com.eko.dcvisits.app.ui.theme.EkoCyan
 import kotlin.math.roundToInt
 
@@ -109,8 +110,8 @@ fun VisitsScreen(vm: VisitsViewModel = viewModel()) {
         item {
             Entrance(index = 0) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Log a visit", style = MaterialTheme.typography.headlineSmall, color = Color.White)
-                    TextButton(onClick = { vm.refresh(context) }) { Text("Refresh", color = Color.White) }
+                    Text("Log a visit", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
+                    TextButton(onClick = { vm.refresh(context) }) { Text("Refresh", color = EkoBlue) }
                 }
             }
         }
@@ -127,14 +128,14 @@ fun VisitsScreen(vm: VisitsViewModel = viewModel()) {
                 Entrance(index = 2) {
                     GlassCard(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(msg, style = MaterialTheme.typography.bodyMedium, color = Color.White)
-                            TextButton(onClick = vm::clearMessage) { Text("OK", color = Color.White) }
+                            Text(msg, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                            TextButton(onClick = vm::clearMessage) { Text("OK", color = EkoBlue) }
                         }
                     }
                 }
             }
         }
-        if (ui.busy) item { CircularProgressIndicator(color = Color.White) }
+        if (ui.busy) item { CircularProgressIndicator(color = EkoBlue) }
 
         ui.awaitingPhotoFor?.let {
             item {
@@ -152,7 +153,7 @@ fun VisitsScreen(vm: VisitsViewModel = viewModel()) {
 
         item {
             Entrance(index = 4) {
-                Text("Tap a CSP to check in", style = MaterialTheme.typography.titleSmall, color = Color.White)
+                Text("Tap a CSP to check in", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onBackground)
             }
         }
         itemsIndexed(csps, key = { _, it -> it.cspLocationId }) { i, csp ->
@@ -193,7 +194,7 @@ private fun ActiveVisitCard(
                 Box(Modifier.size(7.dp).clip(CircleShape).background(EkoCyan))
                 Text("ACTIVE GEOFENCE", style = MaterialTheme.typography.labelSmall, color = EkoCyan)
             }
-            Text(cspCode, style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Text(cspCode, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
             Text(
                 "Checked in — add physical proofs, verify signage, then check out.",
                 style = MaterialTheme.typography.bodySmall,
@@ -201,7 +202,7 @@ private fun ActiveVisitCard(
             )
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Photos: ${captured.size}/${PHOTO_CATEGORIES.size}", style = MaterialTheme.typography.labelLarge, color = Color.White)
+                Text("Photos: ${captured.size}/${PHOTO_CATEGORIES.size}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
                 if (captured.size < PHOTO_CATEGORIES.size) {
                     GlassTag("Required", tint = EkoAmber)
                 } else {
@@ -268,7 +269,7 @@ private fun PhotoSlot(
                         .size(20.dp),
                 )
             } else {
-                Icon(Icons.Filled.CameraAlt, contentDescription = null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(26.dp))
+                Icon(Icons.Filled.CameraAlt, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(26.dp))
             }
         }
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -285,7 +286,7 @@ private fun CspRow(
     GlassCard(Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-                Text(csp.name, style = MaterialTheme.typography.titleMedium, color = Color.White, modifier = Modifier.weight(1f))
+                Text(csp.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
                 advisory?.let { adv ->
                     GlassTag(
                         text = distanceLabel(adv),

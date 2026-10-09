@@ -27,6 +27,22 @@ interface C2Api {
     @GET("dc/csp-details")
     suspend fun cspDetails(@Header("Authorization") bearer: String): Response<CspDetailsResponse>
 
+    @GET("dc/nearest-csp")
+    suspend fun nearestCsp(
+        @Header("Authorization") bearer: String,
+        @Query("lat") lat: Double? = null,
+        @Query("lng") lng: Double? = null,
+        @Query("accuracy_m") accuracyM: Double? = null,
+    ): Response<NearestCspResponse>
+
+    /** A DC's own route (their own id is always within their own scope — C6). */
+    @GET("dashboard/route-history")
+    suspend fun routeHistory(
+        @Header("Authorization") bearer: String,
+        @Query("date") date: String,
+        @Query("dc_user_id") dcUserId: String,
+    ): Response<RouteHistoryResponse>
+
     @GET("master-data/csp-assignments")
     suspend fun cspAssignments(@Header("Authorization") bearer: String): Response<CspAssignmentsResponse>
 

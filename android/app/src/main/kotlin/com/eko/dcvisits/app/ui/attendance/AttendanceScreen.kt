@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.NearMe
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
@@ -51,24 +52,35 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.content.Intent
+import android.net.Uri
 import com.eko.dcvisits.app.data.repo.DayState
 import com.eko.dcvisits.app.ui.components.Entrance
 import com.eko.dcvisits.app.ui.components.GhostGlassButton
 import com.eko.dcvisits.app.ui.components.GlassCard
+import com.eko.dcvisits.app.ui.components.GlassTag
 import com.eko.dcvisits.app.ui.components.GlowButton
+import com.eko.dcvisits.app.ui.components.GpsUnavailableBanner
+import com.eko.dcvisits.app.ui.components.NoEligibleCspBanner
+import com.eko.dcvisits.app.ui.components.PendingSyncBanner
 import com.eko.dcvisits.app.ui.components.ScreenContainer
 import com.eko.dcvisits.app.ui.components.SuccessCheck
 import com.eko.dcvisits.app.ui.components.glassChip
 import com.eko.dcvisits.app.ui.components.glassSurface
+import com.eko.dcvisits.app.ui.theme.EkoBlue
 import com.eko.dcvisits.app.ui.theme.EkoCyan
+import com.eko.dcvisits.app.ui.theme.EkoViolet
 import com.eko.dcvisits.app.util.Ist
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 @Composable
-fun AttendanceScreen(vm: AttendanceViewModel = viewModel()) {
+fun AttendanceScreen(vm: AttendanceViewModel = viewModel(), onNavigate: (String) -> Unit = {}) {
     val context = LocalContext.current
     val day by vm.dayState.collectAsStateWithLifecycle()
     val ui by vm.ui.collectAsStateWithLifecycle()
+    val assignedCount by vm.assignedCount.collectAsStateWithLifecycle()
+    val pendingSync by vm.pendingSync.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) { vm.refresh() }
 
@@ -94,7 +106,7 @@ fun AttendanceScreen(vm: AttendanceViewModel = viewModel()) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Entrance(index = 0) {
-                Text("Your day", style = MaterialTheme.typography.headlineSmall, color = Color.White)
+                Text("Home", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
             }
 
             if (day != DayState.NOT_STARTED) {
@@ -102,13 +114,13 @@ fun AttendanceScreen(vm: AttendanceViewModel = viewModel()) {
                     GlassCard(Modifier.fillMaxWidth(), cornerRadius = 18.dp, contentPadding = 12.dp) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Box(
-                                Modifier.size(28.dp).glassSurface(shape = CircleShape, tint = EkoCyan, fillAlphaTop = 0.35f, fillAlphaBottom = 0.15f),
+                                Modifier.size(28.dp).glassSurface(shape = CircleShape, tint = EkoCyan),
                                 contentAlignment = Alignment.Center,
                             ) { Icon(Icons.Filled.LockOpen, contentDescription = null, tint = EkoCyan, modifier = Modifier.size(16.dp)) }
                             Text(
-                                "Attendance active — Visits, CSP directory, and Scorecard unlocked.",
+                                "Attendance active — Visits, Navigate, My CSPs and Logi unlocked.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
                     }
@@ -128,12 +140,27 @@ fun AttendanceScreen(vm: AttendanceViewModel = viewModel()) {
                         loading = ui.busy,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    DayState.ON_DUTY -> GhostGlassButton(
-                        text = "End Day",
-                        onClick = { vm.endDay(context) },
-                        enabled = !ui.busy,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    DayState.ON_DUTY -> {
+                        var confirmEnd by remember { mutableStateOf(false) }
+                        GhostGlassButton(
+                            text = "End Day",
+                            onClick = { confirmEnd = true },
+                            enabled = !ui.busy,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        if (confirmEnd) {
+                            AlertDialog(
+                                onDismissRequest = { confirmEnd = false },
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                title = { Text("End today's day?") },
+                                text = { Text("Route tracking stops and today's hours/distance are finalized. You can still Resume if you end by mistake.") },
+                                confirmButton = {
+                                    TextButton(onClick = { confirmEnd = false; vm.endDay(context) }) { Text("End Day") }
+                                },
+                                dismissButton = { TextButton(onClick = { confirmEnd = false }) { Text("Cancel") } },
+                            )
+                        }
+                    }
                     DayState.ENDED -> {
                         var confirmResume by remember { mutableStateOf(false) }
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -169,6 +196,70 @@ fun AttendanceScreen(vm: AttendanceViewModel = viewModel()) {
                                     TextButton(onClick = { confirmResume = false }) { Text("Cancel") }
                                 },
                             )
+                        }
+                    }
+                }
+            }
+
+            if (day != DayState.NOT_STARTED) {
+                Entrance(index = 4) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        StatTile(Modifier.weight(1f), Icons.Filled.Place, "Assigned", "$assignedCount", "CSPs")
+                        StatTile(Modifier.weight(1f), Icons.Filled.LockOpen, "Visited today", "${ui.visitedTodayCount}", "of $assignedCount")
+                        StatTile(Modifier.weight(1f), Icons.Filled.Schedule, "Remaining", "${ui.remainingTodayCount}", "today")
+                    }
+                }
+                if (pendingSync > 0) {
+                    Entrance(index = 4) { PendingSyncBanner(pendingSync) }
+                }
+                Entrance(index = 4) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Recommended next stop", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onBackground)
+                        when {
+                            ui.recommendedState == "no_eligible_csp" -> NoEligibleCspBanner()
+                            ui.recommendedState == "no_fix" -> GpsUnavailableBanner()
+                            ui.recommended != null -> {
+                                val rec = ui.recommended!!
+                                GlassCard(Modifier.fillMaxWidth(), cornerRadius = 16.dp, contentPadding = 14.dp) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Text("★", color = EkoViolet)
+                                            Text(rec.name, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                                        }
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            rec.distance_m?.let { GlassTag(formatHomeDistance(it), tint = EkoCyan) }
+                                            GlassTag(rec.code, tint = EkoBlue)
+                                        }
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            GlowButton(text = "Navigate", onClick = {
+                                                val uri = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${rec.lat},${rec.lng}")
+                                                context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                                            })
+                                            GhostGlassButton(text = "My CSPs", onClick = { onNavigate("MY_CSPS") })
+                                        }
+                                    }
+                                }
+                            }
+                            ui.recommendedState == "loading" -> Text(
+                                "Finding your nearest CSP…",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            else -> Text(
+                                "Couldn't load a recommendation right now — check the Navigate tab.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                Entrance(index = 4) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Quick actions", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onBackground)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            GhostGlassButton(text = "Visits", onClick = { onNavigate("VISITS") })
+                            GhostGlassButton(text = "Navigate", onClick = { onNavigate("NAVIGATE") })
+                            GhostGlassButton(text = "Logi", onClick = { onNavigate("LOGI") })
                         }
                     }
                 }
@@ -233,7 +324,7 @@ fun AttendanceScreen(vm: AttendanceViewModel = viewModel()) {
                                 if (ui.locationOff) "  Location off — day recorded without a fix (that's allowed)."
                                 else "  Location logged (±${ui.lastFixAccuracyM?.toInt()} m)",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
                     }
@@ -242,7 +333,7 @@ fun AttendanceScreen(vm: AttendanceViewModel = viewModel()) {
 
             ui.message?.let {
                 Entrance(index = 7) {
-                    GlassCard(Modifier.fillMaxWidth()) { Text(it, color = Color.White) }
+                    GlassCard(Modifier.fillMaxWidth()) { Text(it, color = MaterialTheme.colorScheme.onSurface) }
                 }
             }
 
@@ -277,7 +368,7 @@ private fun StatusHero(day: DayState, busy: Boolean) {
                 DayState.ON_DUTY -> "On duty" to "Tracking your route"
                 DayState.ENDED -> "Day ended" to "See you tomorrow"
             }
-            Text(label, style = MaterialTheme.typography.headlineSmall, color = Color.White)
+            Text(label, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
             Text(sub, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -301,7 +392,7 @@ private fun PulsingRing(active: Boolean) {
             Modifier
                 .size(if (active) 96.dp * pulse else 96.dp)
                 .rotate(if (active) spin else 0f)
-                .glassSurface(shape = CircleShape, tint = if (active) EkoCyan else Color.White, fillAlphaTop = 0.28f, fillAlphaBottom = 0.1f, borderAlpha = 0.45f),
+                .glassSurface(shape = CircleShape, tint = if (active) EkoCyan else EkoBlue, solid = true),
         )
         Icon(
             if (active) Icons.Filled.Stop else Icons.Filled.PlayArrow,
@@ -326,8 +417,11 @@ private fun StatTile(
                 Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Icon(icon, contentDescription = null, tint = EkoCyan, modifier = Modifier.size(15.dp))
             }
-            Text(value, style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Text(value, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
             Text(caption, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
+
+private fun formatHomeDistance(m: Double): String =
+    if (m < 1000) "${m.roundToInt()} m away" else "${"%.1f".format(m / 1000)} km away"

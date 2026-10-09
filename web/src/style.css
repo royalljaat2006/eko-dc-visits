@@ -190,6 +190,41 @@ button:focus-visible {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
+
+/* ---- Live tracking (C2 v0.12.0) --------------------------------------- */
+.live-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+.live-map {
+  height: 520px;
+  margin: 0;
+}
+.live-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.live-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+}
+tr.row-selected td {
+  background: var(--eko-orange-soft);
+}
+@media (max-width: 820px) {
+  .live-layout {
+    grid-template-columns: 1fr;
+  }
+  .live-map {
+    height: 360px;
+  }
+}
 table.visits {
   border-collapse: separate;
   border-spacing: 0;

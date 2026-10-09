@@ -618,6 +618,58 @@ export async function listLocations(signal?: AbortSignal): Promise<LocationsResp
   })) as LocationsResponse;
 }
 
+/** C2 GET /dashboard/live-locations (v0.12.0). DC live tracking map feed, scoped server-side (C6). */
+export type LiveLocationState = 'no_fix' | 'off_duty' | 'stale' | 'live';
+export interface LiveLocationRow {
+  dc_user_id: string;
+  name: string;
+  on_duty: boolean;
+  state: LiveLocationState;
+  lat?: number;
+  lng?: number;
+  accuracy_m?: number | null;
+  captured_at?: string;
+}
+export interface LiveLocationsResponse {
+  items: LiveLocationRow[];
+}
+
+/** GET /dashboard/live-locations?stale_after_s= (default 60s on the server). */
+export async function listLiveLocations(staleAfterS?: number, signal?: AbortSignal): Promise<LiveLocationsResponse> {
+  const qs = staleAfterS !== undefined ? `?${new URLSearchParams({ stale_after_s: String(staleAfterS) }).toString()}` : '';
+  return (await request({
+    method: 'GET',
+    path: `/dashboard/live-locations${qs}`,
+    auth: true,
+    signal,
+  })) as LiveLocationsResponse;
+}
+
+/** C2 GET /dashboard/route-history (v0.12.0). One DC's raw GPS track for one IST date; scope-checked server-side. */
+export interface RouteHistoryPoint {
+  lat: number;
+  lng: number;
+  t: string;
+  accuracy_m?: number;
+  is_mock?: boolean;
+}
+export interface RouteHistoryResponse {
+  dc_user_id: string;
+  date: string;
+  points: RouteHistoryPoint[];
+}
+
+/** GET /dashboard/route-history?date=&dc_user_id= (403 if dc_user_id is outside the caller's scope). */
+export async function getRouteHistory(date: string, dcUserId: string, signal?: AbortSignal): Promise<RouteHistoryResponse> {
+  const qs = new URLSearchParams({ date, dc_user_id: dcUserId });
+  return (await request({
+    method: 'GET',
+    path: `/dashboard/route-history?${qs.toString()}`,
+    auth: true,
+    signal,
+  })) as RouteHistoryResponse;
+}
+
 /** POST /circle/csp-assignments/transfer (C2 v0.3.0). Circle Head only; server enforces circle guardrails. */
 export async function transferCsp(
   cspLocationId: string,

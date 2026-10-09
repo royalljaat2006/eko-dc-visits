@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Eko DC Visit Management API
-  version: 0.11.0
+  version: 0.12.0
   description: >
     Contract-first spec (M0 scope). Hand-written; code conforms to this, never the reverse.
     Server validates its own responses against this spec in test mode. All endpoints are
@@ -13,6 +13,7 @@ tags:
   - { name: master-data, description: Server→client delta pull (C3 §6) }
   - { name: sync, description: Evidence ingestion (C3) }
   - { name: dashboard, description: Role-scoped reads (C6) }
+  - { name: tracking, description: DC live location (derived from track.chunk evidence; never evidence itself, ADR-0003) + smart CSP navigation. Tracked only Check-In→End-Day. Distance is advisory straight-line (ADR-0004/0005), never driving distance/time. }
 paths:
   /auth/otp/request:
     post:
@@ -477,6 +478,53 @@ paths:
                         last_visit_date: { type: [string, 'null'], format: date, description: IST date of this DC's most recent check-in here }
                         csp_profile: { type: object, additionalProperties: { type: string } }
         '403': { $ref: '#/components/responses/Problem' }
+  /dc/nearest-csp:
+    get:
+      tags: [tracking]
+      operationId: getNearestCsp
+      summary: >
+        DC's nearest eligible CSP recommendation for Smart CSP Navigation. Eligibility
+        is always the caller's own active CspAssignment set (design 0001 §6), minus
+        CSPs already visited today — never a client-supplied list. DC-only (403 for
+        other roles). Opening navigation here never auto-completes a visit; check-in
+        still requires an actual visit.checkin sync op.
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: lat, in: query, schema: { type: number, minimum: -90, maximum: 90 }, description: Client-supplied current fix (preferred when present) }
+        - { name: lng, in: query, schema: { type: number, minimum: -180, maximum: 180 } }
+        - { name: accuracy_m, in: query, schema: { type: number, minimum: 0 } }
+      responses:
+        '200':
+          description: >
+            state reflects why a recommendation may be unavailable: inactive_session
+            (not Checked In today, i.e. no open attendance.start), no_eligible_csp
+            (every assigned CSP already visited today), no_fix (no query fix and no
+            stored live location yet), stale_gps (only a >10min-old stored fix is
+            available), ok (fresh fix, items sorted nearest-first).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state, items]
+                properties:
+                  state: { type: string, enum: [inactive_session, no_eligible_csp, no_fix, stale_gps, ok] }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [csp_location_id, code, name, lat, lng]
+                      properties:
+                        csp_location_id: { type: string, format: uuid }
+                        code: { type: string }
+                        name: { type: string }
+                        address: { type: string }
+                        lat: { type: number }
+                        lng: { type: number }
+                        coordinate_confidence: { type: string }
+                        last_visit_date: { type: [string, 'null'], format: date }
+                        distance_m: { type: [number, 'null'], description: Straight-line (haversine), same basis as the geofence check (ADR-0004); null when no fix is available }
+                        distance_basis: { type: [string, 'null'], enum: [straight_line, null], description: No routing provider is wired (ADR-0005) — never driving distance/time }
+        '403': { $ref: '#/components/responses/Problem' }
   /dc/csp-change-requests:
     post:
       tags: [master-data]
@@ -638,6 +686,79 @@ paths:
                         attendance: { type: string, enum: [NOT_STARTED, ON_DUTY, ENDED] }
                         visits_today: { type: integer }
                         km_today: { type: number, description: PROVISIONAL daily km (track_straightline_v0) }
+        '403': { $ref: '#/components/responses/Problem' }
+  /dashboard/live-locations:
+    get:
+      tags: [tracking, dashboard]
+      operationId: listLiveLocations
+      summary: >
+        Live map feed (Admin Portal): one row per DC in the caller's scope (C6),
+        with the freshest known position derived from track.chunk evidence (never
+        evidence itself — a pure, overwritable projection, ADR-0003). Polling, not
+        a push stream, consistent with the rest of this dashboard (10s poll on
+        /dashboard/visits).
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: stale_after_s, in: query, schema: { type: integer, minimum: 1, default: 60 }, description: Age threshold for the `stale` state }
+      responses:
+        '200':
+          description: state = no_fix (never reported a position) | off_duty (has a position, not currently On Duty) | stale (On Duty, last fix older than stale_after_s) | live
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [dc_user_id, name, on_duty, state]
+                      properties:
+                        dc_user_id: { type: string, format: uuid }
+                        name: { type: string }
+                        on_duty: { type: boolean }
+                        state: { type: string, enum: [no_fix, off_duty, stale, live] }
+                        lat: { type: number }
+                        lng: { type: number }
+                        accuracy_m: { type: [number, 'null'] }
+                        captured_at: { type: string, format: date-time, description: Device wall time of the freshest fix (absent when state is no_fix) }
+  /dashboard/route-history:
+    get:
+      tags: [tracking, dashboard]
+      operationId: getRouteHistory
+      summary: >
+        One DC's raw GPS track for one IST calendar date (bounded query backing the
+        Admin Portal's route-history view), read straight from track.chunk evidence
+        via the same path DC-side daily-km derivation uses. Scope-checked: the
+        caller's resolved Scope (C6/ADR-0006) must include dc_user_id, else 403.
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: date, in: query, required: true, schema: { type: string, format: date }, description: IST calendar date }
+        - { name: dc_user_id, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Points as stored (unsorted by this endpoint; sort by t client-side, matching the order-independent convergence invariant, C3 §3)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [dc_user_id, date, points]
+                properties:
+                  dc_user_id: { type: string, format: uuid }
+                  date: { type: string, format: date }
+                  points:
+                    type: array
+                    items:
+                      type: object
+                      required: [lat, lng, t]
+                      properties:
+                        lat: { type: number, minimum: -90, maximum: 90 }
+                        lng: { type: number, minimum: -180, maximum: 180 }
+                        t: { type: string, format: date-time }
+                        accuracy_m: { type: number, minimum: 0 }
+                        is_mock: { type: boolean }
+        '400': { $ref: '#/components/responses/Problem' }
         '403': { $ref: '#/components/responses/Problem' }
   /dashboard/scorecard:
     get:

@@ -65,3 +65,47 @@ test("track.chunk op: accepted, idempotent, km derivable per IST date", async ()
   assert.ok(kmForPoints(points) > 2);
   assert.equal((await repos.listTrackPointsForDcDate("eko", DC_ASHA, "2026-07-09")).length, 0, "IST date filter");
 });
+
+test("track.chunk also upserts the live-location projection — newest point wins, order-independent", async () => {
+  const repos = new MemoryRepos();
+  await seedFixtures(repos, { now: NOW });
+
+  const send = (id: string, points: TrackPoint[]) =>
+    applySyncBatch(
+      repos,
+      principal,
+      {
+        batch_id: `018f5a00-4444-7000-8000-${id}`,
+        device_id: DEVICE,
+        seq_from: 1,
+        seq_to: 1,
+        client_time: NOW.toISOString(),
+        app_version: "t",
+        contract_version: "0.7.0",
+        ops: [{
+          op_id: `018f5a00-4444-7000-8000-${id}`,
+          seq: 1,
+          type: "track.chunk",
+          payload: { id: `018f5a00-4444-7000-8000-${id}`, dc_user_id: DC_ASHA, device_id: DEVICE, points, timestamps: { device_wall_time: NOW.toISOString(), monotonic_ms: 1 } },
+        }],
+      },
+      clock,
+    );
+
+  await send("000000000001", [pt(0, 0), pt(0.01, 10)]); // newest so far: minute 10
+  let live = (await repos.listLiveLocationsForDcs("eko", new Set([DC_ASHA]))).get(DC_ASHA);
+  assert.equal(live?.captured_at, "2026-07-08T05:10:00Z");
+
+  // A late-arriving chunk with an OLDER point must not regress the projection.
+  await send("000000000002", [pt(0.005, 5)]); // minute 5 — older than what's stored
+  live = (await repos.listLiveLocationsForDcs("eko", new Set([DC_ASHA]))).get(DC_ASHA);
+  assert.equal(live?.captured_at, "2026-07-08T05:10:00Z", "older point must not overwrite the newer one");
+
+  // A genuinely newer point does advance it.
+  await send("000000000003", [pt(0.02, 20)]); // minute 20
+  live = (await repos.listLiveLocationsForDcs("eko", new Set([DC_ASHA]))).get(DC_ASHA);
+  assert.equal(live?.captured_at, "2026-07-08T05:20:00Z");
+  assert.equal(live?.lat, 25.38);
+
+  assert.equal((await repos.listLiveLocationsForDcs("eko", new Set(["no-such-dc"]))).size, 0);
+});

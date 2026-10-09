@@ -194,6 +194,22 @@ export interface StoredTrackChunk extends TrackChunk {
   timestamps: EvidenceTimestamps & { server_received_at: string };
 }
 
+/**
+ * Derived "where is this DC right now" projection — not evidence itself,
+ * just the newest point seen in any track_chunk for that DC (see migration
+ * 008). Overwritten in place; never append-only, never the source of truth.
+ */
+export interface DcLiveLocation {
+  tenant_id: TenantId;
+  dc_user_id: string;
+  device_id: string;
+  lat: number;
+  lng: number;
+  accuracy_m: number | null;
+  captured_at: string; // device wall time of the fix
+  server_received_at: string;
+}
+
 /** c1-entities/visit-photo.schema.json — append-only evidence (v0.9.0). */
 export type PhotoCategory = "SHOPFRONT" | "INSIDE" | "QR_DEVICE" | "BRANDING" | "OTHER";
 

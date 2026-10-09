@@ -11,6 +11,7 @@ import './style.css';
 import { clearSession, getSession, setUnauthorizedHandler, type Role } from './api/client.ts';
 import { renderLogin } from './views/login.ts';
 import { renderDayView } from './views/day.ts';
+import { renderLiveView } from './views/live.ts';
 import { renderAttendanceView } from './views/attendance.ts';
 import { renderWorkbenchView } from './views/workbench.ts';
 import { renderScorecardView } from './views/scorecard.ts';
@@ -20,7 +21,16 @@ import { renderApprovalsView } from './views/approvals.ts';
 import { isDayStarted } from './lib/gate.ts';
 import ekoLogo from './assets/eko-logo.jpeg';
 
-type Route = '#/login' | '#/day' | '#/attendance' | '#/csps' | '#/scorecard' | '#/overview' | '#/my-csps' | '#/approvals';
+type Route =
+  | '#/login'
+  | '#/day'
+  | '#/attendance'
+  | '#/csps'
+  | '#/scorecard'
+  | '#/overview'
+  | '#/my-csps'
+  | '#/approvals'
+  | '#/live';
 
 const app = document.querySelector<HTMLElement>('#app')!;
 let teardown: (() => void) | null = null;
@@ -33,15 +43,16 @@ function tabsFor(role: Role): Array<{ hash: Route; label: string }> {
   const overview = { hash: '#/overview' as const, label: 'Overview' };
   const myCsps = { hash: '#/my-csps' as const, label: 'My CSPs' };
   const approvals = { hash: '#/approvals' as const, label: 'Approvals' };
+  const live = { hash: '#/live' as const, label: 'Live Tracking' };
   switch (role) {
     case 'HR_ADMIN':
       return [attendance]; // C6: attendance-only visibility
     case 'CORPORATE_ADMIN':
-      return [overview, visits, attendance, csps, approvals, scorecard];
+      return [overview, visits, live, attendance, csps, approvals, scorecard];
     case 'NATIONAL_HEAD':
-      return [overview, visits, attendance, scorecard];
+      return [overview, visits, live, attendance, scorecard];
     case 'CIRCLE_HEAD':
-      return [attendance, visits, csps, approvals, scorecard];
+      return [attendance, visits, live, csps, approvals, scorecard];
     default:
       // Spec (DC): Attendance FIRST; everything else locked until day start.
       return [attendance, visits, myCsps, scorecard];
@@ -119,6 +130,8 @@ function route(): void {
     teardown = renderCspDetailsView(view);
   } else if (active === '#/approvals') {
     teardown = renderApprovalsView(view);
+  } else if (active === '#/live') {
+    teardown = renderLiveView(view);
   } else {
     teardown = renderDayView(view);
   }

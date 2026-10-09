@@ -42,6 +42,7 @@ import com.eko.dcvisits.app.ui.components.GlassCard
 import com.eko.dcvisits.app.ui.components.GlassTextField
 import com.eko.dcvisits.app.ui.components.GlowButton
 import com.eko.dcvisits.app.ui.components.glassSurface
+import com.eko.dcvisits.app.ui.theme.EkoBlue
 
 @Composable
 fun LoginScreen(
@@ -63,7 +64,7 @@ fun LoginScreen(
         ) {
             Entrance(index = 0) {
                 Box(
-                    Modifier.size(72.dp).glassSurface(shape = CircleShape, fillAlphaTop = 0.3f, fillAlphaBottom = 0.12f, borderAlpha = 0.4f),
+                    Modifier.size(72.dp).glassSurface(shape = CircleShape, tint = EkoBlue, solid = true),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(Icons.Filled.Bolt, contentDescription = null, tint = Color.White, modifier = Modifier.size(34.dp))
@@ -71,7 +72,7 @@ fun LoginScreen(
             }
             Entrance(index = 1) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Eko CSP Visits", style = MaterialTheme.typography.headlineSmall, color = Color.White)
+                    Text("Eko CSP Visits", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
                     Text(
                         "Sign in with your registered mobile number",
                         style = MaterialTheme.typography.bodyMedium,
@@ -134,7 +135,7 @@ fun LoginScreen(
                                         )
                                     }
                                     else -> {
-                                        Text("OTP sent to +91 ${s.phone}", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                                        Text("OTP sent to +91 ${s.phone}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                                         GlassTextField(
                                             value = s.otp,
                                             onValueChange = vm::onOtp,
@@ -160,13 +161,13 @@ fun LoginScreen(
                                             loading = s.loading,
                                             modifier = Modifier.fillMaxWidth(),
                                         )
-                                        TextButton(onClick = vm::back) { Text("Change number", color = Color.White) }
+                                        TextButton(onClick = vm::back) { Text("Change number", color = EkoBlue) }
                                     }
                                 }
                             }
                         }
 
-                        if (s.loading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                        if (s.loading) CircularProgressIndicator(color = EkoBlue, modifier = Modifier.size(20.dp))
                         s.error?.let {
                             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                         }

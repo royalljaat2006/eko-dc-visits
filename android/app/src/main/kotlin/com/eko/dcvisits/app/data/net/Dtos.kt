@@ -85,6 +85,45 @@ data class CspDetailDto(
 @Serializable
 data class CspDetailsResponse(val items: List<CspDetailDto> = emptyList())
 
+// ---- DC live tracking + smart CSP navigation (v0.12.0) -------------------
+
+@Serializable
+data class NearestCspItemDto(
+    val csp_location_id: String,
+    val code: String,
+    val name: String,
+    val address: String = "",
+    val lat: Double,
+    val lng: Double,
+    val coordinate_confidence: String = "UNVERIFIED",
+    val last_visit_date: String? = null,
+    /** Straight-line/haversine (ADR-0004); null only when the server had no fix to measure from. */
+    val distance_m: Double? = null,
+    val distance_basis: String? = null,
+)
+
+@Serializable
+data class NearestCspResponse(
+    val state: String,
+    val items: List<NearestCspItemDto> = emptyList(),
+)
+
+@Serializable
+data class RouteHistoryPointDto(
+    val lat: Double,
+    val lng: Double,
+    val t: String,
+    val accuracy_m: Double? = null,
+    val is_mock: Boolean? = null,
+)
+
+@Serializable
+data class RouteHistoryResponse(
+    val dc_user_id: String,
+    val date: String,
+    val points: List<RouteHistoryPointDto> = emptyList(),
+)
+
 @Serializable
 data class CspAssignmentDto(
     val id: String,

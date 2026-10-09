@@ -17,7 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
-import com.eko.dcvisits.app.ui.theme.EkoCyan
+import com.eko.dcvisits.app.ui.theme.EkoGreen
 
 /** A one-shot spring "pop" checkmark for confirmations (check-in, photo queued, decision applied). */
 @Composable
@@ -30,7 +30,7 @@ fun SuccessCheck(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.D
         modifier
             .size(size)
             .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
-            .glassSurface(shape = CircleShape, tint = EkoCyan, fillAlphaTop = 0.35f, fillAlphaBottom = 0.18f, borderAlpha = 0.5f),
+            .glassSurface(shape = CircleShape, tint = EkoGreen, solid = true),
         contentAlignment = Alignment.Center,
     ) {
         Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(size * 0.5f))
