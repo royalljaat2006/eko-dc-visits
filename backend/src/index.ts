@@ -1,14 +1,19 @@
 /**
- * Dev entrypoint. Storage selection per ADR-0009:
+ * Server entrypoint. Storage selection per ADR-0009:
  *   - DATABASE_URL set  → Postgres repos (run `npm run migrate` first)
- *   - otherwise         → in-memory repos, seeded from fixtures/nandpur
+ *   - otherwise         → EMPTY in-memory repos, local development only.
+ *
+ * There is no demo data: the server never seeds fixtures. Real data comes from
+ * the calling sheet / pilot roster (`npm run seed:calling-sheet`, `seed:pilot`),
+ * and for local development against it set CALLING_SHEET_CSV (below).
+ * In production (NODE_ENV=production) a database is mandatory — an in-memory
+ * store would silently lose data on restart.
  */
 import "dotenv/config"; // loads backend/.env if present — local dev only; no-op if it's missing
 // (never touches Vercel or the self-hosted container, which inject real env vars directly).
 // Must run before ./server.js — its module-level `loadEkoConfig()` reads process.env at import time.
 import { buildServer } from "./server.js";
 import { MemoryRepos } from "./repos/memory.js";
-import { seedFixtures } from "./seed/loader.js";
 import type { Repos } from "./repos/types.js";
 
 async function main(): Promise<void> {
@@ -16,11 +21,15 @@ async function main(): Promise<void> {
   if (process.env.DATABASE_URL) {
     const { PgRepos } = await import("./repos/pg.js");
     repos = new PgRepos(process.env.DATABASE_URL);
-    console.log("[backend] storage: postgres (DATABASE_URL set); seed with `npm run seed`");
+    console.log("[backend] storage: postgres (DATABASE_URL set)");
   } else {
+    if (process.env.NODE_ENV === "production") {
+      console.error("[backend] DATABASE_URL is required in production — refusing to start on an in-memory store");
+      process.exit(1);
+    }
     const mem = new MemoryRepos();
-    const seeded = await seedFixtures(mem);
     repos = mem;
+    console.log("[backend] storage: EMPTY in-memory store (local development; nothing persists)");
     // Local dev against the REAL calling sheet (personal data — keep the CSV
     // under pilot-data/, which is gitignored): CALLING_SHEET_CSV=path/to.csv
     if (process.env.CALLING_SHEET_CSV) {
@@ -32,10 +41,6 @@ async function main(): Promise<void> {
           `${s.circles} circles, ${s.assigned} assigned, ${s.skipped.length} skipped`,
       );
     }
-    console.log(
-      `[backend] storage: in-memory, seeded Nandpur fixtures (${seeded.locations.length} locations, ` +
-        `${seeded.users.length} users, beat plan for ${seeded.today})`,
-    );
   }
 
   const app = buildServer({ repos });

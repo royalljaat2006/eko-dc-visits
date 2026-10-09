@@ -37,16 +37,20 @@ evidence is append-only, judged by annotation, corrected by amendment, never edi
 
 ## Run locally (M0 walking skeleton)
 
-With Docker:
+There is no demo data. Real data comes from the calling sheet (gitignored `pilot-data/`).
+
 ```sh
-docker compose -f infra/docker-compose.yml up -d   # Postgres+PostGIS, MinIO
-cd backend && npm install && npm run migrate && npm run seed && npm run dev
-cd web && npm install && npm run dev               # AM dashboard on :5173
-node backend/tools/sync-sim/run.js                 # simulated DC device syncs a day
+docker compose -f infra/docker-compose.yml up -d   # Postgres+PostGIS
+cd backend && npm install && npm run migrate
+npm run seed:calling-sheet -- ../pilot-data/calling-sheet.csv   # CSPs, DCs, circles, assignments
+npm run user:create -- --name "Full Name" --phone 9XXXXXXXXX --role CORPORATE_ADMIN
+npm run dev
+cd web && npm install && npm run dev               # admin portal on :5173
 ```
 
-Without Docker (this repo's tests do this): the backend runs against an in-memory store
-implementing the same repository interfaces — `cd backend && npm install && npm test`.
+Without a database (`DATABASE_URL` unset) the backend starts EMPTY in memory — for
+development only; set `CALLING_SHEET_CSV=../pilot-data/calling-sheet.csv` to load the real sheet.
+Tests use synthetic fixtures in `backend/test/fixtures/` — `cd backend && npm install && npm test`.
 
 ## Full context
 
@@ -54,4 +58,4 @@ Read [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) first — history, doctrines, role
 
 ## Status
 
-M0 walking skeleton COMPLETE (backend + web + fixtures + sync simulator; Android lane deferred to a JDK-equipped machine — see android/README.md). Verified: 12 backend tests, 11 web tests, contracts:check, and the live sync-sim e2e story all green. Contract set: v0.1.0 (see `contracts/CHANGELOG.md`).
+Running in production on the R730 (self-hosted Docker stack) with real calling-sheet data. Backend 50 tests, web 12 tests, `contracts:check` green. Contract set v0.13.0 (see `contracts/CHANGELOG.md`).

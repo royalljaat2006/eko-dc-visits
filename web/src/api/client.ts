@@ -302,7 +302,7 @@ export function setUnauthorizedHandler(fn: () => void): void {
 // Endpoints (C2 operationIds)
 // ---------------------------------------------------------------------------
 
-/** POST /auth/otp/request → 204. Dev gateway stub always sends OTP 000000. */
+/** POST /auth/otp/request → 204. The OTP is sent by SMS to the registered number. */
 export async function requestOtp(phone: string): Promise<void> {
   await request({ method: 'POST', path: '/auth/otp/request', body: { phone } });
 }

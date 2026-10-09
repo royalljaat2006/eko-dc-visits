@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import type { FastifyInstance } from "fastify";
 import { buildServer, DEV_OTP } from "../src/server.js";
 import { MemoryRepos } from "../src/repos/memory.js";
-import { seedFixtures } from "../src/seed/loader.js";
+import { seedFixtures } from "./support/fixtures.js";
 import { istDateOf } from "../src/geo.js";
 import { deriveAttendance } from "../src/attendance.js";
 

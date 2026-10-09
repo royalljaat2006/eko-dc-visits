@@ -1,67 +1,34 @@
-# Pilot deployment (Vercel)
+# Production deployment (R730, self-hosted Docker)
 
-The site deploys as: static web (`web/dist`) + one serverless function
-(`api/index.js`, prebundled Fastify API with C1 schemas and fixtures inlined).
-`vercel.json` rewrites `/api/*` to the function and everything else to the SPA.
+Production runs on Eko's Dell PowerEdge R730 as the Docker stack in
+[`self-hosted/`](self-hosted/README.md): `postgres` (PostGIS) + `api`, bound to
+loopback, behind the server's single Nginx gateway (path-based route). Follow the
+R730 production-safe SOP for every change there: inspect → back up → one approved
+change at a time → verify → rollback plan.
 
-## One-time setup
+There is **no demo mode and no demo data**. The API refuses to start in production
+without `DATABASE_URL`, and refuses to start without a real OTP source (`EKO_*` SMS
+gateway vars, or `PILOT_OTP`) — the `000000` dev stub is local-development only.
+
+## Go-live checklist
+
+- [ ] `migrate` has run (`docker compose exec api npm run migrate`).
+- [ ] Real data loaded: `seed:calling-sheet` (CSPs, DCs, circles, assignments), then
+      `user:create` for the first admin (see `self-hosted/README.md`).
+- [ ] `JWT_SECRET` is a fresh random value; `PILOT_OTP` (if used) is a fresh value —
+      never one that appeared in git history.
+- [ ] Real SMS OTP (`EKO_*`) configured, and rate limiting verified.
+- [ ] DPDP: real staff GPS/attendance is personal data; hosting is India-resident (R730).
+- [ ] Backup taken before every change (`/home/deepanshu/backups/dc-visits/<timestamp>/`).
+
+## Updating
 
 ```sh
-npm i -g vercel
-vercel login                    # browser/email auth, once
+cd /home/deepanshu/Csp-Visit-Application
+git fetch https://github.com/royalljaat2006/eko-dc-visits.git main && git reset --hard FETCH_HEAD
+cd infra/self-hosted
+docker compose build api && docker compose up -d --no-deps api   # API only; postgres untouched
 ```
 
-## Deploy
-
-```sh
-cd eko-dc-visits
-npm install && npm run bundle:function   # regenerate api/index.js from backend/
-npm run build:web                        # web/dist
-vercel --prod --yes                      # first run creates+links the project
-```
-
-## Environment variables (Vercel dashboard → Settings → Environment Variables)
-
-| Var | Required | Purpose |
-|-----|----------|---------|
-| `JWT_SECRET` | YES before real users | Session token signing (random 32+ chars) |
-| `PILOT_OTP`  | until Eko is configured | Login OTP for enrolled pilot users (replaces dev 000000). Ignored once the four `EKO_*` vars below are all set |
-| `DATABASE_URL` | YES for the pilot | Postgres + PostGIS. Without it the API runs in **DEMO MODE**: seeded in-memory, resets on cold starts |
-| `EKO_DEVELOPER_KEY`, `EKO_ACCESS_KEY`, `EKO_INITIATOR_ID`, `EKO_USER_CODE` | for real SMS OTP | ekoicici product (`api.eko.in/ekoicici/v3`) — a LIVE, BILLED account; every Send OTP sends a real SMS at real cost. All four must be set together to switch on. `EKO_INITIATOR_ID`/`EKO_USER_CODE` are fixed account credentials, never a phone number; `csp_id`/`mobile` are the caller's own number, set per request |
-| `EKO_BASE_URL` | optional | Defaults to the UAT/staging host; set to Eko's production host once that account's KYC is approved |
-| `EKO_CSP_ID` | optional | Only if Eko's onboarding assigned one for this service |
-
-## Attaching a durable database (required for the weeks-long pilot)
-
-1. Create a free Postgres on [Neon](https://neon.tech) (or Vercel Marketplace →
-   Neon). Pick the **Singapore** region until an India region is available —
-   note the DPDP data-residency caveat below.
-2. Enable PostGIS + apply schema + seed from a trusted machine:
-   ```sh
-   cd backend
-   DATABASE_URL='postgres://…' npm run migrate
-   DATABASE_URL='postgres://…' npm run seed     # or load real pilot CSPs/users
-   ```
-3. Set `DATABASE_URL` on Vercel and redeploy (`vercel --prod`).
-
-## Pilot readiness checklist (from BUILD_PLAN)
-
-- [ ] `PILOT_OTP` + `JWT_SECRET` set (never run public with dev defaults)
-- [ ] Real pilot users/CSPs loaded (replace Nandpur fixtures with real data;
-      coordinates may start `UNVERIFIED` — first-visit capture bootstraps them)
-- [ ] **DPDP residency**: attendance/GPS of real staff is personal data. The
-      locked plan requires India-region hosting for production; a short pilot
-      on Singapore infra is a product-owner risk call — record it.
-- [ ] Backups: enable Neon PITR/branch snapshots
-- [x] Rate limiting (`@fastify/rate-limit`, 5/min OTP request, 10/min OTP verify)
-- [ ] Real SMS OTP before scaling beyond the pilot cohort — wired
-      (`backend/src/auth/eko.ts`), set the `EKO_*` vars above to switch it on
-
-## Production URL
-
-https://dc-visit-app.vercel.app (project domain; survives redeploys).
-
-## Netlify (previous attempt)
-
-Site `eko-dc-visits-pilot` was created but the account hit plan limits; the
-Netlify function/db scaffolding was removed in favor of this Vercel setup.
+Rollback: re-tag the saved image (`self-hosted-api:before-<timestamp>`) as `latest`
+and `up -d --no-deps api`; restore data from the backup's `db.sql` if needed.

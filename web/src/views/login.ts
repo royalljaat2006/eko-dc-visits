@@ -1,6 +1,6 @@
 /**
  * LOGIN screen: phone → OTP request → OTP verify (C2 /auth/otp/*).
- * Dev gateway stub always sends OTP 000000 (C2 requestOtp summary).
+ * OTP is delivered by the Eko SMS gateway (C2 requestOtp).
  */
 import { ApiError, requestOtp, verifyOtp } from '../api/client.ts';
 import ekoLogo from '../assets/eko-logo.jpeg';
@@ -23,14 +23,7 @@ export function renderLogin(root: HTMLElement, onLoggedIn: () => void): () => vo
             <input id="otp" name="otp" type="text" inputmode="numeric" maxlength="6"
                    placeholder="6-digit OTP" autocomplete="one-time-code" required />
           </label>
-          <p class="hint">Only registered pilot numbers can sign in. Dev/demo OTP: <code>000000</code>.</p>
-          <details class="hint">
-            <summary>Demo accounts</summary>
-            <p class="hint">
-              9800000004 Admin · 9800000005 National Head · 9800000003 Circle Head ·
-              9800000001 DC (Asha) · 9800000007 HR
-            </p>
-          </details>
+          <p class="hint">Only registered Eko numbers can sign in. An OTP is sent to your mobile.</p>
           <button id="verify-otp" type="submit" class="btn-primary">Verify &amp; sign in</button>
           <p id="login-status" class="status" role="status"></p>
           <p id="login-error" class="error" role="alert"></p>

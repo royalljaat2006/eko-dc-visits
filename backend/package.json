@@ -12,11 +12,10 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
     "migrate": "tsx scripts/migrate.ts",
-    "seed": "tsx scripts/seed.ts",
     "seed:pilot": "tsx scripts/seed-pilot.ts",
+    "user:create": "tsx scripts/create-user.ts",
     "seed:calling-sheet": "tsx scripts/seed-calling-sheet.ts",
-    "contracts:check": "tsx scripts/contracts-check.ts",
-    "sync-sim": "tsx tools/sync-sim/run.ts"
+    "contracts:check": "tsx scripts/contracts-check.ts"
   },
   "dependencies": {
     "@fastify/helmet": "^13.0.1",

@@ -25,7 +25,7 @@ certificate. Two ways to get that — pick one.
    cp .env.example .env      # edit: API_DOMAIN, POSTGRES_PASSWORD, JWT_SECRET, PILOT_OTP
    docker compose up -d --build
    docker compose exec api npm run migrate      # once — creates the schema
-   docker compose exec api npm run seed         # once — demo users, OR load your own (below)
+   # then load real data (below): seed:calling-sheet, seed:pilot, user:create
    ```
    Caddy fetches the TLS cert on first request. Check:
    `curl https://dcvisits.yourdomain.com/api/v1/master-data/locations` → 401 (means it's up).
@@ -51,15 +51,30 @@ Free, no open ports, Cloudflare gives the HTTPS cert.
 
 ---
 
-## Load your real users / CSPs (instead of the demo seed)
+## Load real users / CSPs
 
-`npm run seed` loads the fake "Nandpur" fixtures. Two ways to bring in real data:
+Nothing is seeded by default — there is no demo data. The database starts empty after `migrate`:
+
+**Calling sheet** (CSPs, their addresses, DCs by name + mobile, circles, assignments — in sheet order). Copy the CSV to a private folder on the server (`pilot-data/`, gitignored), then:
+
+```sh
+docker compose run --rm --no-deps -v "$PWD/../../pilot-data:/pilot-data:ro" api \
+  node --import tsx scripts/seed-calling-sheet.ts /pilot-data/calling-sheet.csv
+```
+
+Re-running converges (deterministic ids, insert-if-absent). CSP operators stay anonymous: their name/mobile/email are never read.
+
+**Admin / Circle Head / National Head / HR accounts** (nobody is seeded, so create the first admin yourself):
+
+```sh
+docker compose exec api npm run user:create -- --name "Full Name" --phone 9XXXXXXXXX --role CORPORATE_ADMIN
+```
 
 **Circle 1A85 pilot roster** (spec §7 — the 7 real DCs with their phones +
 per-user dashboard links, from `pilot-data/circle-1a85-roster.json` (gitignored)):
 
 ```sh
-docker compose exec api npm run seed:pilot   # Nandpur base + Circle 1A85 DCs
+docker compose exec api npm run seed:pilot   # Circle 1A85 DCs (needs pilot-data/circle-1a85-roster.json)
 ```
 
 Then, once the DC users exist, everything else is bulk-loadable from the
@@ -72,10 +87,8 @@ Circle Head user + CSPs first — see below):
 | Bulk CSP details | CSP master fields — address + §3.1 profile (dry-run diff, then commit) | `/circle/csp-details/import` |
 | Home locations | DC / CH `home_lat` / `home_lng` ("Excel sheet for Lat Long") | `/circle/home-locations/import` |
 
-**Everything else** (Banks, Circles, Circle Head users, the CSP Location tree
-with `coordinates` + `radius_m`): edit copies of the JSON under
-`fixtures/nandpur/` and point the loader at them, or `psql` rows in directly
-(schema is `backend/migrations/001…007`). Users need: `phone` (10 digits, the
+**Everything else** (Banks, Circle Head users, coordinates + `radius_m`): `user:create`, the workbench uploads, or `psql` rows directly
+(schema is `backend/migrations/001…`). Users need: `phone` (10 digits, the
 login id), `name`, `role` (`DC` / `CIRCLE_HEAD` / `NATIONAL_HEAD` / `HR_ADMIN` /
 `CORPORATE_ADMIN`), `status: ACTIVE`, optional `dashboard_url`.
 

@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import type { FastifyInstance } from "fastify";
 import { buildServer, DEV_OTP } from "../src/server.js";
 import { MemoryRepos } from "../src/repos/memory.js";
-import { seedFixtures } from "../src/seed/loader.js";
+import { seedFixtures } from "./support/fixtures.js";
 import { istDateOf } from "../src/geo.js";
 
 const PHONES = { asha: "9800000001", vikram: "9800000002", amPriya: "9800000003", admin: "9800000004", nationalHead: "9800000005", hr: "9800000007" };
@@ -166,7 +166,7 @@ test("C6 scoping over HTTP: Circle Head sees own circle DCs only; tenant-root se
     assert.equal(results[0]!.result, "accepted");
   }
 
-  // Circle Head Priya heads Nandpur Circle, whose only DC is asha; vikram is in Betwa Circle (fixtures/circle-memberships.json)
+  // Circle Head Priya heads Nandpur Circle, whose only DC is asha; vikram is in Betwa Circle (test/fixtures/circle-memberships.json)
   const am = await login(app, PHONES.amPriya);
   const amView = await app.inject({
     method: "GET",
@@ -225,7 +225,7 @@ test("csp-assignments delta pull (design 0001 §5): DC gets own; Circle Head get
   });
   assert.equal(ashaList.statusCode, 200);
   const ashaItems = (ashaList.json() as { items: Array<{ dc_user_id: string; csp_location_id: string; assigned_by_user_id: string }> }).items;
-  assert.equal(ashaItems.length, 5, "asha holds all 5 Nandpur CSPs (fixtures/csp-assignments.json)");
+  assert.equal(ashaItems.length, 5, "asha holds all 5 test-fixture CSPs (test/fixtures/csp-assignments.json)");
   assert.ok(ashaItems.every((a) => a.dc_user_id === asha.user_id));
 
   const ch = await login(app, PHONES.amPriya);
@@ -776,7 +776,7 @@ test("seedCircle1A85 (spec §7): roster DCs with phones + own dashboard_url, in 
 });
 
 // ---- DC live tracking + smart CSP navigation (new) -------------------------
-// Asha holds all 5 Nandpur CSPs (fixtures/nandpur/csp-assignments.json):
+// Asha holds all 5 Nandpur CSPs (test/fixtures/csp-assignments.json):
 const CSP_KISHANGANJ_CHOWK = "018f5a00-0000-7000-8000-000000000105"; // 25.3602, 85.7591
 const CSP_MAHUA_TOLA = "018f5a00-0000-7000-8000-000000000106"; // 25.3721, 85.7488
 const CSP_BANIYA_GHAT = "018f5a00-0000-7000-8000-000000000107"; // 25.2955, 85.8103

@@ -43,7 +43,7 @@ id) match, so arrival order and duplicate emits never change the result. Manual
 (DC taps "Check out") or `AUTO_GEOFENCE` (design 0001 §4 dwell-matcher exit).
 
 `visit.photo` (v0.9.0): metadata + the watermarked JPEG inline as base64 on tier T2 — an
-M1 interim so photos round-trip against the demo/no-object-store backend. The M2 hardening
+M1 interim so photos round-trip against the no-object-store backend. The M2 hardening
 splits it: metadata op in-batch, binary via pre-signed resumable upload (§7). The server
 re-hashes the bytes; a mismatch is `accepted-flagged` (`HASH_MISMATCH`), never rejected.
 

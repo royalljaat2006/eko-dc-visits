@@ -20,7 +20,7 @@ import {
   validateLocation,
   validateUser,
 } from "../src/validation/schemas.js";
-import { FIXTURES_DIR } from "../src/seed/loader.js";
+import { FIXTURES_DIR } from "../test/support/fixtures.js";
 import { IMPLEMENTED_ROUTES } from "../src/server.js";
 import type { ValidateFunction } from "ajv";
 

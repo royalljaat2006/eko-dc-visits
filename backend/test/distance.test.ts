@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { kmForPoints } from "../src/distance.js";
 import { MemoryRepos } from "../src/repos/memory.js";
-import { seedFixtures } from "../src/seed/loader.js";
+import { seedFixtures } from "./support/fixtures.js";
 import { applySyncBatch, type Clock } from "../src/sync/engine.js";
 import type { Principal, SyncBatch, TrackPoint } from "../src/domain/types.js";
 

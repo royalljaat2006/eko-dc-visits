@@ -51,13 +51,19 @@ export const DEV_OTP = "000000"; // C2: M0 stub gateway always sends '000000' in
  * a per-deployment secret distributed to enrolled pilot users out-of-band.
  * Superseded by the real Eko SMS-OTP gateway (below) once EKO_* env vars are set.
  */
-const OTP_CODE = process.env.PILOT_OTP ?? DEV_OTP;
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+// The 000000 dev stub exists for local development and tests only. In
+// production a real OTP source is mandatory (Eko SMS gateway or PILOT_OTP).
+const OTP_CODE = process.env.PILOT_OTP ?? (IS_PRODUCTION ? "" : DEV_OTP);
 /**
  * Real SMS OTP (Eko Mobile/OTP Verification API). null when EKO_DEVELOPER_KEY
  * / EKO_ACCESS_KEY / EKO_INITIATOR_ID aren't all set, in which case the routes
  * below fall back to OTP_CODE — same as every environment before this.
  */
 const EKO = loadEkoConfig();
+if (IS_PRODUCTION && !EKO && !OTP_CODE) {
+  throw new Error("Production needs a real OTP source: set EKO_* (SMS gateway) or PILOT_OTP — the 000000 dev stub is disabled");
+}
 const PHONE_PATTERN = /^[6-9][0-9]{9}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** Tenant a self-registered DC lands in — matches the seed fixtures' tenant so scoping stays consistent. */

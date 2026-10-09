@@ -13,8 +13,8 @@ npm run build      # tsc typecheck + vite build → dist/
 npm test           # node:test unit tests (IST formatting, chip mapping)
 ```
 
-Login: any 10-digit phone the backend knows; dev OTP is always `000000`
-(C2 `/auth/otp/request` stub gateway).
+Login: a 10-digit phone registered in the backend; the OTP arrives by SMS
+(C2 `/auth/otp/request`). Locally, without SMS keys, the backend's dev OTP applies.
 
 ## Screens
 

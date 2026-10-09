@@ -72,7 +72,7 @@ const eko = loadEkoConfigFromEnv();
 if (!eko) throw new Error("EKO_* env vars not set");
 
 // --- your "send OTP" endpoint ---
-const sent = await sendOtp(eko, "9800000001");
+const sent = await sendOtp(eko, "9XXXXXXXXX");
 if (!sent.ok) {
   // sent.reason is Eko's actual message — log it, don't swallow it
   throw new Error(sent.reason);
@@ -83,7 +83,7 @@ if (!sent.ok) {
 
 // --- your "verify OTP" endpoint, later, same phone number ---
 const clientRefId = /* looked up from wherever you stored it */;
-const verified = await verifyOtp(eko, "9800000001", otpFromUser, clientRefId);
+const verified = await verifyOtp(eko, "9XXXXXXXXX", otpFromUser, clientRefId);
 if (!verified.ok) {
   throw new Error(verified.reason);
 }

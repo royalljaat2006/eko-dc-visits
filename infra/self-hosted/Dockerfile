@@ -16,14 +16,13 @@ WORKDIR /app
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000
 
 COPY --from=deps /app/backend/node_modules ./backend/node_modules
-# Only the sources the server needs at runtime. Contracts + fixtures are
+# Only the sources the server needs at runtime. Contracts are
 # imported by the backend via JSON import attributes, so they must be present.
 COPY backend/src ./backend/src
 COPY backend/scripts ./backend/scripts
 COPY backend/migrations ./backend/migrations
 COPY backend/package.json ./backend/package.json
 COPY contracts ./contracts
-COPY fixtures ./fixtures
 
 EXPOSE 3000
 WORKDIR /app/backend

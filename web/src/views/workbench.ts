@@ -26,9 +26,9 @@ import {
 import { rowsFromSheetObjects, normalizePhone } from '../lib/importRows.ts';
 import { todayIstDate } from '../lib/format.ts';
 
-const TEMPLATE_CSV = 'csp_code,dc_phone\nCSP-ND-1001,9800000001\nCSP-ND-1002,9800000006\n';
-const DETAILS_TEMPLATE_CSV = 'csp_code,address,branch_name,mobile_number,population\nCSP-ND-1001,New Market Rd,Kishanganj Main,9876543210,4200\n';
-const HOME_TEMPLATE_CSV = 'phone,home_lat,home_lng\n9800000001,25.3602,85.7591\n';
+const TEMPLATE_CSV = 'csp_code,dc_phone\n1A850001,9XXXXXXXXX\n1A850002,9XXXXXXXXX\n';
+const DETAILS_TEMPLATE_CSV = 'csp_code,address,branch_name,mobile_number,population\n1A850001,Main Road,Branch name,9XXXXXXXXX,4200\n';
+const HOME_TEMPLATE_CSV = 'phone,home_lat,home_lng\n9XXXXXXXXX,25.0000,85.0000\n';
 
 /**
  * SheetJS (`xlsx`) is ~400 kB minified and only the Circle Head's bulk-upload

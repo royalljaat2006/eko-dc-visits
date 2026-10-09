@@ -8,7 +8,6 @@ web
 docs
 netlify_deploy
 .netlify
-.vercel
 **/.gradle
 **/*.apk
 **/*.aab

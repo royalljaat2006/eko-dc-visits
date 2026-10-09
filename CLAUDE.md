@@ -7,7 +7,6 @@ Architecture + locked decisions: `../BUILD_PLAN.md`. Designs: `docs/design/`, `d
 
 - `web/` — Vite + TS dashboard (Lane E). The real frontend.
 - `backend/` — Fastify + pg API core (Lanes A/B). The real backend.
-- `api/` — Vercel deploy shell. `api/index.js` is a **generated** esbuild bundle — never edit it; regenerate with `npm run bundle:function` after backend changes.
 - `contracts/` — versioned API contracts (contracts-first: change here before code).
 - `android/` — Kotlin native app (M1). 260 MB with build output — do not grep/scan it wholesale.
 
@@ -15,7 +14,8 @@ Architecture + locked decisions: `../BUILD_PLAN.md`. Designs: `docs/design/`, `d
 
 - web: `npm --prefix web run dev` · `build` · `typecheck` · `test`
 - backend: `cd backend && npm run dev` · `typecheck` · `test` · `migrate` · `seed:pilot` · `contracts:check`
-- deploy bundle: `npm run bundle:function` (root)
+- real data: `npm run seed:calling-sheet -- <csv>` · `seed:pilot` · `user:create` (all need `DATABASE_URL`)
+- production: R730 self-hosted Docker stack (`infra/self-hosted/`); there is **no demo data or demo mode** — test fixtures live only in `backend/test/`
 
 ## Doctrines (don't violate — see PROJECT_CONTEXT §3)
 
@@ -26,5 +26,5 @@ Architecture + locked decisions: `../BUILD_PLAN.md`. Designs: `docs/design/`, `d
 
 ## Token hygiene
 
-- Don't read: `node_modules/`, `android/` build output, `api/index.js`, `package-lock.json`.
+- Don't read: `node_modules/`, `android/` build output, `package-lock.json`, `pilot-data/` (real personal data, gitignored).
 - Prefer `typecheck` / targeted `node --test` files over full builds when checking work.

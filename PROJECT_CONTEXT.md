@@ -1,6 +1,6 @@
 # PROJECT CONTEXT — Eko DC Visit App
 
-**Last updated:** 2026-07-28 · **Live:** https://dc-visit-app.vercel.app · **Repo:** `eko-dc-visits/`
+**Last updated:** 2026-10-10 · **Runs on:** Eko R730 (self-hosted Docker, real calling-sheet data — no demo mode) · **Repo:** `eko-dc-visits/`
 
 This is the single onboarding document for the project: what it is, how it was
 designed, what exists, how it works, and what remains. A new engineer (or AI
@@ -52,8 +52,8 @@ already exist, see §10).
    from Ganesh Kumar / Circle 1A85): attendance-first DC navigation, 21:00 IST
    auto-checkout, CSP Details with Get Directions, DC-edit → CH approval
    workflow, per-user My Dashboard links. Implemented as contracts v0.8.0.
-6. Built incrementally with contracts-first discipline; deployed to Vercel;
-   renamed to **dc-visit-app.vercel.app**.
+6. Built incrementally with contracts-first discipline. Moved from a Vercel demo to
+   production on the R730; all demo data/mode was then removed (2026-10-10).
 
 ## 3. Core Doctrines (why the code looks the way it does)
 
@@ -89,16 +89,18 @@ already exist, see §10).
 Web app (Vite/TS SPA, Eko-branded, works on mobile browsers)
         │  /api/* (typed client only — raw fetch is banned outside client.ts)
         ▼
-Vercel serverless function  ←— api/index.js (PREBUNDLED Fastify app;
-        │                       C1 schemas + fixtures inlined, no fs deps)
+API (Fastify, Docker on the R730, loopback-bound, behind the server Nginx)
+        │
         ▼
 Storage (ADR-0009 repository pattern — same interface, two impls):
-  • MemoryRepos  — tests, local dev, and DEMO MODE on Vercel (no DATABASE_URL)
-  • PgRepos      — plain SQL, Postgres + PostGIS; migrations/001–005 ready
+  • PgRepos      — plain SQL, Postgres + PostGIS (production; migrations/ applied)
+  • MemoryRepos  — automated tests and an EMPTY local-dev store only. The server
+                   never seeds demo data; in production it refuses to start without
+                   DATABASE_URL.
 ```
 
 - **Backend:** Node 22 + TypeScript + Fastify. Auth: phone + OTP (dev stub
-  `000000`, overridden by `PILOT_OTP` env) → HS256 JWT + device registration.
+  real SMS via the Eko gateway, or `PILOT_OTP`; the `000000` stub is local-dev/tests only and disabled in production) → HS256 JWT + device registration.
   Authorization: ONE choke point (`src/scope.ts`) resolves tenant → role →
   visible DC/location sets; every scoped query takes that Scope object.
 - **Sync (C3):** batches of ops (`visit.checkin`, `attendance.start/end`,
@@ -121,12 +123,11 @@ Storage (ADR-0009 repository pattern — same interface, two impls):
 |------|-----------|
 | `../BUILD_PLAN.md` | The master plan (v1.2): decisions, lanes, milestones, risks, rulings |
 | `contracts/` | **The law.** C1 entity JSON Schemas · C2 `openapi.yaml` · C3 `PROTOCOL.md` · C6 `matrix.yaml` (incl. the closed hard-gate list) · C7 `KPIS.md` (formulas) · `CHANGELOG.md` (v0.1.0 → v0.8.0) |
-| `backend/` | Fastify API + sync engine + repos (memory/pg) + `migrations/001–005.sql` + `tools/sync-sim` (device-emulating e2e simulator) |
+| `backend/` | Fastify API + sync engine + repos (memory/pg) + `migrations/001–005.sql` |
 | `web/` | The SPA. `src/api/client.ts` (only network module) · `src/views/*` · `src/lib/*` |
 | `android/` | Kotlin `:core` (outbox + dwell matcher), `./gradlew :core:test` on JDK 17 |
-| `fixtures/nandpur/` | Synthetic demo universe: SBI bank, 2 circles, 9 locations, 7 users, assignments, beat plan |
-| `pilot-data/circle-1a85-roster.json` (gitignored) | REAL Circle 1A85 pilot DCs (spec §7) — **never seeded into the public demo**; pilot DB only |
-| `api/` | Vercel function: `_src/index.ts` → prebundled `index.js` (`npm run bundle:function`) |
+| `backend/test/fixtures/` | Synthetic TEST fixtures (invented people/places) used only by automated tests + `contracts:check`; never loaded by the server |
+| `pilot-data/circle-1a85-roster.json` (gitignored) | REAL Circle 1A85 pilot DCs (spec §7) — personal data: pilot DB only, never committed |
 | `docs/adr/` | ADRs 0001–0009 (locked decisions as records) |
 | `docs/design/` | 0001 circles/multibank · 0002 gamification |
 | `docs/specs/` | The CSP Visit Mobile App working draft (implemented) |
@@ -134,16 +135,16 @@ Storage (ADR-0009 repository pattern — same interface, two impls):
 
 ## 6. Roles & What Each Sees (C6-scoped, enforced server-side)
 
-| Role | Demo login | Tabs / capabilities |
-|------|-----------|---------------------|
-| **DC** | 9800000001 (Asha) | **Attendance first — other tabs LOCKED until Check-In** (spec). My-day card: ✅ Check In / 🌙 End Day (browser GPS optional, logged never gated). Visits (own, map). **My CSPs**: assigned list w/ address, last-visit date, distance-from-here, 🧭 Get Directions (Google Maps universal link), **Suggest edit** → pending approval. Scorecard w/ 📊 My Dashboard link (own card only). |
-| **Circle Head** | 9800000003 (Priya) | Own attendance (same flow). Circle-scoped: Visits, Attendance board (+ own row), **CSP Workbench** (single transfer + **Upload Excel** bulk assign w/ per-row accept/reject), **Approvals** (DC edits, old-vs-proposed side-by-side, approve applies / reject w/ reason), Scorecards. |
-| **National Head** | 9800000005 (Arjun) | Tenant-wide read: Overview cockpit, Visits, Attendance board (hours + provisional KM per DC), Scorecards. Cannot write evidence. |
-| **HR/Admin** | 9800000007 (Meena) | Attendance ONLY (PII minimisation — zero visit/photo visibility, tested). |
-| **Corporate Admin** | 9800000004 (Rekha) | Everything: Overview (attendance/visit/CSP-coverage rollups, per-circle + per-DC tables, per-bank counts), all tabs incl. Workbench + Approvals. |
+| Role | Tabs / capabilities |
+|------|---------------------|
+| **DC** | **Attendance first — other tabs LOCKED until Check-In** (spec). My-day card: ✅ Check In / 🌙 End Day (browser GPS optional, logged never gated). Visits (own, map). **My CSPs**: assigned list w/ address, last-visit date, distance-from-here, 🧭 Get Directions (Google Maps universal link), **Suggest edit** → pending approval. Scorecard w/ 📊 My Dashboard link (own card only). |
+| **Circle Head** | Own attendance (same flow). Circle-scoped: Visits, Attendance board (+ own row), **CSP Workbench** (single transfer + **Upload Excel** bulk assign w/ per-row accept/reject), **Approvals** (DC edits, old-vs-proposed side-by-side, approve applies / reject w/ reason), Scorecards. |
+| **National Head** | Tenant-wide read: Overview cockpit, Visits, Attendance board (hours + provisional KM per DC), Scorecards. Cannot write evidence. |
+| **HR/Admin** | Attendance ONLY (PII minimisation — zero visit/photo visibility, tested). |
+| **Corporate Admin** | Everything: Overview (attendance/visit/CSP-coverage rollups, per-circle + per-DC tables, per-bank counts), all tabs incl. Workbench + Approvals. |
 
-Other demo DCs: 9800000002 (Vikram, Betwa circle), 9800000006 (Manoj). OTP for
-all demo accounts: `000000` (demo only — see §9).
+Accounts are real: DCs come from the calling sheet (name + mobile); admin / Circle Head /
+National Head / HR accounts are created with `npm run user:create`.
 
 ## 7. Key Mechanics (quick reference)
 
@@ -175,27 +176,14 @@ all demo accounts: `000000` (demo only — see §9).
 
 ## 8. Deployment & Operations
 
-- **URL:** https://dc-visit-app.vercel.app (registered as a *project domain*
-  — survives redeploys). Vercel team `eko-kiosk-visit-app`, project
-  `eko-dc-visits`, SSO deployment-protection disabled.
-- **Deploy (from `eko-dc-visits/`):**
-  ```sh
-  npm install && npm run bundle:function && npm run build:web
-  vercel --prod --yes
-  ```
-- **DEMO MODE (current state):** no `DATABASE_URL` set → the function seeds
-  the Nandpur fixtures **in memory per serverless instance**. Data resets on
-  cold starts — expected, not a bug. Repopulate a demo day anytime:
-  `cd backend && BASE_URL=https://dc-visit-app.vercel.app/api/v1 npm run sync-sim`
-- **Go-pilot checklist** (details in `infra/DEPLOYMENT.md`):
-  1. Neon (or any Postgres+PostGIS): `npm run migrate` + load real CSPs/users
-     (incl. `pilot-data/circle-1a85-roster.json` (gitignored)), set `DATABASE_URL` on Vercel.
-  2. Set `PILOT_OTP` (replaces `000000`) and `JWT_SECRET`; redeploy.
-  3. Remove the demo-accounts hint from the login screen.
-  4. **DPDP note:** real staff GPS/attendance is personal data; the plan
-     requires India-resident hosting for production — a short pilot on
-     Singapore-region infra is a recorded product-owner risk call.
-  5. Real SMS OTP + rate limiting before scaling beyond the pilot cohort.
+- **Where:** Eko R730, Docker stack `infra/self-hosted/` (postgres+PostGIS + api, loopback `127.0.0.1:8210`),
+  behind the server's Nginx. Runbook, update + rollback: `infra/DEPLOYMENT.md`; data loading:
+  `infra/self-hosted/README.md`. Backups: `/home/deepanshu/backups/dc-visits/<timestamp>/`.
+- **No demo mode.** No demo seed, no demo accounts, no `000000` OTP in production. The real roster
+  and calling sheet live in the gitignored `pilot-data/` and are loaded with `seed:pilot` /
+  `seed:calling-sheet`.
+- **Go-live checklist:** see `infra/DEPLOYMENT.md` (real SMS OTP + rate limiting, fresh `JWT_SECRET`/`PILOT_OTP`,
+  India-resident hosting per DPDP).
 
 ## 9. Quality State (as of last commit)
 
@@ -206,7 +194,7 @@ all demo accounts: `000000` (demo only — see §9).
 - Android `:core`: **17/17 JVM tests** (outbox invariants, dwell scenarios).
 - `contracts:check` green (routes ⇄ spec both directions; fixtures ⇄ schemas).
 - Every feature was additionally **verified live in a browser** and the
-  production URL re-verified after each deploy (sync-sim e2e runs against it).
+  production re-verified after each deploy (health, DB counts, auth-gated routes).
 - CI (GitHub Actions config in `.github/workflows/ci.yml`) covers backend,
   contracts, web, android-core — note: repo has no GitHub remote yet.
 
@@ -214,13 +202,12 @@ all demo accounts: `000000` (demo only — see §9).
 
 **Done:** everything in §6–§7, Eko branding with the real logo, admin
 Overview cockpit, bulk Excel assignment, change-request approvals, gamified
-scorecards, daily-KM visibility, Vercel deployment + clean domain, the
+scorecards, daily-KM visibility, R730 production deployment on real data, the
 CSP-Visit-Mobile-App spec (v0.8.0) end to end.
 
 **Remaining (in rough priority order):**
-1. **Durable DB** — attach Neon Postgres and exit demo mode (blocker for the
-   real pilot; migrations are ready but PgRepos has never run against a live
-   DB — smoke-test migrate/seed/sync-sim against Neon before go-live).
+1. **Admin portal on the R730** — deploy the web build behind Nginx (`/dc-visits/`), create the first real admin
+   (`user:create`), and fill the 501 CSP addresses still blank in the calling sheet.
 2. **Android `:app` module** — wire the existing `:core` outbox + dwell
    matcher to Room persistence, foreground tracking service (Start→End Day
    only), CameraX + watermark photo pipeline (contracts C4 to be authored).

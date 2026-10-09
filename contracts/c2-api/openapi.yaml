@@ -19,7 +19,7 @@ paths:
     post:
       tags: [auth]
       operationId: requestOtp
-      summary: Request an enrollment OTP (M0 stub gateway always sends '000000' in dev)
+      summary: Request an enrollment OTP (SMS via the Eko gateway; the 000000 dev stub is local-development only and disabled in production)
       requestBody:
         required: true
         content:

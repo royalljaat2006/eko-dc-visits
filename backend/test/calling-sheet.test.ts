@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildServer, DEV_OTP } from "../src/server.js";
 import { MemoryRepos } from "../src/repos/memory.js";
-import { seedFixtures } from "../src/seed/loader.js";
+import { seedFixtures } from "./support/fixtures.js";
 import { normalizeDcPhone, parseCsv, seedCallingSheet } from "../src/seed/calling-sheet.js";
 
 // Row 0 is a banner row (as in the real export); header repeats "Calling Status".
