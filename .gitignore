@@ -19,3 +19,6 @@ infra/self-hosted/.env
 android/keystore/
 keystore.properties
 *.apk
+
+# Real calling-sheet exports (personal data) — never commit
+pilot-data/

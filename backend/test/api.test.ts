@@ -750,21 +750,29 @@ test("home-locations bulk import (v0.11.0): sets DC + own home; re-send unchange
   assert.equal(forbidden.statusCode, 403);
 });
 
-test("seedCircle1A85 (spec §7): 7 real DCs with phones + own dashboard_url, in Circle 1A85", async () => {
+test("seedCircle1A85 (spec §7): roster DCs with phones + own dashboard_url, in Circle 1A85 (synthetic roster)", async () => {
   const { seedCircle1A85 } = await import("../src/seed/loader.js");
   const { MemoryRepos } = await import("../src/repos/memory.js");
   const repos = new MemoryRepos();
-  const { circle, users } = await seedCircle1A85(repos);
+  // Synthetic: the real roster is personal data and lives in gitignored pilot-data/.
+  const roster = {
+    circle_name: "Circle 1A85",
+    dcs: [
+      { name: "Test Dc One", phone: "9000000001", dashboard_url: "https://example.test/d/1" },
+      { name: "Test Dc Two", phone: "9000000002", dashboard_url: "https://example.test/d/2" },
+    ],
+  };
+  const { circle, users } = await seedCircle1A85(repos, { roster });
 
   assert.equal(circle.name, "Circle 1A85");
-  assert.equal(users.length, 7);
-  const munna = users.find((u) => u.name === "Munna Pathak")!;
-  assert.equal(munna.phone, "9000000000");
-  assert.equal(munna.dashboard_url, "https://example.test/redacted");
-  assert.equal(munna.role, "DC");
+  assert.equal(users.length, 2);
+  const one = users.find((u) => u.name === "Test Dc One")!;
+  assert.equal(one.phone, "9000000001");
+  assert.equal(one.dashboard_url, "https://example.test/d/1");
+  assert.equal(one.role, "DC");
   // each DC resolves as their own login identity
-  const byPhone = await repos.findUserByPhone("9000000000");
-  assert.equal(byPhone?.name, "Vijay");
+  const byPhone = await repos.findUserByPhone("9000000002");
+  assert.equal(byPhone?.name, "Test Dc Two");
 });
 
 // ---- DC live tracking + smart CSP navigation (new) -------------------------

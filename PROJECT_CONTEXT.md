@@ -125,7 +125,7 @@ Storage (ADR-0009 repository pattern — same interface, two impls):
 | `web/` | The SPA. `src/api/client.ts` (only network module) · `src/views/*` · `src/lib/*` |
 | `android/` | Kotlin `:core` (outbox + dwell matcher), `./gradlew :core:test` on JDK 17 |
 | `fixtures/nandpur/` | Synthetic demo universe: SBI bank, 2 circles, 9 locations, 7 users, assignments, beat plan |
-| `fixtures/circle-1a85-roster.json` | REAL Circle 1A85 pilot DCs (spec §7) — **never seeded into the public demo**; pilot DB only |
+| `pilot-data/circle-1a85-roster.json` (gitignored) | REAL Circle 1A85 pilot DCs (spec §7) — **never seeded into the public demo**; pilot DB only |
 | `api/` | Vercel function: `_src/index.ts` → prebundled `index.js` (`npm run bundle:function`) |
 | `docs/adr/` | ADRs 0001–0009 (locked decisions as records) |
 | `docs/design/` | 0001 circles/multibank · 0002 gamification |
@@ -189,7 +189,7 @@ all demo accounts: `000000` (demo only — see §9).
   `cd backend && BASE_URL=https://dc-visit-app.vercel.app/api/v1 npm run sync-sim`
 - **Go-pilot checklist** (details in `infra/DEPLOYMENT.md`):
   1. Neon (or any Postgres+PostGIS): `npm run migrate` + load real CSPs/users
-     (incl. `fixtures/circle-1a85-roster.json`), set `DATABASE_URL` on Vercel.
+     (incl. `pilot-data/circle-1a85-roster.json` (gitignored)), set `DATABASE_URL` on Vercel.
   2. Set `PILOT_OTP` (replaces `000000`) and `JWT_SECRET`; redeploy.
   3. Remove the demo-accounts hint from the login screen.
   4. **DPDP note:** real staff GPS/attendance is personal data; the plan

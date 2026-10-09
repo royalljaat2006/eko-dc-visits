@@ -16,7 +16,6 @@ import circlesJson from "../../../fixtures/nandpur/circles.json" with { type: "j
 import membershipsJson from "../../../fixtures/nandpur/circle-memberships.json" with { type: "json" };
 import cspAssignmentsJson from "../../../fixtures/nandpur/csp-assignments.json" with { type: "json" };
 import beatPlansJson from "../../../fixtures/nandpur/beat-plans.json" with { type: "json" };
-import circle1a85Json from "../../../fixtures/circle-1a85-roster.json" with { type: "json" };
 import type { Bank, BeatPlan, Circle, CircleMembership, CspAssignment, LocationNode, User } from "../domain/types.js";
 import type { Repos } from "../repos/types.js";
 import { istDateOf } from "../geo.js";
@@ -75,6 +74,26 @@ export async function seedFixtures(repos: Repos, opts: SeedOptions = {}): Promis
   return { banks, locations, users, beatPlans, circles, circleMemberships, cspAssignments, today };
 }
 
+export interface PilotRoster {
+  circle_name: string;
+  dcs: Array<{ name: string; phone: string; dashboard_url: string }>;
+}
+
+/**
+ * Where the real roster lives. It holds real people's phones + dashboard links,
+ * so it is NEVER committed: pilot-data/ is gitignored. Override with
+ * PILOT_ROSTER_FILE. Shape: see PilotRoster.
+ */
+async function readPilotRoster(): Promise<PilotRoster> {
+  const { readFile } = await import("node:fs/promises");
+  const file = process.env.PILOT_ROSTER_FILE ?? path.resolve(HERE, "../../../pilot-data/circle-1a85-roster.json");
+  try {
+    return JSON.parse(await readFile(file, "utf8")) as PilotRoster;
+  } catch (e) {
+    throw new Error(`Pilot roster not readable at ${file} (set PILOT_ROSTER_FILE): ${(e as Error).message}`);
+  }
+}
+
 /**
  * The REAL Circle 1A85 pilot roster (spec §7 — Ganesh Kumar / Eko Bharat
  * Ventures): 7 DC users with their phones + per-user dashboard_url, in a
@@ -82,12 +101,16 @@ export async function seedFixtures(repos: Repos, opts: SeedOptions = {}): Promis
  * Load into the pilot DB only, after PILOT_OTP + JWT_SECRET are set:
  *   DATABASE_URL='postgres://…' npm run seed:pilot
  * CSPs, assignments, and the Circle Head come from real master data separately.
+ * The roster comes from pilot-data/ (gitignored) or `opts.roster` (tests pass a synthetic one).
  */
-export async function seedCircle1A85(repos: Repos, opts: SeedOptions = {}): Promise<{ circle: Circle; users: User[] }> {
+export async function seedCircle1A85(
+  repos: Repos,
+  opts: SeedOptions & { roster?: PilotRoster } = {},
+): Promise<{ circle: Circle; users: User[] }> {
   const now = opts.now ?? new Date();
   const today = istDateOf(now);
   const tenant_id = "eko";
-  const roster = circle1a85Json as { circle_name: string; dcs: Array<{ name: string; phone: string; dashboard_url: string }> };
+  const roster = opts.roster ?? (await readPilotRoster());
 
   // Stable ids so re-running converges (insert-if-absent in the repos).
   const circleId = "018f5a85-0000-7000-8000-0000000000c1";

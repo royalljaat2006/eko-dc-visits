@@ -56,7 +56,7 @@ Free, no open ports, Cloudflare gives the HTTPS cert.
 `npm run seed` loads the fake "Nandpur" fixtures. Two ways to bring in real data:
 
 **Circle 1A85 pilot roster** (spec §7 — the 7 real DCs with their phones +
-per-user dashboard links, from `fixtures/circle-1a85-roster.json`):
+per-user dashboard links, from `pilot-data/circle-1a85-roster.json` (gitignored)):
 
 ```sh
 docker compose exec api npm run seed:pilot   # Nandpur base + Circle 1A85 DCs

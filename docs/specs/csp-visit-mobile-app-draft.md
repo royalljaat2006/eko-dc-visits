@@ -566,27 +566,5 @@ Dashboard Links
 
 Source for the Scorecard "My Dashboard" link (Section 3). Each row's link must be shown only 
 to that DC when logged in. 
-DC Name 
-Mobile Number 
-Dashboard Link 
-Ajay 
-9000000000 
-https://example.test/redacted 
-Anil 
-9000000000 
-https://example.test/redacted 
-Ashutosh Pathak 
-9000000000 
-https://example.test/redacted 
-Balram 
-9000000000 
-https://example.test/redacted 
-Munna Pathak 
-9000000000 
-https://example.test/redacted 
-Ravi Shankar Kumar 
-9000000000 
-https://example.test/redacted 
-Vijay 
-9000000000 
-https://example.test/redacted
+
+_[Redacted before publishing: the table of DC names, mobile numbers and per-DC dashboard links (7 rows). The real roster is personal data and lives in the gitignored `pilot-data/circle-1a85-roster.json`.]_
