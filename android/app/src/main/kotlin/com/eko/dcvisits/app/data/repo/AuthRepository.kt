@@ -24,7 +24,7 @@ class AuthRepository(
 
     suspend fun current(): Session? = session.current()
 
-    /** POST /auth/otp/request — dev gateway stubs OTP 000000 (PILOT_OTP overrides). */
+    /** POST /auth/otp/request — the OTP is sent by SMS to the registered number. */
     suspend fun requestOtp(phone: String) {
         api.requestOtp(OtpRequestBody(phone)).let {
             if (!it.isSuccessful && it.code() != 204) it.bodyOrThrow()

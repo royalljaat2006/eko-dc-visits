@@ -2,7 +2,6 @@ package com.eko.dcvisits.app.ui.login
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.eko.dcvisits.app.BuildConfig
 import com.eko.dcvisits.app.data.net.ApiException
 import com.eko.dcvisits.app.di.ServiceLocator
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,9 +29,6 @@ data class LoginUiState(
 class LoginViewModel : ViewModel() {
     private val auth = ServiceLocator.authRepository
 
-    /** Debug builds skip the OTP screen (see build.gradle SKIP_OTP). */
-    val skipOtp: Boolean = BuildConfig.SKIP_OTP
-
     private val _state = MutableStateFlow(LoginUiState())
     val state: StateFlow<LoginUiState> = _state
 
@@ -48,21 +44,6 @@ class LoginViewModel : ViewModel() {
         viewModelScope.launch {
             runCatching { auth.requestOtp(s.phone) }
                 .onSuccess { _state.update { it.copy(loading = false, step = LoginUiState.Step.OTP) } }
-                .onFailure { e -> _state.update { it.copy(loading = false, error = e.readable()) } }
-        }
-    }
-
-    /** One-step login for testing: number only, dev-stub OTP sent for you. */
-    fun loginDirect(onSuccess: () -> Unit) {
-        val s = _state.value
-        if (!s.phoneValid || s.loading) return
-        _state.update { it.copy(loading = true, error = null) }
-        viewModelScope.launch {
-            runCatching {
-                auth.requestOtp(s.phone)
-                auth.verifyOtp(s.phone, "000000")
-            }
-                .onSuccess { _state.update { it.copy(loading = false) }; onSuccess() }
                 .onFailure { e -> _state.update { it.copy(loading = false, error = e.readable()) } }
         }
     }

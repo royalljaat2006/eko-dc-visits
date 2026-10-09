@@ -11,7 +11,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
- * Design 0001 §4 scenarios. Coordinates use the Nandpur fixture CSPs; metre
+ * Design 0001 §4 scenarios. Coordinates are synthetic CSP positions; metre
  * offsets are applied via latitude degrees (1e-5° ≈ 1.11 m).
  */
 class DwellMatcherTest {

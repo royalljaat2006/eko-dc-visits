@@ -12,24 +12,17 @@ plugins {
 //   1. -PapiBaseUrl=... on the Gradle command line
 //   2. api.base.url=... in local.properties
 //   3. debug  -> http://10.0.2.2:3000/api/v1/  (emulator -> host loopback)
-//      release -> https://dc-visit-app.vercel.app/api/v1/
+//      release -> NO default: -PapiBaseUrl (or api.base.url) is required, so a release
+//      build can never silently point at a wrong/legacy backend.
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
-fun apiBaseUrl(default: String): String =
+fun apiBaseUrl(default: String?): String =
     (project.findProperty("apiBaseUrl") as String?)
         ?: localProps.getProperty("api.base.url")
         ?: default
-
-// Same precedence, for the debug build's OTP-skip convenience: -PskipOtp=false
-// builds a debug (installable, auto-signed) APK that exercises the real
-// phone -> OTP screen -> verify flow against a backend, instead of the
-// number-only fast path. Useful for testing the Eko gateway end to end.
-fun skipOtpDefault(default: Boolean): Boolean =
-    (project.findProperty("skipOtp") as String?)?.toBooleanStrictOrNull()
-        ?: localProps.getProperty("skip.otp")?.toBooleanStrictOrNull()
-        ?: default
+        ?: throw GradleException("Set -PapiBaseUrl=<https://host/.../api/v1/> (or api.base.url in local.properties) for this build")
 
 // Release signing. Each value resolves from an environment variable first (how
 // CI injects secrets), then the matching key in local.properties. If no
@@ -78,18 +71,12 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             buildConfigField("String", "API_BASE_URL", "\"${apiBaseUrl("http://10.0.2.2:3000/api/v1/")}\"")
-            // Testing convenience: skip the OTP screen — enter a number and log
-            // straight in with the dev-stub OTP (000000). Only works against a
-            // backend without PILOT_OTP/Eko set. Override with -PskipOtp=false
-            // to test the real OTP screen. Release always keeps the real flow.
-            buildConfigField("boolean", "SKIP_OTP", "${skipOtpDefault(true)}")
         }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            buildConfigField("String", "API_BASE_URL", "\"${apiBaseUrl("https://dc-visit-app.vercel.app/api/v1/")}\"")
-            buildConfigField("boolean", "SKIP_OTP", "false")
+            buildConfigField("String", "API_BASE_URL", "\"${apiBaseUrl(null)}\"")
             if (hasReleaseKeystore) signingConfig = signingConfigs.getByName("release")
         }
     }

@@ -29,11 +29,10 @@ a bare JDK.
 export ANDROID_HOME=/path/to/Android/sdk
 ./gradlew :app:testDebugUnitTest :app:assembleDebug   # -> app/build/outputs/apk/debug/app-debug.apk
 # API base URL: -PapiBaseUrl=... , or api.base.url=... in local.properties.
-# Debug default http://10.0.2.2:3000/api/v1/  (emulator -> host; run `cd backend && npm run dev`).
+# Debug default http://10.0.2.2:3000/api/v1/ (emulator -> host; `cd backend && npm run dev`). Release has NO default: pass -PapiBaseUrl.
 ```
 
-`SKIP_OTP` (debug builds only, `BuildConfig`): number-only login, no OTP
-screen — testing convenience, off in release. See `LoginViewModel.skipOtp`.
+Login always uses the real phone → OTP flow (there is no skip-OTP shortcut).
 
 ### Release signing
 

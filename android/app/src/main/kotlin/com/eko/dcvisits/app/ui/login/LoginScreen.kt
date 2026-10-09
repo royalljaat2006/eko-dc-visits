@@ -85,7 +85,7 @@ fun LoginScreen(
                 GlassCard(Modifier.fillMaxWidth(), cornerRadius = 28.dp, contentPadding = 22.dp) {
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         AnimatedContent(
-                            targetState = if (vm.skipOtp) LoginUiState.Step.PHONE else s.step,
+                            targetState = s.step,
                             transitionSpec = {
                                 (slideInHorizontally(tween(280)) { it / 3 } + fadeIn(tween(280))) togetherWith
                                     (slideOutHorizontally(tween(200)) { -it / 3 } + fadeOut(tween(180)))
@@ -94,26 +94,6 @@ fun LoginScreen(
                         ) { step ->
                             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                                 when {
-                                    vm.skipOtp -> {
-                                        GlassTextField(
-                                            value = s.phone,
-                                            onValueChange = vm::onPhone,
-                                            label = "Mobile number",
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                                        )
-                                        GlowButton(
-                                            text = "Log in",
-                                            onClick = { vm.loginDirect(onSignedIn) },
-                                            enabled = s.phoneValid && !s.loading,
-                                            loading = s.loading,
-                                            modifier = Modifier.fillMaxWidth(),
-                                        )
-                                        Text(
-                                            "Testing build — no OTP. e.g. 9800000001 (Asha, DC), 9800000003 (Priya, Circle Head).",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
                                     step == LoginUiState.Step.PHONE -> {
                                         GlassTextField(
                                             value = s.phone,
@@ -129,7 +109,7 @@ fun LoginScreen(
                                             modifier = Modifier.fillMaxWidth(),
                                         )
                                         Text(
-                                            "Demo backend: fixture number (e.g. 9800000001 Asha, DC) with OTP 000000.",
+                                            "Use your registered Eko mobile number. An OTP is sent by SMS.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
