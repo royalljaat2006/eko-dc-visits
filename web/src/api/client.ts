@@ -217,7 +217,10 @@ function storeSession(s: Session): void {
 // Core request helper
 // ---------------------------------------------------------------------------
 
-const BASE = '/api/v1'; // C2 servers[0].url; vite dev-proxies /api → http://localhost:3000
+// C2 servers[0].url; vite dev-proxies /api → http://localhost:3000. Production
+// builds under a path-based deployment (e.g. nginx `/dc-visits-admin/` serving
+// this SPA while the API lives at `/dc-visits/`) override this via VITE_API_BASE.
+const BASE = import.meta.env.VITE_API_BASE ?? '/api/v1';
 
 function problemFromStatus(status: number, title: string): Problem {
   return { type: 'about:blank', title, status };

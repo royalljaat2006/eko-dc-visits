@@ -1,6 +1,11 @@
 import { defineConfig } from 'vite';
 
+// Path-based deployments (e.g. nginx serving this SPA at /dc-visits-admin/)
+// set BASE_PATH at build time; defaults to root for local dev/preview.
+const base = process.env.BASE_PATH ?? '/';
+
 export default defineConfig({
+  base,
   server: {
     port: 5173,
     proxy: {
