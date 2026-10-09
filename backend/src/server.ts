@@ -13,7 +13,7 @@ import { resolveScope } from "./scope.js";
 import { applySyncBatch, type Clock } from "./sync/engine.js";
 import { DEV_TOKEN_CONFIG, newRefreshToken, signAccessToken, verifyAccessToken, type TokenConfig } from "./auth/tokens.js";
 import { ekoSendOtp, ekoVerifyOtp, loadEkoConfig } from "./auth/eko.js";
-import { istDateOf } from "./geo.js";
+import { haversineMeters, istDateOf } from "./geo.js";
 import { computeScorecard } from "./scorecard.js";
 import { kmForPoints } from "./distance.js";
 import { deriveAttendance } from "./attendance.js";
@@ -35,7 +35,10 @@ export const IMPLEMENTED_ROUTES: ReadonlyArray<{ method: string; path: string }>
   { method: "get", path: "/dashboard/attendance" },
   { method: "get", path: "/dashboard/scorecard" },
   { method: "get", path: "/dashboard/overview" },
+  { method: "get", path: "/dashboard/live-locations" },
+  { method: "get", path: "/dashboard/route-history" },
   { method: "get", path: "/dc/csp-details" },
+  { method: "get", path: "/dc/nearest-csp" },
   { method: "post", path: "/dc/csp-change-requests" },
   { method: "get", path: "/circle/csp-change-requests" },
   { method: "post", path: "/circle/csp-change-requests/decide" },
@@ -808,6 +811,71 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         return reply.code(200).send({ items });
       });
 
+      // ---- DC nearest eligible CSP (live tracking + navigation) --------------
+      // Authority is the DC's own active assignments (design 0001 §6) — never
+      // a client-supplied list. Straight-line distance only (haversine, same
+      // basis as the geofence check, ADR-0004) — no routing provider is
+      // wired, so this is never represented as driving distance/time.
+      api.get("/dc/nearest-csp", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
+        const principal = req.principal!;
+        if (principal.role !== "DC") {
+          return problem(reply, 403, "Forbidden", "Nearest-CSP is the DC's own recommendation");
+        }
+        const today = istDateOf(clock());
+
+        const day = await repos.getAttendanceDay(principal.tenant_id, principal.user_id, today);
+        if (!day?.started_at || day.ended_at) {
+          return reply.code(200).send({ state: "inactive_session", items: [] });
+        }
+
+        const q = req.query as { lat?: string; lng?: string; accuracy_m?: string };
+        let fix: { lat: number; lng: number; accuracy_m: number | null } | null = null;
+        let fixIsFresh = false;
+        if (q.lat !== undefined && q.lng !== undefined && Number.isFinite(Number(q.lat)) && Number.isFinite(Number(q.lng))) {
+          fix = { lat: Number(q.lat), lng: Number(q.lng), accuracy_m: q.accuracy_m !== undefined ? Number(q.accuracy_m) : null };
+          fixIsFresh = true;
+        } else {
+          const live = (await repos.listLiveLocationsForDcs(principal.tenant_id, new Set([principal.user_id]))).get(principal.user_id);
+          if (live) {
+            fix = { lat: live.lat, lng: live.lng, accuracy_m: live.accuracy_m };
+            // A stored fix older than 10 minutes is too stale to recommend a direction from.
+            fixIsFresh = clock().getTime() - new Date(live.captured_at).getTime() <= 10 * 60 * 1000;
+          }
+        }
+
+        const [assignments, lastVisits] = await Promise.all([
+          repos.listActiveCspAssignments(principal.tenant_id, new Set([principal.user_id]), today),
+          repos.lastVisitDatesForDc(principal.tenant_id, principal.user_id),
+        ]);
+        const eligibleIds = assignments.map((a) => a.csp_location_id).filter((id) => lastVisits.get(id) !== today);
+        if (eligibleIds.length === 0) {
+          return reply.code(200).send({ state: "no_eligible_csp", items: [] });
+        }
+        const locations = await repos.listLocationsByIds(principal.tenant_id, eligibleIds);
+        const byId = new Map(locations.map((l) => [l.id, l]));
+
+        const items = eligibleIds
+          .map((id) => byId.get(id))
+          .filter((loc): loc is LocationNode => loc != null)
+          .map((loc) => ({
+            csp_location_id: loc.id,
+            code: loc.code,
+            name: loc.name,
+            address: loc.address ?? "",
+            lat: loc.coordinates.lat,
+            lng: loc.coordinates.lng,
+            coordinate_confidence: loc.coordinate_confidence,
+            last_visit_date: lastVisits.get(loc.id) ?? null,
+            distance_m: fix ? Math.round(haversineMeters(fix, loc.coordinates)) : null,
+            distance_basis: fix ? ("straight_line" as const) : null,
+          }));
+        if (fix) items.sort((a, b) => (a.distance_m ?? Infinity) - (b.distance_m ?? Infinity));
+
+        if (!fix) return reply.code(200).send({ state: "no_fix", items });
+        if (!fixIsFresh) return reply.code(200).send({ state: "stale_gps", items });
+        return reply.code(200).send({ state: "ok", items });
+      });
+
       // ---- DC change requests (C2 /dc/csp-change-requests, spec §3) ----------
       api.post("/dc/csp-change-requests", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
         const principal = req.principal!;
@@ -1048,6 +1116,63 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           return computeScorecard({ id: dc.id, name: dc.name }, visits, dayFor(q.date!), daysWithStart);
         });
         return reply.code(200).send({ formula_version: "dc_score_v1", items });
+      });
+
+      // ---- dashboard live locations (live tracking map) ----------------------
+      // Polling, not a push stream — same choice the rest of this dashboard
+      // already made (10s poll on /dashboard/visits) rather than adding a new
+      // real-time transport to the stack for one feature.
+      api.get("/dashboard/live-locations", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
+        const principal = req.principal!;
+        const q = req.query as { stale_after_s?: string };
+        const staleAfterMs = (Number(q.stale_after_s) > 0 ? Number(q.stale_after_s) : 60) * 1000;
+        const scope = await resolveScope(repos, principal, clock());
+        const today = istDateOf(clock());
+
+        const dcs = await repos.listDcUsers(scope.tenant_id, scope.dc_user_ids);
+        const dcIds = dcs.map((d) => d.id);
+        const [locations, attendance] = await Promise.all([
+          repos.listLiveLocationsForDcs(scope.tenant_id, scope.dc_user_ids),
+          repos.getAttendanceDaysForDcDates(scope.tenant_id, dcIds, [today]),
+        ]);
+
+        const now = clock().getTime();
+        const items = dcs.map((dc) => {
+          const day = attendance.get(`${dc.id}|${today}`) ?? null;
+          const on_duty = day?.started_at != null && day.ended_at == null;
+          const loc = locations.get(dc.id);
+          if (!loc) return { dc_user_id: dc.id, name: dc.name, on_duty, state: "no_fix" as const };
+          const stale = now - new Date(loc.captured_at).getTime() > staleAfterMs;
+          return {
+            dc_user_id: dc.id,
+            name: dc.name,
+            on_duty,
+            state: !on_duty ? ("off_duty" as const) : stale ? ("stale" as const) : ("live" as const),
+            lat: loc.lat,
+            lng: loc.lng,
+            accuracy_m: loc.accuracy_m,
+            captured_at: loc.captured_at,
+          };
+        });
+        return reply.code(200).send({ items });
+      });
+
+      // ---- dashboard route history (bounded, one DC, one IST date) -----------
+      api.get("/dashboard/route-history", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
+        const principal = req.principal!;
+        const q = req.query as { date?: string; dc_user_id?: string };
+        if (!q.date || !DATE_PATTERN.test(q.date)) {
+          return problem(reply, 400, "Bad Request", "date (YYYY-MM-DD, IST calendar date) is required");
+        }
+        if (!q.dc_user_id) {
+          return problem(reply, 400, "Bad Request", "dc_user_id is required");
+        }
+        const scope = await resolveScope(repos, principal, clock());
+        if (scope.dc_user_ids !== "ALL" && !scope.dc_user_ids.has(q.dc_user_id)) {
+          return problem(reply, 403, "Forbidden", "That DC is outside your scope");
+        }
+        const points = await repos.listTrackPointsForDcDate(scope.tenant_id, q.dc_user_id, q.date);
+        return reply.code(200).send({ dc_user_id: q.dc_user_id, date: q.date, points });
       });
 
       // ---- dashboard (C2 /dashboard/visits) ----------------------------------

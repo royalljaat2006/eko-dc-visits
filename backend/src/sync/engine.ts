@@ -147,6 +147,22 @@ async function applyNewOp(
     // Append-only raw evidence; daily km is derived at READ time from the full
     // sorted point set (src/distance.ts), so chunk arrival order is irrelevant.
     await repos.insertTrackChunkIfAbsent(stored);
+    // Derived live-position projection (migration 008) — newest point in this
+    // chunk, only applied if newer than whatever's already stored; never
+    // evidence itself, purely a read-optimization for the live map.
+    if (chunk.points.length > 0) {
+      const newest = chunk.points.reduce((a, b) => (b.t > a.t ? b : a));
+      await repos.upsertDcLiveLocationIfNewer({
+        tenant_id: tenant,
+        dc_user_id: chunk.dc_user_id,
+        device_id: chunk.device_id,
+        lat: newest.lat,
+        lng: newest.lng,
+        accuracy_m: newest.accuracy_m ?? null,
+        captured_at: newest.t,
+        server_received_at: stored.timestamps.server_received_at,
+      });
+    }
     return { op_id: opId, result: "accepted" };
   }
   if (opType === "visit.photo") {

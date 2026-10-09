@@ -7,6 +7,7 @@ import type {
   CircleMembership,
   CspAssignment,
   CspChangeRequest,
+  DcLiveLocation,
   Device,
   LocationNode,
   StoredAttendanceEvent,
@@ -50,6 +51,7 @@ export class MemoryRepos implements Repos {
   private checkinEvents = new Map<string, StoredCheckInEvent>();
   private attendanceEvents = new Map<string, StoredAttendanceEvent>();
   private trackChunks = new Map<string, StoredTrackChunk>();
+  private liveLocations = new Map<string, DcLiveLocation>(); // key tenant:dc
   private visitPhotos = new Map<string, StoredVisitPhoto>();
   private checkoutEvents = new Map<string, StoredCheckoutEvent>();
   private cspChangeRequests = new Map<string, CspChangeRequest>();
@@ -346,6 +348,21 @@ export class MemoryRepos implements Repos {
       out.set(c.dc_user_id, bucket);
     }
     for (const list of out.values()) list.sort((a, b) => a.t.localeCompare(b.t));
+    return out;
+  }
+
+  async upsertDcLiveLocationIfNewer(loc: DcLiveLocation): Promise<void> {
+    const k = this.key(loc.tenant_id, loc.dc_user_id);
+    const cur = this.liveLocations.get(k);
+    if (!cur || loc.captured_at > cur.captured_at) this.liveLocations.set(k, loc);
+  }
+  async listLiveLocationsForDcs(tenantId: TenantId, dcIds: "ALL" | ReadonlySet<string>): Promise<Map<string, DcLiveLocation>> {
+    const out = new Map<string, DcLiveLocation>();
+    for (const loc of this.liveLocations.values()) {
+      if (loc.tenant_id !== tenantId) continue;
+      if (dcIds !== "ALL" && !dcIds.has(loc.dc_user_id)) continue;
+      out.set(loc.dc_user_id, loc);
+    }
     return out;
   }
 

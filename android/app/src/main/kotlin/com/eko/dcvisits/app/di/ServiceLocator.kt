@@ -7,6 +7,7 @@ import com.eko.dcvisits.app.data.repo.ApprovalsRepository
 import com.eko.dcvisits.app.data.repo.AttendanceRepository
 import com.eko.dcvisits.app.data.repo.AuthRepository
 import com.eko.dcvisits.app.data.repo.CspRepository
+import com.eko.dcvisits.app.data.repo.NearestCspRepository
 import com.eko.dcvisits.app.data.repo.PhotoRepository
 import com.eko.dcvisits.app.data.repo.ScorecardRepository
 import com.eko.dcvisits.app.data.repo.VisitRepository
@@ -52,6 +53,10 @@ object ServiceLocator {
 
     val cspRepository: CspRepository by lazy {
         CspRepository(database.cspCacheDao(), sessionStore)
+    }
+
+    val nearestCspRepository: NearestCspRepository by lazy {
+        NearestCspRepository(sessionStore)
     }
 
     val attendanceRepository: AttendanceRepository by lazy {

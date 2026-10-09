@@ -4,12 +4,14 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eko.dcvisits.app.data.net.AttendanceRowDto
+import com.eko.dcvisits.app.data.net.NearestCspItemDto
 import com.eko.dcvisits.app.data.repo.DayState
 import com.eko.dcvisits.app.di.ServiceLocator
 import com.eko.dcvisits.app.ui.location.LocationProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -19,6 +21,10 @@ data class AttendanceUi(
     val message: String? = null,
     val lastFixAccuracyM: Double? = null,
     val locationOff: Boolean = false,
+    val visitedTodayCount: Int = 0,
+    val remainingTodayCount: Int = 0,
+    val recommended: NearestCspItemDto? = null,
+    val recommendedState: String = "loading",
 )
 
 class AttendanceViewModel : ViewModel() {
@@ -27,6 +33,12 @@ class AttendanceViewModel : ViewModel() {
     val dayState: StateFlow<DayState> =
         repo.localDayState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DayState.NOT_STARTED)
 
+    /** Home-dashboard counters (UI/UX pass) — read from the same sources every other screen uses. */
+    val assignedCount: StateFlow<Int> =
+        ServiceLocator.cspRepository.cspFlow.map { it.size }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    val pendingSync: StateFlow<Int> =
+        ServiceLocator.outboxRepository().pendingCount.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
     private val _ui = MutableStateFlow(AttendanceUi())
     val ui: StateFlow<AttendanceUi> = _ui
 
@@ -34,6 +46,24 @@ class AttendanceViewModel : ViewModel() {
         viewModelScope.launch {
             val summary = repo.serverSummary()
             _ui.value = _ui.value.copy(summary = summary)
+
+            val visits = ServiceLocator.visitRepository.todayVisits()
+            val assigned = assignedCount.value
+            val visitedToday = visits?.map { it.location_id }?.toSet()?.size ?: 0
+            _ui.value = _ui.value.copy(
+                visitedTodayCount = visitedToday,
+                remainingTodayCount = (assigned - visitedToday).coerceAtLeast(0),
+            )
+
+            val nearest = try {
+                ServiceLocator.nearestCspRepository.fetch()
+            } catch (_: Exception) {
+                null
+            }
+            _ui.value = _ui.value.copy(
+                recommended = nearest?.items?.firstOrNull(),
+                recommendedState = nearest?.state ?: "error",
+            )
         }
     }
 

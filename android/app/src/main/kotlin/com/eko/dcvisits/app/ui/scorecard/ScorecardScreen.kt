@@ -58,7 +58,7 @@ fun ScorecardScreen(vm: ScorecardViewModel = viewModel()) {
      ) {
         Entrance(index = 0) {
             Column {
-                Text("My scorecard", style = MaterialTheme.typography.headlineSmall, color = Color.White)
+                Text("My scorecard", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
                 Text(
                     "dc_score_v1 — transparent, never affects pay.",
                     style = MaterialTheme.typography.bodySmall,
@@ -67,7 +67,7 @@ fun ScorecardScreen(vm: ScorecardViewModel = viewModel()) {
             }
         }
 
-        if (ui.loading) CircularProgressIndicator(color = Color.White)
+        if (ui.loading) CircularProgressIndicator(color = EkoBlue)
 
         ui.card?.let { c ->
             Entrance(index = 1) {
@@ -83,7 +83,7 @@ fun ScorecardScreen(vm: ScorecardViewModel = viewModel()) {
                         }
                         Text(
                             "Visits ${c.visits_done}  ·  geo-verified ${c.geo_verified_visits}  ·  streak ${c.streak_days}d",
-                            color = Color.White.copy(alpha = 0.85f),
+                            color = MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         if (c.badges.isNotEmpty()) {
@@ -142,7 +142,7 @@ private fun ScoreRing(points: Int) {
     Box(Modifier.size(176.dp), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val stroke = Stroke(width = 14.dp.toPx(), cap = StrokeCap.Round)
-            drawArc(color = Color.White.copy(alpha = 0.12f), startAngle = -90f, sweepAngle = 360f, useCenter = false, style = stroke)
+            drawArc(color = Color.Black.copy(alpha = 0.08f), startAngle = -90f, sweepAngle = 360f, useCenter = false, style = stroke)
             drawArc(
                 brush = Brush.sweepGradient(listOf(EkoBlue, EkoCyan, EkoViolet, EkoBlue)),
                 startAngle = -90f,
@@ -152,7 +152,7 @@ private fun ScoreRing(points: Int) {
             )
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("${count.value.toInt()}", style = MaterialTheme.typography.headlineLarge, color = Color.White)
+            Text("${count.value.toInt()}", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onSurface)
             Text("points today", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

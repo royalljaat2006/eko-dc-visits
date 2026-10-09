@@ -41,11 +41,18 @@ import com.eko.dcvisits.app.ui.components.Entrance
 import com.eko.dcvisits.app.ui.components.GhostGlassButton
 import com.eko.dcvisits.app.ui.components.GlassCard
 import com.eko.dcvisits.app.ui.components.GlassTag
+import com.eko.dcvisits.app.ui.components.GlassTextField
 import com.eko.dcvisits.app.ui.components.GlowButton
 import com.eko.dcvisits.app.ui.components.ScreenContainer
 import com.eko.dcvisits.app.ui.theme.EkoAmber
+import com.eko.dcvisits.app.ui.theme.EkoBlue
 import com.eko.dcvisits.app.ui.theme.EkoCyan
+import com.eko.dcvisits.app.ui.theme.EkoGreen
+import com.eko.dcvisits.app.util.Ist
 import kotlin.math.roundToInt
+
+private enum class CspFilter(val label: String) { ALL("All"), PENDING("Pending today"), VISITED("Visited today") }
+private enum class CspSort(val label: String) { DISTANCE("Nearest first"), NAME("Name") }
 
 @Composable
 fun CspDetailsScreen(vm: CspDetailsViewModel = viewModel()) {
@@ -57,24 +64,65 @@ fun CspDetailsScreen(vm: CspDetailsViewModel = viewModel()) {
     LaunchedEffect(Unit) { vm.start(context) }
 
     var editing by remember { mutableStateOf<CspCacheEntity?>(null) }
+    var query by remember { mutableStateOf("") }
+    var filter by remember { mutableStateOf(CspFilter.ALL) }
+    var sort by remember { mutableStateOf(CspSort.DISTANCE) }
+
+    val today = remember { Ist.today() }
+    val visible = csps
+        .filter { c ->
+            (query.isBlank() || c.name.contains(query, ignoreCase = true) || c.code.contains(query, ignoreCase = true)) &&
+                when (filter) {
+                    CspFilter.ALL -> true
+                    CspFilter.VISITED -> c.lastVisitDate == today
+                    CspFilter.PENDING -> c.lastVisitDate != today
+                }
+        }
+        .let { list ->
+            when (sort) {
+                CspSort.NAME -> list.sortedBy { it.name }
+                CspSort.DISTANCE -> list.sortedBy { vm.distanceMeters(it) ?: Double.MAX_VALUE }
+            }
+        }
 
     ScreenContainer { pad ->
      LazyColumn(Modifier.fillMaxSize(), contentPadding = pad, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Entrance(index = 0) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("My CSPs (${csps.size})", style = MaterialTheme.typography.headlineSmall, color = Color.White)
-                    TextButton(onClick = { vm.refresh(context) }, enabled = !busy) { Text("Refresh", color = Color.White) }
+                    Text("My CSPs (${visible.size}/${csps.size})", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
+                    TextButton(onClick = { vm.refresh(context) }, enabled = !busy) { Text("Refresh", color = EkoBlue) }
+                }
+            }
+        }
+        item {
+            Entrance(index = 1) {
+                GlassTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = "Search by name or CSP code",
+                )
+            }
+        }
+        item {
+            Entrance(index = 2) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CspFilter.entries.forEach { f ->
+                            FilterChip(f.label, selected = filter == f, onClick = { filter = f })
+                        }
+                    }
+                    SortDropdown(sort = sort, onSelect = { sort = it })
                 }
             }
         }
         message?.let { msg ->
             item {
-                Entrance(index = 1) {
+                Entrance(index = 3) {
                     GlassCard(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(msg, style = MaterialTheme.typography.bodyMedium, color = Color.White)
-                            TextButton(onClick = vm::clearMessage) { Text("OK", color = Color.White) }
+                            Text(msg, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                            TextButton(onClick = vm::clearMessage) { Text("OK", color = EkoBlue) }
                         }
                     }
                 }
@@ -87,13 +135,18 @@ fun CspDetailsScreen(vm: CspDetailsViewModel = viewModel()) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        } else if (visible.isEmpty()) {
+            item {
+                Text("No CSPs match this search/filter.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
-        itemsIndexed(csps, key = { _, it -> it.cspLocationId }) { i, csp ->
-            Entrance(index = i + 2) {
+        itemsIndexed(visible, key = { _, it -> it.cspLocationId }) { i, csp ->
+            Entrance(index = i + 4) {
                 CspCard(
                     csp = csp,
                     distanceM = vm.distanceMeters(csp),
                     profile = vm.profileOf(csp),
+                    visitedToday = csp.lastVisitDate == today,
                     onDirections = {
                         val uri = Uri.parse(
                             "https://www.google.com/maps/dir/?api=1&destination=${csp.lat},${csp.lng}",
@@ -126,15 +179,20 @@ private fun CspCard(
     csp: CspCacheEntity,
     distanceM: Double?,
     profile: Map<String, String>,
+    visitedToday: Boolean,
     onDirections: () -> Unit,
     onSuggestEdit: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     GlassCard(Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(csp.name, style = MaterialTheme.typography.titleMedium, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GlassTag(if (visitedToday) "Visited today" else "Pending today", tint = if (visitedToday) EkoGreen else EkoAmber)
+                if (csp.coordinateConfidence == "UNVERIFIED") GlassTag("Coordinates unverified", tint = EkoAmber)
+            }
+            Text(csp.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(csp.code, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (csp.address.isNotBlank()) Text(csp.address, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
+            if (csp.address.isNotBlank()) Text(csp.address, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
                 "Lat ${"%.5f".format(csp.lat)}, Lng ${"%.5f".format(csp.lng)}  ·  ${csp.coordinateConfidence}",
                 style = MaterialTheme.typography.bodySmall,
@@ -155,7 +213,7 @@ private fun CspCard(
                             Text(
                                 "${k.replace('_', ' ').replaceFirstChar { c -> c.uppercase() }}: $v",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.85f),
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
                     }
@@ -165,6 +223,31 @@ private fun CspCard(
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GlowButton(text = "Get Directions", onClick = onDirections)
                 GhostGlassButton(text = "Suggest edit", onClick = onSuggestEdit)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    androidx.compose.material3.FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+    )
+}
+
+@Composable
+private fun SortDropdown(sort: CspSort, onSelect: (CspSort) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { expanded = true }) {
+            Text("Sort: ${sort.label}", color = EkoBlue)
+            Icon(Icons.Filled.ArrowDropDown, contentDescription = "Change sort", tint = EkoBlue)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            CspSort.entries.forEach { s ->
+                DropdownMenuItem(text = { Text(s.label) }, onClick = { onSelect(s); expanded = false })
             }
         }
     }

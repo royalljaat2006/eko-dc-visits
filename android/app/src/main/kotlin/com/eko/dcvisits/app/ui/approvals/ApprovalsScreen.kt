@@ -32,6 +32,7 @@ import com.eko.dcvisits.app.ui.components.GhostGlassButton
 import com.eko.dcvisits.app.ui.components.GlassCard
 import com.eko.dcvisits.app.ui.components.GlowButton
 import com.eko.dcvisits.app.ui.components.ScreenContainer
+import com.eko.dcvisits.app.ui.theme.EkoBlue
 
 @Composable
 fun ApprovalsScreen(vm: ApprovalsViewModel = viewModel()) {
@@ -45,8 +46,8 @@ fun ApprovalsScreen(vm: ApprovalsViewModel = viewModel()) {
         item {
             Entrance(index = 0) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Approvals (${ui.items.size})", style = MaterialTheme.typography.headlineSmall, color = Color.White)
-                    TextButton(onClick = vm::load) { Text("Refresh", color = Color.White) }
+                    Text("Approvals (${ui.items.size})", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
+                    TextButton(onClick = vm::load) { Text("Refresh", color = EkoBlue) }
                 }
             }
         }
@@ -55,14 +56,14 @@ fun ApprovalsScreen(vm: ApprovalsViewModel = viewModel()) {
                 Entrance(index = 1) {
                     GlassCard(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(msg, style = MaterialTheme.typography.bodyMedium, color = Color.White)
-                            TextButton(onClick = vm::clearMessage) { Text("OK", color = Color.White) }
+                            Text(msg, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                            TextButton(onClick = vm::clearMessage) { Text("OK", color = EkoBlue) }
                         }
                     }
                 }
             }
         }
-        if (ui.loading) item { CircularProgressIndicator(color = Color.White) }
+        if (ui.loading) item { CircularProgressIndicator(color = EkoBlue) }
         if (!ui.loading && ui.items.isEmpty()) {
             item { Text("Nothing pending in your circle.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
@@ -74,18 +75,18 @@ fun ApprovalsScreen(vm: ApprovalsViewModel = viewModel()) {
                         Text(
                             "${r.csp_name ?: r.csp_location_id} (${r.csp_code ?: "—"})",
                             style = MaterialTheme.typography.titleMedium,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
                             "Proposed by ${r.requested_by_name ?: "a DC"}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
+                        HorizontalDivider(color = Color.Black.copy(alpha = 0.08f))
                         r.changes.forEach { (field, ch) ->
                             val old = ch.old?.toString()?.trim('"') ?: "—"
                             val new = ch.new?.toString()?.trim('"') ?: "—"
-                            Text("$field:  $old  →  $new", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                            Text("$field:  $old  →  $new", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                         }
                         Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             GlowButton(text = "Approve", onClick = { vm.approve(r.id) })

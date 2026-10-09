@@ -19,6 +19,7 @@ import type {
   CircleMembership,
   CspAssignment,
   CspChangeRequest,
+  DcLiveLocation,
   Device,
   LocationNode,
   StoredAttendanceEvent,
@@ -635,6 +636,43 @@ export class PgRepos implements Repos {
       const bucket = out.get(dc) ?? [];
       bucket.push(r.point as TrackPoint);
       out.set(dc, bucket);
+    }
+    return out;
+  }
+
+  async upsertDcLiveLocationIfNewer(loc: DcLiveLocation): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO dc_live_location (tenant_id, dc_user_id, device_id, lat, lng, accuracy_m, captured_at, server_received_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (tenant_id, dc_user_id) DO UPDATE SET
+         device_id = excluded.device_id, lat = excluded.lat, lng = excluded.lng,
+         accuracy_m = excluded.accuracy_m, captured_at = excluded.captured_at,
+         server_received_at = excluded.server_received_at
+       WHERE excluded.captured_at > dc_live_location.captured_at`,
+      [loc.tenant_id, loc.dc_user_id, loc.device_id, loc.lat, loc.lng, loc.accuracy_m, loc.captured_at, loc.server_received_at],
+    );
+  }
+  async listLiveLocationsForDcs(tenantId: TenantId, dcIds: "ALL" | ReadonlySet<string>): Promise<Map<string, DcLiveLocation>> {
+    const values: unknown[] = [tenantId];
+    let sql = `SELECT * FROM dc_live_location WHERE tenant_id = $1`;
+    if (dcIds !== "ALL") {
+      if (dcIds.size === 0) return new Map();
+      values.push([...dcIds]);
+      sql += ` AND dc_user_id = ANY($${values.length}::uuid[])`;
+    }
+    const { rows } = await this.pool.query(sql, values);
+    const out = new Map<string, DcLiveLocation>();
+    for (const r of rows as Row[]) {
+      out.set(r.dc_user_id as string, {
+        tenant_id: r.tenant_id as string,
+        dc_user_id: r.dc_user_id as string,
+        device_id: r.device_id as string,
+        lat: r.lat as number,
+        lng: r.lng as number,
+        accuracy_m: (r.accuracy_m as number | null) ?? null,
+        captured_at: (r.captured_at as Date).toISOString(),
+        server_received_at: (r.server_received_at as Date).toISOString(),
+      });
     }
     return out;
   }

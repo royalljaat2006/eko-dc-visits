@@ -1,46 +1,46 @@
 package com.eko.dcvisits.app.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// A deep-space navy base — glass cards read best floating over something dark
-// and slightly saturated, the way iOS's frosted sheets sit over a wallpaper.
-val SpaceDeep = Color(0xFF0A0E1A)
-val SpaceMid = Color(0xFF121834)
-val EkoBlue = Color(0xFF3E8BFF)
-val EkoCyan = Color(0xFF5FE0D0)
-val EkoViolet = Color(0xFF8B6BFF)
-val EkoPink = Color(0xFFFF6FA5)
-val EkoAmber = Color(0xFFFFB454)
+// Light, high-contrast, neutral-background palette (field-readability pass).
+// Accent colours double as both text/icon tint on light surfaces AND button
+// fills with white text on top — every value below is dark/saturated enough
+// to clear WCAG AA (4.5:1) against white in both directions.
+val EkoBlue = Color(0xFF1D4ED8) // primary accent + CTA fill
+val EkoViolet = Color(0xFF6D28D9) // secondary accent
+val EkoCyan = Color(0xFF0E7490)
+val EkoPink = Color(0xFFBE185D)
+val EkoAmber = Color(0xFFB45309) // warning
+val EkoGreen = Color(0xFF15803D) // success / live
+val EkoRed = Color(0xFFB91C1C) // danger / error
 
-private val DarkColors = darkColorScheme(
+private val PageBackground = Color(0xFFF7F8FC)
+private val OnPageText = Color(0xFF14161B)
+private val SurfaceVariantLight = Color(0xFFEDEFF6)
+private val OnSurfaceVariantLight = Color(0xFF53586B)
+
+private val AppColors = lightColorScheme(
     primary = EkoBlue,
     onPrimary = Color.White,
-    secondary = EkoCyan,
-    tertiary = EkoAmber,
-    background = SpaceDeep,
-    onBackground = Color(0xFFF2F4FF),
-    surface = SpaceMid,
-    onSurface = Color(0xFFF2F4FF),
-    surfaceVariant = Color(0xFF1B2244),
-    onSurfaceVariant = Color(0xFFB6BEE0),
-    error = Color(0xFFFF6B6B),
-    outline = Color(0x33FFFFFF),
-)
-
-private val LightColors = lightColorScheme(
-    primary = EkoBlue,
     secondary = EkoViolet,
+    onSecondary = Color.White,
     tertiary = EkoAmber,
-    background = Color(0xFFEFF2FB),
+    onTertiary = Color.White,
+    background = PageBackground,
+    onBackground = OnPageText,
     surface = Color.White,
+    onSurface = OnPageText,
+    surfaceVariant = SurfaceVariantLight,
+    onSurfaceVariant = OnSurfaceVariantLight,
+    error = EkoRed,
+    onError = Color.White,
+    outline = Color(0x1F14161B),
 )
 
 private val Display = FontWeight.Bold
@@ -56,17 +56,15 @@ private val AppTypography = Typography().let { base ->
     )
 }
 
-/** True while the app is on the dark, glassy surface — screens use this to pick glass tints. */
+/**
+ * One deliberate look, regardless of system dark-mode: a light, neutral,
+ * high-contrast surface reads far better than a dark one in direct outdoor
+ * sunlight, which is the dominant use case for this app (field DC visits).
+ */
 @Composable
-fun isGlassDark(): Boolean = true // the whole app commits to the dark glass look, per design
-
-@Composable
-fun DcVisitsTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    content: @Composable () -> Unit,
-) {
+fun DcVisitsTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = DarkColors, // glass aesthetic is dark-first by design; see isGlassDark()
+        colorScheme = AppColors,
         typography = AppTypography,
         content = content,
     )

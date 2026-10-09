@@ -38,9 +38,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.RateReview
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -73,16 +75,22 @@ import com.eko.dcvisits.app.ui.components.LocalScreen
 import com.eko.dcvisits.app.ui.components.glassSurface
 import com.eko.dcvisits.app.ui.components.pressScale
 import com.eko.dcvisits.app.ui.csp.CspDetailsScreen
-import com.eko.dcvisits.app.ui.scorecard.ScorecardScreen
+import com.eko.dcvisits.app.ui.logi.LogiScreen
+import com.eko.dcvisits.app.ui.nearestcsp.NearestCspScreen
+import com.eko.dcvisits.app.ui.profile.ProfileScreen
+import com.eko.dcvisits.app.ui.theme.EkoBlue
 import com.eko.dcvisits.app.ui.visits.VisitsScreen
 import kotlinx.coroutines.launch
 
+/** Bottom-nav IA (UI/UX pass): Home, My CSPs, Navigate, Visits, Logi, Profile for a DC. */
 private enum class Tab(val label: String, val icon: ImageVector, val dcGated: Boolean) {
-    ATTENDANCE("Today", Icons.Filled.CheckCircle, dcGated = false),
+    HOME("Home", Icons.Filled.CheckCircle, dcGated = false),
+    MY_CSPS("My CSPs", Icons.Filled.Place, dcGated = true),
+    NAVIGATE("Navigate", Icons.Filled.Navigation, dcGated = true),
     VISITS("Visits", Icons.AutoMirrored.Filled.List, dcGated = true),
-    CSPS("My CSPs", Icons.Filled.Place, dcGated = true),
+    LOGI("Logi", Icons.Filled.Route, dcGated = true),
     APPROVALS("Approvals", Icons.Filled.RateReview, dcGated = false),
-    SCORECARD("Score", Icons.Filled.Star, dcGated = true),
+    PROFILE("Profile", Icons.Filled.Person, dcGated = false),
 }
 
 @Composable
@@ -107,12 +115,12 @@ fun MainScaffold(
 
     val role = session?.user?.role ?: "DC"
     val tabs = when (role) {
-        "DC" -> listOf(Tab.ATTENDANCE, Tab.VISITS, Tab.CSPS, Tab.SCORECARD)
-        "CIRCLE_HEAD" -> listOf(Tab.ATTENDANCE, Tab.APPROVALS, Tab.SCORECARD)
-        "CORPORATE_ADMIN" -> listOf(Tab.ATTENDANCE, Tab.APPROVALS)
-        else -> listOf(Tab.ATTENDANCE)
+        "DC" -> listOf(Tab.HOME, Tab.MY_CSPS, Tab.NAVIGATE, Tab.VISITS, Tab.LOGI, Tab.PROFILE)
+        "CIRCLE_HEAD" -> listOf(Tab.HOME, Tab.APPROVALS, Tab.PROFILE)
+        "CORPORATE_ADMIN" -> listOf(Tab.HOME, Tab.APPROVALS, Tab.PROFILE)
+        else -> listOf(Tab.HOME, Tab.PROFILE)
     }
-    var selected by rememberSaveable { mutableStateOf(Tab.ATTENDANCE) }
+    var selected by rememberSaveable { mutableStateOf(Tab.HOME) }
     val gated = role == "DC" && day == DayState.NOT_STARTED
 
     LaunchedEffect(role, day) {
@@ -129,12 +137,14 @@ fun MainScaffold(
                 label = "tab-content",
             ) { tab ->
                 when {
-                    tab != Tab.ATTENDANCE && role == "DC" && gated -> GateNotice()
-                    tab == Tab.ATTENDANCE -> AttendanceScreen(attendanceVm)
+                    tab != Tab.HOME && role == "DC" && gated -> GateNotice()
+                    tab == Tab.HOME -> AttendanceScreen(attendanceVm, onNavigate = { dest -> runCatching { Tab.valueOf(dest) }.getOrNull()?.let { selected = it } })
                     tab == Tab.VISITS -> VisitsScreen()
-                    tab == Tab.CSPS -> CspDetailsScreen()
+                    tab == Tab.MY_CSPS -> CspDetailsScreen()
+                    tab == Tab.NAVIGATE -> NearestCspScreen()
+                    tab == Tab.LOGI -> LogiScreen()
                     tab == Tab.APPROVALS -> ApprovalsScreen()
-                    tab == Tab.SCORECARD -> ScorecardScreen()
+                    tab == Tab.PROFILE -> ProfileScreen(role = role, onSignOut = onSignOut)
                     else -> AttendanceScreen(attendanceVm)
                 }
             }
@@ -171,7 +181,7 @@ private fun TopBar(name: String, role: String, onSignOut: () -> Unit, showAvatar
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f, fill = false)) {
-            Text(name, style = MaterialTheme.typography.titleLarge, color = Color.White, maxLines = 1)
+            Text(name, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground, maxLines = 1)
             Text(
                 role.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() },
                 style = MaterialTheme.typography.labelMedium,
@@ -183,11 +193,11 @@ private fun TopBar(name: String, role: String, onSignOut: () -> Unit, showAvatar
                 Modifier
                     .pressScale()
                     .size(40.dp)
-                    .glassSurface(shape = CircleShape, fillAlphaTop = 0.16f, fillAlphaBottom = 0.06f)
+                    .glassSurface(shape = CircleShape, tint = EkoBlue)
                     .clickable(onClick = onSignOut),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out", tint = Color.White, modifier = Modifier.size(18.dp))
+                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out", tint = EkoBlue, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -248,7 +258,7 @@ private fun SideGlassRail(
                     .clickable(onClick = onSignOut),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out", tint = Color.White, modifier = Modifier.size(18.dp))
+                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out", tint = EkoBlue, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -257,13 +267,13 @@ private fun SideGlassRail(
 @Composable
 private fun NavItem(tab: Tab, isSelected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val highlight by animateFloatAsState(if (isSelected) 1f else 0f, label = "navHighlight")
-    val tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.5f)
+    val tint = if (isSelected) EkoBlue else MaterialTheme.colorScheme.onSurfaceVariant
 
     Column(
         Modifier
             .pressScale()
             .clip(RoundedCornerShape(18.dp))
-            .background(Color.White.copy(alpha = 0.16f * highlight))
+            .background(EkoBlue.copy(alpha = 0.12f * highlight))
             .clickable(enabled = enabled, onClick = onClick)
             .alpha(if (enabled) 1f else 0.35f)
             .padding(horizontal = 12.dp, vertical = 9.dp),
@@ -273,7 +283,7 @@ private fun NavItem(tab: Tab, isSelected: Boolean, enabled: Boolean, onClick: ()
         AnimatedVisibility(visible = isSelected) {
             Text(
                 tab.label,
-                color = Color.White,
+                color = EkoBlue,
                 style = MaterialTheme.typography.labelSmall,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 3.dp),
@@ -288,7 +298,7 @@ private fun GateNotice() {
         Box(Modifier.glassSurface(shape = RoundedCornerShape(24.dp)).padding(24.dp)) {
             Text(
                 "Mark attendance (Check In) to unlock the other sections.",
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
             )

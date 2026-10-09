@@ -53,6 +53,26 @@
 - C2: attendance board rows + overview per-DC rows gain km_today
   (track_straightline_v0 — PROVISIONAL, never for reimbursement per C7/ADR-0005).
 
+## v0.12.0 — DC live tracking + smart CSP navigation
+
+- C2: 0.12.0; + GET /dc/nearest-csp (DC-only; recommends the nearest eligible
+  CSP from the caller's own active CspAssignment set, minus CSPs already
+  visited today — straight-line/haversine distance, same basis as the
+  geofence check, ADR-0004; no routing provider, ADR-0005; explicit states:
+  inactive_session, no_eligible_csp, no_fix, stale_gps, ok); + GET
+  /dashboard/live-locations (C6-scoped live map feed; states no_fix, off_duty,
+  stale, live; polling, matching the existing /dashboard/visits convention);
+  + GET /dashboard/route-history (bounded, one DC + one IST date, scope-checked).
+- No new evidence op, table, or schema: live location is a derived, overwritable
+  projection built from the existing track.chunk op (new table dc_live_location,
+  explicitly NOT evidence per ADR-0003 — track_chunks remains the source of
+  truth; newest-point-wins upsert, order-independent). Nearest-CSP and
+  route-history reuse existing CspAssignment/track-point repo methods verbatim.
+- Migration: 008_dc_live_location.sql.
+- Tracked only from a successful Check-In (attendance.start) until End Day
+  (attendance.end) — unchanged from the existing TrackingService behavior;
+  this slice only adds reads over data it already collected.
+
 ## v0.11.0 — close the spec's data gaps
 
 - C2: 0.11.0; + POST /circle/csp-details/import (Circle Head/admin bulk-update

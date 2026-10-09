@@ -17,7 +17,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shape
@@ -26,34 +25,38 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * The base frosted surface used everywhere: a soft vertical sheen, a hairline
- * light border, and a diffuse shadow — glass without needing a true backdrop
- * blur (there's nothing but the [AnimatedGlassBackground] behind it anyway).
+ * The base flat surface used everywhere: a solid fill, a hairline neutral
+ * border and a soft, low-elevation shadow. Deliberately NOT translucent —
+ * outdoor sunlight washes out low-contrast/translucent surfaces, so every
+ * card is a solid, high-contrast rectangle instead (field-readability pass).
+ * [tint] now controls a pale wash fill rather than a frosted gradient; pass
+ * [solid] = true for a fully-saturated fill (e.g. a status dot or badge).
  */
 fun Modifier.glassSurface(
-    shape: Shape = RoundedCornerShape(24.dp),
+    shape: Shape = RoundedCornerShape(16.dp),
     tint: Color = Color.White,
     fillAlphaTop: Float = 0.16f,
     fillAlphaBottom: Float = 0.05f,
     borderAlpha: Float = 0.28f,
+    solid: Boolean = false,
 ): Modifier = this
-    .shadow(elevation = 18.dp, shape = shape, ambientColor = Color.Black.copy(alpha = 0.5f), spotColor = Color.Black.copy(alpha = 0.5f))
+    .shadow(elevation = 2.dp, shape = shape, ambientColor = Color.Black.copy(alpha = 0.10f), spotColor = Color.Black.copy(alpha = 0.10f))
     .clip(shape)
     .background(
-        Brush.linearGradient(
-            colors = listOf(tint.copy(alpha = fillAlphaTop), tint.copy(alpha = fillAlphaBottom)),
-            start = Offset(0f, 0f),
-            end = Offset(0f, 400f),
-        ),
+        when {
+            solid -> tint
+            tint == Color.White -> Color.White
+            else -> tint.copy(alpha = (fillAlphaTop + fillAlphaBottom).coerceAtMost(1f))
+        },
     )
-    .border(1.dp, Brush.linearGradient(listOf(tint.copy(alpha = borderAlpha), tint.copy(alpha = borderAlpha * 0.3f))), shape)
+    .border(1.dp, Color.Black.copy(alpha = 0.06f), shape)
 
-/** A frosted card with inner padding — the default building block for every screen. */
+/** A flat card with inner padding — the default building block for every screen. */
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = 24.dp,
-    contentPadding: Dp = 18.dp,
+    cornerRadius: Dp = 16.dp,
+    contentPadding: Dp = 16.dp,
     tint: Color = Color.White,
     onClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
@@ -66,30 +69,32 @@ fun GlassCard(
     Box(base.padding(contentPadding), content = content)
 }
 
-/** Full-bleed glass panel (no inner padding) — for things like the bottom nav bar. */
+/** Full-bleed flat panel (no inner padding) — for things like the bottom nav bar. */
 @Composable
 fun GlassPanel(
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(28.dp),
+    shape: Shape = RoundedCornerShape(24.dp),
     content: @Composable BoxScope.() -> Unit,
 ) {
-    Box(modifier.glassSurface(shape = shape, fillAlphaTop = 0.22f, fillAlphaBottom = 0.10f), content = content)
+    Box(modifier.glassSurface(shape = shape), content = content)
 }
 
-/** A borderless glass chip — for tags/badges that shouldn't compete with cards. */
+/** A pale tinted chip background — for tags/badges that shouldn't compete with cards. */
 fun Modifier.glassChip(color: Color = Color.White): Modifier =
-    this.glassSurface(shape = RoundedCornerShape(50), tint = color, fillAlphaTop = 0.18f, fillAlphaBottom = 0.10f, borderAlpha = 0.3f)
+    this
+        .clip(RoundedCornerShape(50))
+        .background(color.copy(alpha = 0.12f))
 
 /** An empty-state affordance (e.g. an unfilled photo slot) — dashed instead of solid so it reads as "tap to fill." */
 fun Modifier.dashedBorder(
-    color: Color = Color.White.copy(alpha = 0.35f),
+    color: Color = Color.Black.copy(alpha = 0.25f),
     cornerRadius: Dp = 16.dp,
     strokeWidth: Dp = 1.5.dp,
     dash: Dp = 8.dp,
     gap: Dp = 6.dp,
 ): Modifier = this
     .clip(RoundedCornerShape(cornerRadius))
-    .background(Color.White.copy(alpha = 0.04f))
+    .background(Color.Black.copy(alpha = 0.03f))
     .drawWithContent {
         drawContent()
         val strokePx = strokeWidth.toPx()
