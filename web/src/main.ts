@@ -18,6 +18,7 @@ import { renderScorecardView } from './views/scorecard.ts';
 import { renderOverviewView } from './views/overview.ts';
 import { renderCspDetailsView } from './views/csp-details.ts';
 import { renderApprovalsView } from './views/approvals.ts';
+import { renderAllCspsView } from './views/all-csps.ts';
 import { isDayStarted } from './lib/gate.ts';
 import ekoLogo from './assets/eko-logo.jpeg';
 
@@ -30,6 +31,7 @@ type Route =
   | '#/overview'
   | '#/my-csps'
   | '#/approvals'
+  | '#/all-csps'
   | '#/live';
 
 const app = document.querySelector<HTMLElement>('#app')!;
@@ -44,15 +46,16 @@ function tabsFor(role: Role): Array<{ hash: Route; label: string }> {
   const myCsps = { hash: '#/my-csps' as const, label: 'My CSPs' };
   const approvals = { hash: '#/approvals' as const, label: 'Approvals' };
   const live = { hash: '#/live' as const, label: 'Live Tracking' };
+  const allCsps = { hash: '#/all-csps' as const, label: 'All CSPs' };
   switch (role) {
     case 'HR_ADMIN':
       return [attendance]; // C6: attendance-only visibility
     case 'CORPORATE_ADMIN':
-      return [overview, visits, live, attendance, csps, approvals, scorecard];
+      return [overview, visits, live, attendance, allCsps, csps, approvals, scorecard];
     case 'NATIONAL_HEAD':
-      return [overview, visits, live, attendance, scorecard];
+      return [overview, visits, live, attendance, allCsps, scorecard];
     case 'CIRCLE_HEAD':
-      return [attendance, visits, live, csps, approvals, scorecard];
+      return [attendance, visits, live, allCsps, csps, approvals, scorecard];
     default:
       // Spec (DC): Attendance FIRST; everything else locked until day start.
       return [attendance, visits, myCsps, scorecard];
@@ -130,6 +133,8 @@ function route(): void {
     teardown = renderCspDetailsView(view);
   } else if (active === '#/approvals') {
     teardown = renderApprovalsView(view);
+  } else if (active === '#/all-csps') {
+    teardown = renderAllCspsView(view);
   } else if (active === '#/live') {
     teardown = renderLiveView(view);
   } else {

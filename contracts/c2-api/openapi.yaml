@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Eko DC Visit Management API
-  version: 0.12.0
+  version: 0.13.0
   description: >
     Contract-first spec (M0 scope). Hand-written; code conforms to this, never the reverse.
     Server validates its own responses against this spec in test mode. All endpoints are
@@ -686,6 +686,45 @@ paths:
                         attendance: { type: string, enum: [NOT_STARTED, ON_DUTY, ENDED] }
                         visits_today: { type: integer }
                         km_today: { type: number, description: PROVISIONAL daily km (track_straightline_v0) }
+        '403': { $ref: '#/components/responses/Problem' }
+  /dashboard/csps:
+    get:
+      tags: [dashboard, master-data]
+      operationId: listDashboardCsps
+      summary: >
+        Admin Portal "All CSPs": every CSP in the caller's scope (C6), ordered as in
+        Eko's calling sheet (sheet_row ascending; CSPs not from the sheet come last,
+        by code). CSP operators are anonymous (the CSP code is the only identity);
+        the assigned DC is a named Eko official, so DC name + phone are returned.
+        CORPORATE_ADMIN, NATIONAL_HEAD (tenant-wide) and CIRCLE_HEAD (own circle);
+        403 for DC and HR_ADMIN.
+      security: [{ bearer: [] }]
+      responses:
+        '200':
+          description: One row per CSP. address is null until the sheet (or an approved DC edit) provides it.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [csp_location_id, code]
+                      properties:
+                        csp_location_id: { type: string, format: uuid }
+                        code: { type: string }
+                        address: { type: [string, 'null'] }
+                        district: { type: [string, 'null'] }
+                        state: { type: [string, 'null'] }
+                        circle: { type: [string, 'null'] }
+                        population: { type: [string, 'null'], description: Rural / Semi-urban / Urban as in the sheet }
+                        dc_user_id: { type: [string, 'null'], format: uuid }
+                        dc_name: { type: [string, 'null'] }
+                        dc_phone: { type: [string, 'null'] }
+                        sheet_row: { type: [integer, 'null'], description: 1-based data-row number in the calling sheet }
         '403': { $ref: '#/components/responses/Problem' }
   /dashboard/live-locations:
     get:

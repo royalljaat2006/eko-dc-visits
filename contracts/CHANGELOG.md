@@ -1,5 +1,13 @@
 # Contract set changelog
 
+## v0.13.0 — Admin Portal: All CSPs in calling-sheet order
+- C2: 0.13.0; + GET /dashboard/csps (CORPORATE_ADMIN / NATIONAL_HEAD / CIRCLE_HEAD;
+  403 for DC, HR_ADMIN). CSP code + address (null until provided) + district/state/
+  circle/population + assigned DC name/phone, ordered by `sheet_row`.
+- Data: CSP master is loaded from the calling sheet (`csp_profile.sheet_row`,
+  `csp_profile.circle`); CSP operators stay anonymous (name == CSP ID); DCs are
+  named Eko officials. No schema change — uses existing `csp_profile` map.
+
 ## v0.1.0 — M0 walking-skeleton scope
 - C1: common defs (uuidv7, triple timestamps, geoPoint), Location (+coordinate_confidence),
   User/Device, BeatPlanAssignment, CheckInEvent.
@@ -90,7 +98,7 @@
   `rbo_name`/`lho_name` from the CSP→Branch→RBO→LHO hierarchy when not
   explicitly overridden.
 - Seed: `npm run seed:pilot` loads the real Circle 1A85 roster
-  (fixtures/circle-1a85-roster.json — spec §7) into a "Circle 1A85": 7 DC users
+  (pilot-data/circle-1a85-roster.json (gitignored) — spec §7) into a "Circle 1A85": 7 DC users
   with their phones + per-user dashboard_url, DC memberships. Never in the
   public demo seed.
 

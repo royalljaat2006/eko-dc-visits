@@ -648,6 +648,24 @@ export async function listLiveLocations(staleAfterS?: number, signal?: AbortSign
   })) as LiveLocationsResponse;
 }
 
+/** C2 GET /dashboard/csps (v0.13.0). Admin "All CSPs" in calling-sheet order; CSP operators are anonymous, the DC is a named official. */
+export interface DashboardCspRow {
+  csp_location_id: string;
+  code: string;
+  address: string | null;
+  district: string | null;
+  state: string | null;
+  circle: string | null;
+  population: string | null;
+  dc_user_id: string | null;
+  dc_name: string | null;
+  dc_phone: string | null;
+  sheet_row: number | null;
+}
+export async function listDashboardCsps(signal?: AbortSignal): Promise<{ items: DashboardCspRow[] }> {
+  return (await request({ method: 'GET', path: '/dashboard/csps', auth: true, signal })) as { items: DashboardCspRow[] };
+}
+
 /** C2 GET /dashboard/route-history (v0.12.0). One DC's raw GPS track for one IST date; scope-checked server-side. */
 export interface RouteHistoryPoint {
   lat: number;

@@ -35,6 +35,7 @@ export const IMPLEMENTED_ROUTES: ReadonlyArray<{ method: string; path: string }>
   { method: "get", path: "/dashboard/attendance" },
   { method: "get", path: "/dashboard/scorecard" },
   { method: "get", path: "/dashboard/overview" },
+  { method: "get", path: "/dashboard/csps" },
   { method: "get", path: "/dashboard/live-locations" },
   { method: "get", path: "/dashboard/route-history" },
   { method: "get", path: "/dc/csp-details" },
@@ -1173,6 +1174,58 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         }
         const points = await repos.listTrackPointsForDcDate(scope.tenant_id, q.dc_user_id, q.date);
         return reply.code(200).send({ dc_user_id: q.dc_user_id, date: q.date, points });
+      });
+
+      // ---- admin portal: all CSPs, in calling-sheet order --------------------
+      // CSP operators are anonymous (name == CSP ID, no operator phone/email);
+      // the DC is a named Eko official, so DC name + phone are returned. HR
+      // gets nothing (PII minimisation, same as visits). Scoped via the choke point.
+      api.get("/dashboard/csps", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
+        const principal = req.principal!;
+        if (principal.role !== "CORPORATE_ADMIN" && principal.role !== "NATIONAL_HEAD" && principal.role !== "CIRCLE_HEAD") {
+          return problem(reply, 403, "Forbidden", "The CSP list is for admin, national head and circle head roles");
+        }
+        const scope = await resolveScope(repos, principal, clock());
+        const asOf = istDateOf(clock());
+        const [all, assignments, circles] = await Promise.all([
+          repos.listAllLocations(scope.tenant_id),
+          repos.listActiveCspAssignments(scope.tenant_id, scope.dc_user_ids, asOf),
+          repos.listCircles(scope.tenant_id),
+        ]);
+        const csps = all.filter(
+          (l) => l.type === "CSP" && (scope.location_ids === "ALL" || scope.location_ids.has(l.id)),
+        );
+        const assignmentByCsp = new Map(assignments.map((a) => [a.csp_location_id, a]));
+        const dcs = await repos.listUsersByIds(scope.tenant_id, [...new Set(assignments.map((a) => a.dc_user_id))]);
+        const dcById = new Map(dcs.map((u) => [u.id, u]));
+        const circleName = new Map(circles.map((c) => [c.id, c.name]));
+
+        const rowNo = (l: LocationNode): number => {
+          const n = Number(l.csp_profile?.sheet_row);
+          return Number.isFinite(n) && n > 0 ? n : Number.MAX_SAFE_INTEGER; // not from the sheet → after it
+        };
+        const items = csps
+          .map((l) => {
+            const a = assignmentByCsp.get(l.id);
+            const dc = a ? dcById.get(a.dc_user_id) : undefined;
+            return {
+              csp_location_id: l.id,
+              code: l.code,
+              address: l.address ?? null,
+              district: l.district ?? null,
+              state: l.state ?? null,
+              circle: (a ? circleName.get(a.circle_id) : undefined) ?? l.csp_profile?.circle ?? null,
+              population: l.csp_profile?.population ?? null,
+              dc_user_id: dc?.id ?? null,
+              dc_name: dc?.name ?? null,
+              dc_phone: dc?.phone ?? null,
+              sheet_row: l.csp_profile?.sheet_row ? Number(l.csp_profile.sheet_row) : null,
+              _order: rowNo(l),
+            };
+          })
+          .sort((x, y) => x._order - y._order || x.code.localeCompare(y.code))
+          .map(({ _order: _unused, ...row }) => row);
+        return reply.code(200).send({ items });
       });
 
       // ---- dashboard (C2 /dashboard/visits) ----------------------------------

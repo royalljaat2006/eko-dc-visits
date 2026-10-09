@@ -21,6 +21,17 @@ async function main(): Promise<void> {
     const mem = new MemoryRepos();
     const seeded = await seedFixtures(mem);
     repos = mem;
+    // Local dev against the REAL calling sheet (personal data — keep the CSV
+    // under pilot-data/, which is gitignored): CALLING_SHEET_CSV=path/to.csv
+    if (process.env.CALLING_SHEET_CSV) {
+      const { readFile } = await import("node:fs/promises");
+      const { seedCallingSheet } = await import("./seed/calling-sheet.js");
+      const s = await seedCallingSheet(mem, await readFile(process.env.CALLING_SHEET_CSV, "utf8"));
+      console.log(
+        `[backend] calling sheet: ${s.csps} CSPs (${s.with_address} with address), ${s.dcs} DCs, ` +
+          `${s.circles} circles, ${s.assigned} assigned, ${s.skipped.length} skipped`,
+      );
+    }
     console.log(
       `[backend] storage: in-memory, seeded Nandpur fixtures (${seeded.locations.length} locations, ` +
         `${seeded.users.length} users, beat plan for ${seeded.today})`,
