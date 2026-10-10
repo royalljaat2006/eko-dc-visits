@@ -70,6 +70,7 @@ import com.eko.dcvisits.app.ui.components.glassSurface
 import com.eko.dcvisits.app.ui.theme.EkoBlue
 import com.eko.dcvisits.app.ui.theme.EkoCyan
 import com.eko.dcvisits.app.ui.theme.EkoViolet
+import com.eko.dcvisits.app.ui.location.rememberLocationAsker
 import com.eko.dcvisits.app.util.Ist
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
@@ -77,6 +78,7 @@ import kotlin.math.roundToInt
 @Composable
 fun AttendanceScreen(vm: AttendanceViewModel = viewModel(), onNavigate: (String) -> Unit = {}) {
     val context = LocalContext.current
+    val askLocation = rememberLocationAsker()
     val day by vm.dayState.collectAsStateWithLifecycle()
     val ui by vm.ui.collectAsStateWithLifecycle()
     val assignedCount by vm.assignedCount.collectAsStateWithLifecycle()
@@ -135,7 +137,7 @@ fun AttendanceScreen(vm: AttendanceViewModel = viewModel(), onNavigate: (String)
                 when (day) {
                     DayState.NOT_STARTED -> GlowButton(
                         text = "Check In — Start Day",
-                        onClick = { vm.checkIn(context) },
+                        onClick = { askLocation { vm.checkIn(context) } },
                         enabled = !ui.busy,
                         loading = ui.busy,
                         modifier = Modifier.fillMaxWidth(),
@@ -155,7 +157,7 @@ fun AttendanceScreen(vm: AttendanceViewModel = viewModel(), onNavigate: (String)
                                 title = { Text("End today's day?") },
                                 text = { Text("Route tracking stops and today's hours/distance are finalized. You can still Resume if you end by mistake.") },
                                 confirmButton = {
-                                    TextButton(onClick = { confirmEnd = false; vm.endDay(context) }) { Text("End Day") }
+                                    TextButton(onClick = { confirmEnd = false; askLocation { vm.endDay(context) } }) { Text("End Day") }
                                 },
                                 dismissButton = { TextButton(onClick = { confirmEnd = false }) { Text("Cancel") } },
                             )
@@ -189,7 +191,7 @@ fun AttendanceScreen(vm: AttendanceViewModel = viewModel(), onNavigate: (String)
                                 confirmButton = {
                                     TextButton(onClick = {
                                         confirmResume = false
-                                        vm.resumeDay(context)
+                                        askLocation { vm.resumeDay(context) }
                                     }) { Text("Resume & track") }
                                 },
                                 dismissButton = {

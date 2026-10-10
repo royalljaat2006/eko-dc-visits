@@ -38,8 +38,24 @@ class AttendanceRepository(
 ) {
     /** Local, optimistic day state from today's enqueued attendance ops (IST). */
     val localDayState: Flow<DayState> = outbox.recent.map { rows ->
+        when (todaysAttendance(rows).lastOrNull()?.second) {
+            "START" -> DayState.ON_DUTY
+            "END" -> DayState.ENDED
+            else -> DayState.NOT_STARTED
+        }
+    }
+
+    /** When today's current duty stretch began (the latest START after any END), for the on-duty notification. */
+    val onDutySince: Flow<java.time.Instant?> = outbox.recent.map { rows ->
+        val ops = todaysAttendance(rows)
+        if (ops.lastOrNull()?.second != "START") null
+        else ops.lastOrNull { it.second == "START" }?.first?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }
+    }
+
+    /** Today's (IST) attendance ops from the outbox as (device wall time ISO, kind), oldest first. */
+    private fun todaysAttendance(rows: List<com.eko.dcvisits.app.data.db.OutboxEntity>): List<Pair<String, String>> {
         val today = Ist.today()
-        val todays = rows
+        return rows
             .filter { it.type == SyncPayloads.OP_ATTENDANCE_START || it.type == SyncPayloads.OP_ATTENDANCE_END }
             .mapNotNull { row ->
                 val payload = runCatching {
@@ -51,11 +67,6 @@ class AttendanceRepository(
                 wall to (payload["kind"]?.jsonPrimitive?.content ?: "")
             }
             .sortedBy { it.first }
-        when (todays.lastOrNull()?.second) {
-            "START" -> DayState.ON_DUTY
-            "END" -> DayState.ENDED
-            else -> DayState.NOT_STARTED
-        }
     }
 
     suspend fun checkIn(fix: Fix?) = submit("START", fix, "Check In")

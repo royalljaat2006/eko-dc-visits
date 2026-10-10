@@ -1,8 +1,5 @@
 package com.eko.dcvisits.app.ui.main
 
-import android.Manifest
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -77,6 +74,7 @@ import com.eko.dcvisits.app.ui.components.pressScale
 import com.eko.dcvisits.app.ui.csp.CspDetailsScreen
 import com.eko.dcvisits.app.ui.logi.LogiScreen
 import com.eko.dcvisits.app.ui.nearestcsp.NearestCspScreen
+import com.eko.dcvisits.app.ui.location.LocationGate
 import com.eko.dcvisits.app.ui.profile.ProfileScreen
 import com.eko.dcvisits.app.ui.theme.EkoBlue
 import com.eko.dcvisits.app.ui.visits.VisitsScreen
@@ -104,14 +102,9 @@ fun MainScaffold(
     val session by ServiceLocator.authRepository.sessionFlow.collectAsStateWithLifecycle(initialValue = null)
     val day by attendanceVm.dayState.collectAsStateWithLifecycle()
 
-    val permLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions(),
-    ) { }
-    LaunchedEffect(Unit) {
-        permLauncher.launch(
-            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
-        )
-    }
+    // Asks for Location (+ notifications on Android 13+) on EVERY resume while missing, and
+    // warns when GPS is off. Never gates a field action (ADR-0004).
+    LocationGate()
 
     val role = session?.user?.role ?: "DC"
     val tabs = when (role) {

@@ -4,8 +4,11 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.location.LocationManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -19,6 +22,7 @@ import com.eko.dcvisits.app.data.sync.SyncPayloads
 import com.eko.dcvisits.app.data.sync.SyncWorker
 import com.eko.dcvisits.app.data.sync.Uuidv7
 import com.eko.dcvisits.app.di.ServiceLocator
+import com.eko.dcvisits.app.ui.location.LocationAccess
 import com.eko.dcvisits.app.ui.location.LocationProvider
 import com.eko.dcvisits.app.util.Ist
 import com.eko.dcvisits.core.dwell.CspSite
@@ -68,6 +72,24 @@ class TrackingService : Service() {
     private var pointCount = 0
     private var started = false
 
+    // ---- live state shown in the notification ----
+    private var gps: GpsStatus = GpsStatus.OK
+    private var requestingUpdates = false
+    private var visitsToday: Int? = null
+    private var cspsAssigned: Int? = null
+    private var pendingSync = 0
+    private var dutySince: java.time.Instant? = null
+    private var alertedFor: GpsStatus? = null
+    private var ticksSinceAlert = 0
+    private var ticksSinceVisitsRefresh = VISITS_REFRESH_EVERY_TICKS
+
+    /** Fires the moment the user flips Location on/off in quick settings or Settings. */
+    private val gpsReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            scope.launch { reevaluateGps() }
+        }
+    }
+
     /** cspId -> the client id of the visit.checkin THIS matcher session emitted for it,
      * so a later dwell-exit can close the same visit with visit.checkout. Session-scoped:
      * a checkout can't be correlated across a process restart, which is an acceptable
@@ -99,35 +121,77 @@ class TrackingService : Service() {
 
     private fun startTracking() {
         started = true
-        val hasPermission = LocationProvider.hasPermission(this)
-        startForegroundCompat(withLocation = hasPermission)
+        gps = LocationAccess.status(this)
+        startForegroundCompat(withLocation = LocationProvider.hasPermission(this))
 
-        if (!hasPermission) {
-            // No permission yet — stay up (the day still runs) but note the gap.
-            gapCount++
-            updateNotification()
-            return
+        // Re-evaluate the instant Location is toggled, and also on a timer (permission can be
+        // revoked from Settings without any broadcast).
+        val filter = IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION).apply {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) addAction(LocationManager.MODE_CHANGED_ACTION)
         }
+        androidx.core.content.ContextCompat.registerReceiver(
+            this, gpsReceiver, filter, androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
 
+        scope.launch { ServiceLocator.attendanceRepository.onDutySince.collect { dutySince = it; updateNotification() } }
+        scope.launch { outbox.pendingCount.collect { pendingSync = it; updateNotification() } }
+        scope.launch {
+            val sites = csps.sites()
+            cspsAssigned = sites.size
+            matcher = DwellMatcher(sites.map { CspSite(it.id, it.lat, it.lng, it.radiusM) })
+            updateNotification()
+        }
+        scope.launch { reevaluateGps() }
+
+        scope.launch {
+            var ticks = 0
+            while (isActive) {
+                kotlinx.coroutines.delay(WATCHDOG_EVERY_MS)
+                if (pastCutoff()) { stopEverything(); break }
+                reevaluateGps()
+                if (++ticksSinceVisitsRefresh >= VISITS_REFRESH_EVERY_TICKS) {
+                    ticksSinceVisitsRefresh = 0
+                    ServiceLocator.visitRepository.todayVisits()?.let { visitsToday = it.size }
+                }
+                if (++ticks % FLUSH_EVERY_TICKS == 0) flush()
+                updateNotification()
+            }
+        }
+    }
+
+    /** Re-reads permission/GPS state; starts or resumes fix updates when possible; alerts on transitions. */
+    private suspend fun reevaluateGps() {
+        val now = LocationAccess.status(this)
+        val changed = now != gps
+        gps = now
+        if (now == GpsStatus.OK) {
+            ensureUpdates()
+            if (alertedFor != null) {
+                alertedFor = null
+                getSystemService(NotificationManager::class.java).cancel(ALERT_ID)
+            }
+        } else {
+            if (changed || alertedFor != now) {
+                gapCount++ // we are not recording while this lasts
+                postGpsAlert(now)
+            } else if (++ticksSinceAlert >= REALERT_EVERY_TICKS) {
+                postGpsAlert(now) // still off — nudge again
+            }
+        }
+        updateNotification()
+    }
+
+    private fun ensureUpdates() {
+        if (requestingUpdates) return
         val request = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, MOVING_INTERVAL_MS)
             .setMinUpdateIntervalMillis(MIN_INTERVAL_MS)
             .setMaxUpdateDelayMillis(MAX_BATCH_DELAY_MS)
             .build()
         try {
             fused.requestLocationUpdates(request, callback, mainLooper)
+            requestingUpdates = true
         } catch (_: SecurityException) {
             gapCount++
-        }
-
-        scope.launch {
-            matcher = DwellMatcher(csps.sites().map { CspSite(it.id, it.lat, it.lng, it.radiusM) })
-        }
-        scope.launch {
-            while (isActive) {
-                kotlinx.coroutines.delay(FLUSH_EVERY_MS)
-                if (pastCutoff()) { stopEverything(); break }
-                flush()
-            }
         }
     }
 
@@ -232,6 +296,8 @@ class TrackingService : Service() {
 
     private fun stopEverything() {
         runCatching { fused.removeLocationUpdates(callback) }
+        runCatching { unregisterReceiver(gpsReceiver) }
+        getSystemService(NotificationManager::class.java).cancel(ALERT_ID)
         scope.launch { flush() }
         scope.cancel()
         stopForegroundCompat()
@@ -240,6 +306,7 @@ class TrackingService : Service() {
 
     override fun onDestroy() {
         runCatching { fused.removeLocationUpdates(callback) }
+        runCatching { unregisterReceiver(gpsReceiver) }
         super.onDestroy()
     }
 
@@ -252,26 +319,73 @@ class TrackingService : Service() {
         if (nm.getNotificationChannel(CHANNEL) == null) {
             nm.createNotificationChannel(
                 NotificationChannel(CHANNEL, "On duty", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "Shown while your workday route is being recorded"
+                    description = "Your duty time, visits today, GPS and sync status while you are on duty"
+                },
+            )
+        }
+        if (nm.getNotificationChannel(ALERT_CHANNEL) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(ALERT_CHANNEL, "GPS alerts", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "Warns you when GPS or location permission is off during duty"
+                    enableVibration(true)
                 },
             )
         }
     }
 
+    private fun openApp(): android.app.PendingIntent = android.app.PendingIntent.getActivity(
+        this, 0, Intent(this, MainActivity::class.java),
+        android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
     private fun notification(): Notification {
-        val open = android.app.PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
-            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
-        )
         val power = getSystemService(PowerManager::class.java)
-        val saver = if (power?.isPowerSaveMode == true) " · battery saver on" else ""
+        val copy = DutyNotificationText.forDuty(
+            DutySnapshot(
+                gps = gps,
+                onDutySince = dutySince,
+                now = java.time.Instant.now(),
+                visitsToday = visitsToday ?: checkedInVisitIds.size.takeIf { it > 0 },
+                cspsAssigned = cspsAssigned,
+                lastFixAt = lastFixWallMs.takeIf { it > 0 }?.let(java.time.Instant::ofEpochMilli),
+                pendingSync = pendingSync,
+                batterySaver = power?.isPowerSaveMode == true,
+            ),
+        )
         return NotificationCompat.Builder(this, CHANNEL)
-            .setContentTitle("On duty — recording route")
-            .setContentText("$pointCount fixes · $gapCount gaps$saver")
+            .setContentTitle(copy.title)
+            .setContentText(copy.summary)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(copy.details.joinToString("\n")))
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
-            .setContentIntent(open)
+            .setOnlyAlertOnce(true)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setContentIntent(openApp())
             .build()
+    }
+
+    /** Heads-up warning: GPS off / permission gone while on duty. Tapping it opens the right Settings screen. */
+    private fun postGpsAlert(status: GpsStatus) {
+        ticksSinceAlert = 0
+        alertedFor = status
+        val copy = DutyNotificationText.gpsAlert(status)
+        val settings = if (status == GpsStatus.GPS_OFF) LocationAccess.locationSettingsIntent() else LocationAccess.appSettingsIntent(this)
+        val toSettings = android.app.PendingIntent.getActivity(
+            this, 1, settings, android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val n = NotificationCompat.Builder(this, ALERT_CHANNEL)
+            .setContentTitle(copy.title)
+            .setContentText(copy.summary)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(copy.details.joinToString("\n")))
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setContentIntent(toSettings)
+            .addAction(0, if (status == GpsStatus.GPS_OFF) "Turn on GPS" else "Open settings", toSettings)
+            .setAutoCancel(false)
+            .build()
+        runCatching { getSystemService(NotificationManager::class.java).notify(ALERT_ID, n) }
     }
 
     private fun startForegroundCompat(withLocation: Boolean) {
@@ -301,11 +415,16 @@ class TrackingService : Service() {
         const val ACTION_STOP = "com.eko.dcvisits.tracking.STOP"
         private const val CHANNEL = "on_duty"
         private const val NOTIF_ID = 4201
+        private const val ALERT_CHANNEL = "gps_alerts"
+        private const val ALERT_ID = 4202
 
         private const val MOVING_INTERVAL_MS = 20_000L
         private const val MIN_INTERVAL_MS = 10_000L
         private const val MAX_BATCH_DELAY_MS = 60_000L
-        private const val FLUSH_EVERY_MS = 180_000L
+        private const val WATCHDOG_EVERY_MS = 30_000L
+        private const val FLUSH_EVERY_TICKS = 6 // 6 x 30 s = 3 min
+        private const val VISITS_REFRESH_EVERY_TICKS = 6
+        private const val REALERT_EVERY_TICKS = 20 // re-nudge about every 10 min while GPS stays off
         private const val CHUNK_POINTS = 60
         private const val GAP_THRESHOLD_MS = 90_000L
         private const val CUTOFF_MINUTE = 21 * 60 // 21:00 IST hard stop (DPDP)

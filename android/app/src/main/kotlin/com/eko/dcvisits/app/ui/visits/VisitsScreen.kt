@@ -65,12 +65,14 @@ import com.eko.dcvisits.app.ui.components.dashedBorder
 import com.eko.dcvisits.app.ui.theme.EkoAmber
 import com.eko.dcvisits.app.ui.theme.EkoBlue
 import com.eko.dcvisits.app.ui.theme.EkoCyan
+import com.eko.dcvisits.app.ui.location.rememberLocationAsker
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VisitsScreen(vm: VisitsViewModel = viewModel()) {
     val context = LocalContext.current
+    val askLocation = rememberLocationAsker()
     val csps by vm.assignedCsps.collectAsStateWithLifecycle()
     val pending by vm.pendingCheckins.collectAsStateWithLifecycle()
     val ui by vm.ui.collectAsStateWithLifecycle()
@@ -162,7 +164,7 @@ fun VisitsScreen(vm: VisitsViewModel = viewModel()) {
                     csp = csp,
                     advisory = ui.currentFix?.let { fix -> vm.advisory(csp, fix) },
                     enabled = !ui.busy,
-                    onCheckIn = { vm.checkIn(context, csp) },
+                    onCheckIn = { askLocation { vm.checkIn(context, csp) } },
                 )
             }
         }
