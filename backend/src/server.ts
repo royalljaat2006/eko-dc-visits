@@ -64,6 +64,13 @@ const EKO = loadEkoConfig();
 if (IS_PRODUCTION && !EKO && !OTP_CODE) {
   throw new Error("Production needs a real OTP source: set EKO_* (SMS gateway) or PILOT_OTP — the 000000 dev stub is disabled");
 }
+if (IS_PRODUCTION && !process.env.JWT_SECRET) {
+  throw new Error("Production needs JWT_SECRET — the built-in dev signing secret is public");
+}
+/** Wrong-OTP lockout per phone: MAX_OTP_FAILURES within OTP_LOCK_MS locks that number until the window passes. */
+const MAX_OTP_FAILURES = 5;
+const OTP_LOCK_MS = 15 * 60 * 1000;
+const otpFailures = new Map<string, { count: number; firstAt: number }>();
 const PHONE_PATTERN = /^[6-9][0-9]{9}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** Tenant a self-registered DC lands in — matches the seed fixtures' tenant so scoping stays consistent. */
@@ -95,6 +102,16 @@ const CSP_PROFILE_FIELDS = [
 ] as const;
 
 type CspFieldDiff = Record<string, { old: string | number | null; new: string | number }>;
+
+/** A lat/lng the field map proposes that isn't a real coordinate (text → NaN, out of range) — else null. */
+function badCoordinate(proposed: Record<string, unknown>): string | null {
+  for (const [field, max] of [["lat", 90], ["lng", 180]] as const) {
+    if (!(field in proposed) || proposed[field] === "" || proposed[field] == null) continue;
+    const n = Number(proposed[field]);
+    if (!Number.isFinite(n) || Math.abs(n) > max) return `${field} must be a number between -${max} and ${max}`;
+  }
+  return null;
+}
 
 /** Diff a proposed field map against a Location — whitelist-filtered, only real changes. */
 function diffCspFields(
@@ -253,15 +270,27 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         const pending = pendingName.get(body.phone);
         const alreadyProven = pending !== undefined && pending.otp === body.otp && pending.expiresAt > Date.now();
         if (!alreadyProven) {
+          const fails = otpFailures.get(body.phone);
+          if (fails && Date.now() - fails.firstAt > OTP_LOCK_MS) otpFailures.delete(body.phone);
+          else if (fails && fails.count >= MAX_OTP_FAILURES) {
+            return problem(reply, 429, "Too Many Requests", "Too many wrong OTPs for this number — try again in 15 minutes");
+          }
+          const fail = () => {
+            const f = otpFailures.get(body.phone as string) ?? { count: 0, firstAt: Date.now() };
+            f.count++;
+            otpFailures.set(body.phone as string, f);
+            return problem(reply, 401, "Unauthorized", "OTP verification failed");
+          };
           if (EKO) {
             const verified = await ekoVerifyOtp(EKO, body.phone, body.otp);
             if (!verified.ok) {
               req.log.error({ reason: verified.reason }, "eko verify-otp failed");
-              return problem(reply, 401, "Unauthorized", "OTP verification failed");
+              return fail();
             }
           } else if (body.otp !== OTP_CODE) {
-            return problem(reply, 401, "Unauthorized", "OTP verification failed");
+            return fail();
           }
+          otpFailures.delete(body.phone);
         }
 
         // Self-registration: a brand-new number that just proved ownership
@@ -465,6 +494,16 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         if (!circleId) {
           return problem(reply, 422, "Unprocessable", "Target DC has no active circle membership");
         }
+        // The CSP itself must currently be held inside the head's circle (or be
+        // unassigned) — a Circle Head can't pull a CSP out of another circle.
+        if (scope.dc_user_ids !== "ALL") {
+          const current = (await repos.listActiveCspAssignments(principal.tenant_id, "ALL", today)).find(
+            (a) => a.csp_location_id === csp.id,
+          );
+          if (current && !scope.dc_user_ids.has(current.dc_user_id)) {
+            return problem(reply, 403, "Forbidden", "CSP is assigned to a DC in another circle");
+          }
+        }
 
         // End-old + start-new; history is never edited (design 0001 §3). The
         // old assignment ends as of YESTERDAY (IST) so the transfer takes
@@ -594,6 +633,12 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           }
 
           const current = activeByCsp.get(csp.id);
+          // A Circle Head may only move CSPs currently held inside their own
+          // circle (or unassigned ones) — never pull one from another circle.
+          if (current && scope.dc_user_ids !== "ALL" && !scope.dc_user_ids.has(current.dc_user_id)) {
+            reject("CSP is assigned to a DC in another circle");
+            continue;
+          }
           if (current?.dc_user_id === dc.id) {
             results.push({ row: i + 1, csp_code: cspCode, dc_phone: dcPhone, result: "unchanged", dc_name: dc.name });
             continue;
@@ -682,6 +727,8 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
 
           const { csp_code: _drop, ...fields } = r;
           void _drop;
+          const coordError = badCoordinate(fields);
+          if (coordError) { reject(coordError); continue; }
           const changes = diffCspFields(csp, fields);
           if (Object.keys(changes).length === 0) {
             results.push({ row: i + 1, csp_code: cspCode, result: "unchanged" });
@@ -900,6 +947,8 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         }
         const loc = await repos.getLocationById(principal.tenant_id, body.csp_location_id);
         if (!loc) return problem(reply, 422, "Unprocessable", "Unknown CSP");
+        const coordError = badCoordinate(body.changes as Record<string, unknown>);
+        if (coordError) return problem(reply, 422, "Unprocessable", coordError);
 
         const changes = diffCspFields(loc, body.changes as Record<string, unknown>);
         if (Object.keys(changes).length === 0) {
