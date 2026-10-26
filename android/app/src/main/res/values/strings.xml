@@ -44,7 +44,7 @@
     <string name="distance_straight_line">%1$s · straight-line</string>
 
     <!-- ===== Roles (display only; the role codes themselves are never translated) ===== -->
-    <string name="role_dc">Dc</string>
+    <string name="role_dc">DC</string>
     <string name="role_circle_head">Circle head</string>
     <string name="role_national_head">National head</string>
     <string name="role_hr_admin">Hr admin</string>
