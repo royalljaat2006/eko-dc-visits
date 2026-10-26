@@ -106,7 +106,7 @@ type CspFieldDiff = Record<string, { old: string | number | null; new: string | 
 /** A lat/lng the field map proposes that isn't a real coordinate (text → NaN, out of range) — else null. */
 function badCoordinate(proposed: Record<string, unknown>): string | null {
   for (const [field, max] of [["lat", 90], ["lng", 180]] as const) {
-    if (!(field in proposed) || proposed[field] === "" || proposed[field] == null) continue;
+    if (!(field in proposed) || proposed[field] == null || String(proposed[field]).trim() === "") continue;
     const n = Number(proposed[field]);
     if (!Number.isFinite(n) || Math.abs(n) > max) return `${field} must be a number between -${max} and ${max}`;
   }
@@ -170,6 +170,24 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   const repos = deps.repos;
   const clock: Clock = deps.clock ?? (() => new Date());
   const tokens = deps.tokens ?? DEV_TOKEN_CONFIG;
+
+  /**
+   * May this caller move a CSP's current assignment? Admin: always. Circle Head:
+   * when the CSP sits in one of the head's circles — judged by the assignment's
+   * circle, so CSPs left behind by a DC who moved circle can still be reassigned —
+   * or is held by one of the head's DCs.
+   */
+  const ownsAssignment = async (
+    scope: Awaited<ReturnType<typeof resolveScope>>,
+    current: { dc_user_id: string; circle_id: string },
+    asOf: string,
+  ): Promise<boolean> => {
+    if (scope.dc_user_ids === "ALL" || scope.dc_user_ids.has(current.dc_user_id)) return true;
+    for (const dcId of scope.dc_user_ids) {
+      if ((await repos.getActiveDcCircleId(scope.tenant_id, dcId, asOf)) === current.circle_id) return true;
+    }
+    return false;
+  };
 
   const app = Fastify({
     logger: process.env.LOG_LEVEL ? { level: process.env.LOG_LEVEL } : false,
@@ -275,12 +293,15 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           else if (fails && fails.count >= MAX_OTP_FAILURES) {
             return problem(reply, 429, "Too Many Requests", "Too many wrong OTPs for this number — try again in 15 minutes");
           }
-          const fail = () => {
-            const f = otpFailures.get(body.phone as string) ?? { count: 0, firstAt: Date.now() };
-            f.count++;
-            otpFailures.set(body.phone as string, f);
-            return problem(reply, 401, "Unauthorized", "OTP verification failed");
-          };
+          // Count the attempt BEFORE awaiting the gateway so parallel guesses can't all
+          // slip past the check; a correct OTP clears it below.
+          if (otpFailures.size > 10_000) {
+            for (const [k, v] of otpFailures) if (Date.now() - v.firstAt > OTP_LOCK_MS) otpFailures.delete(k);
+          }
+          const f = otpFailures.get(body.phone) ?? { count: 0, firstAt: Date.now() };
+          f.count++;
+          otpFailures.set(body.phone, f);
+          const fail = () => problem(reply, 401, "Unauthorized", "OTP verification failed");
           if (EKO) {
             const verified = await ekoVerifyOtp(EKO, body.phone, body.otp);
             if (!verified.ok) {
@@ -500,7 +521,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           const current = (await repos.listActiveCspAssignments(principal.tenant_id, "ALL", today)).find(
             (a) => a.csp_location_id === csp.id,
           );
-          if (current && !scope.dc_user_ids.has(current.dc_user_id)) {
+          if (current && !(await ownsAssignment(scope, current, today))) {
             return problem(reply, 403, "Forbidden", "CSP is assigned to a DC in another circle");
           }
         }
@@ -635,7 +656,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           const current = activeByCsp.get(csp.id);
           // A Circle Head may only move CSPs currently held inside their own
           // circle (or unassigned ones) — never pull one from another circle.
-          if (current && scope.dc_user_ids !== "ALL" && !scope.dc_user_ids.has(current.dc_user_id)) {
+          if (current && !(await ownsAssignment(scope, current, today))) {
             reject("CSP is assigned to a DC in another circle");
             continue;
           }
@@ -727,6 +748,8 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
 
           const { csp_code: _drop, ...fields } = r;
           void _drop;
+          // A blank lat/lng cell means "no change" — never Number("") = 0.
+          for (const k of ["lat", "lng"]) if (fields[k] != null && String(fields[k]).trim() === "") delete fields[k];
           const coordError = badCoordinate(fields);
           if (coordError) { reject(coordError); continue; }
           const changes = diffCspFields(csp, fields);

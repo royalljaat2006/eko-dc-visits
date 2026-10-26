@@ -285,7 +285,10 @@ const refreshAccessToken = singleFlight(async (): Promise<boolean> => {
   } catch (err) {
     throw networkError(err);
   }
-  if (!res.ok) return false;
+  // Only a rejected refresh token (400/401/403) ends the session; a 429 rate
+  // limit or 5xx outage is temporary and must not log the user out.
+  if (res.status === 400 || res.status === 401 || res.status === 403) return false;
+  if (!res.ok) throw new ApiError(await problemFromResponse(res));
   const data = (await res.json()) as { access_token?: unknown; refresh_token?: unknown };
   if (typeof data.access_token !== 'string' || typeof data.refresh_token !== 'string') return false;
   // Re-read: the user may have logged out while the refresh was in flight.
