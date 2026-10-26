@@ -27,6 +27,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.eko.dcvisits.app.tracking.GpsStatus
+import androidx.compose.ui.res.stringResource
+import com.eko.dcvisits.app.R
 
 /**
  * Location access policy for the field app:
@@ -132,21 +134,21 @@ fun LocationGate() {
     when (prompt) {
         Prompt.SETTINGS_FOR_PERMISSION -> AlertDialog(
             onDismissRequest = { prompt = null },
-            title = { Text("Location permission needed") },
-            text = { Text("Eko records where you check in and your route during duty. Please allow Location for this app in Settings → Permissions.") },
+            title = { Text(stringResource(R.string.location_permission_needed)) },
+            text = { Text(stringResource(R.string.location_permission_body)) },
             confirmButton = {
-                TextButton(onClick = { prompt = null; context.startActivity(LocationAccess.appSettingsIntent(context)) }) { Text("Open settings") }
+                TextButton(onClick = { prompt = null; context.startActivity(LocationAccess.appSettingsIntent(context)) }) { Text(stringResource(R.string.action_open_settings)) }
             },
-            dismissButton = { TextButton(onClick = { prompt = null }) { Text("Not now") } },
+            dismissButton = { TextButton(onClick = { prompt = null }) { Text(stringResource(R.string.action_not_now)) } },
         )
         Prompt.GPS_OFF -> AlertDialog(
             onDismissRequest = { prompt = null },
-            title = { Text("GPS is off") },
-            text = { Text("Turn on Location so your check-ins and route are recorded.") },
+            title = { Text(stringResource(R.string.gps_is_off)) },
+            text = { Text(stringResource(R.string.gps_off_body)) },
             confirmButton = {
-                TextButton(onClick = { prompt = null; context.startActivity(LocationAccess.locationSettingsIntent()) }) { Text("Turn on GPS") }
+                TextButton(onClick = { prompt = null; context.startActivity(LocationAccess.locationSettingsIntent()) }) { Text(stringResource(R.string.action_turn_on_gps)) }
             },
-            dismissButton = { TextButton(onClick = { prompt = null }) { Text("Later") } },
+            dismissButton = { TextButton(onClick = { prompt = null }) { Text(stringResource(R.string.action_later)) } },
         )
         null -> Unit
     }
@@ -176,12 +178,13 @@ fun rememberLocationAsker(): (() -> Unit) -> Unit {
     gpsOffFor?.let { action ->
         AlertDialog(
             onDismissRequest = { gpsOffFor = null },
-            title = { Text("GPS is off") },
-            text = { Text("Without GPS this will be recorded with no location and may be flagged for review.") },
+            title = { Text(stringResource(R.string.gps_is_off)) },
+            text = { Text(stringResource(R.string.gps_off_action_body)) },
             confirmButton = {
-                TextButton(onClick = { gpsOffFor = null; context.startActivity(LocationAccess.locationSettingsIntent()) }) { Text("Turn on GPS") }
+                TextButton(onClick = { gpsOffFor = null; context.startActivity(LocationAccess.locationSettingsIntent()) }) { Text(stringResource(R.string.action_turn_on_gps)) }
             },
-            dismissButton = { TextButton(onClick = { gpsOffFor = null; action() }) { Text("Continue without GPS") } },
+            dismissButton = { TextButton(onClick = { gpsOffFor = null; action() }) { Text(stringResource(R.string.action_continue_without_gps)) } },
+
         )
     }
 

@@ -80,16 +80,20 @@ import com.eko.dcvisits.app.ui.profile.ProfileScreen
 import com.eko.dcvisits.app.ui.theme.EkoBlue
 import com.eko.dcvisits.app.ui.visits.VisitsScreen
 import kotlinx.coroutines.launch
+import androidx.annotation.StringRes
+import androidx.compose.ui.res.stringResource
+import com.eko.dcvisits.app.R
+import com.eko.dcvisits.app.ui.text.roleLabel
 
 /** Bottom-nav IA (UI/UX pass): Home, My CSPs, Navigate, Visits, Logi, Profile for a DC. */
-private enum class Tab(val label: String, val icon: ImageVector, val dcGated: Boolean) {
-    HOME("Home", Icons.Filled.CheckCircle, dcGated = false),
-    MY_CSPS("My CSPs", Icons.Filled.Place, dcGated = true),
-    NAVIGATE("Navigate", Icons.Filled.Navigation, dcGated = true),
-    VISITS("Visits", Icons.AutoMirrored.Filled.List, dcGated = true),
-    LOGI("Logi", Icons.Filled.Route, dcGated = true),
-    APPROVALS("Approvals", Icons.Filled.RateReview, dcGated = false),
-    PROFILE("Profile", Icons.Filled.Person, dcGated = false),
+private enum class Tab(@StringRes val label: Int, val icon: ImageVector, val dcGated: Boolean) {
+    HOME(R.string.tab_home, Icons.Filled.CheckCircle, dcGated = false),
+    MY_CSPS(R.string.tab_my_csps, Icons.Filled.Place, dcGated = true),
+    NAVIGATE(R.string.tab_navigate, Icons.Filled.Navigation, dcGated = true),
+    VISITS(R.string.tab_visits, Icons.AutoMirrored.Filled.List, dcGated = true),
+    LOGI(R.string.tab_logi, Icons.Filled.Route, dcGated = true),
+    APPROVALS(R.string.tab_approvals, Icons.Filled.RateReview, dcGated = false),
+    PROFILE(R.string.tab_profile, Icons.Filled.Person, dcGated = false),
 }
 
 @Composable
@@ -150,13 +154,13 @@ fun MainScaffold(
         Row(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))) {
             SideGlassRail(tabs, selected, gated, onSelect = { selected = it }, onSignOut = onSignOut, name = session?.user?.name ?: "Eko")
             Column(Modifier.fillMaxSize()) {
-                TopBar(session?.user?.name ?: "Eko CSP Visits", role, onSignOut, showAvatar = false)
+                TopBar(session?.user?.name ?: stringResource(R.string.app_name), role, onSignOut, showAvatar = false)
                 Box(Modifier.weight(1f)) { body() }
             }
         }
     } else {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))) {
-            TopBar(session?.user?.name ?: "Eko CSP Visits", role, onSignOut, showAvatar = true)
+            TopBar(session?.user?.name ?: stringResource(R.string.app_name), role, onSignOut, showAvatar = true)
             Box(Modifier.weight(1f).fillMaxWidth()) { body() }
             BottomGlassNav(tabs, selected, gated, onSelect = { selected = it })
         }
@@ -177,7 +181,7 @@ private fun TopBar(name: String, role: String, onSignOut: () -> Unit, showAvatar
         Column(Modifier.weight(1f, fill = false)) {
             Text(name, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground, maxLines = 1)
             Text(
-                role.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() },
+                roleLabel(role),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -191,7 +195,7 @@ private fun TopBar(name: String, role: String, onSignOut: () -> Unit, showAvatar
                     .clickable(onClick = onSignOut),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out", tint = EkoBlue, modifier = Modifier.size(18.dp))
+                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = stringResource(R.string.action_sign_out), tint = EkoBlue, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -252,7 +256,7 @@ private fun SideGlassRail(
                     .clickable(onClick = onSignOut),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out", tint = EkoBlue, modifier = Modifier.size(18.dp))
+                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = stringResource(R.string.action_sign_out), tint = EkoBlue, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -273,10 +277,11 @@ private fun NavItem(tab: Tab, isSelected: Boolean, enabled: Boolean, onClick: ()
             .padding(horizontal = 12.dp, vertical = 9.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(tab.icon, contentDescription = tab.label, tint = tint, modifier = Modifier.size(21.dp))
+        val label = stringResource(tab.label)
+        Icon(tab.icon, contentDescription = label, tint = tint, modifier = Modifier.size(21.dp))
         AnimatedVisibility(visible = isSelected) {
             Text(
-                tab.label,
+                label,
                 color = EkoBlue,
                 style = MaterialTheme.typography.labelSmall,
                 textAlign = TextAlign.Center,
@@ -291,7 +296,8 @@ private fun GateNotice() {
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Box(Modifier.glassSurface(shape = RoundedCornerShape(24.dp)).padding(24.dp)) {
             Text(
-                "Mark attendance (Check In) to unlock the other sections.",
+                stringResource(R.string.gate_notice),
+
                 color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,

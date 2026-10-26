@@ -24,6 +24,7 @@ import com.eko.dcvisits.app.data.sync.Uuidv7
 import com.eko.dcvisits.app.di.ServiceLocator
 import com.eko.dcvisits.app.ui.location.LocationAccess
 import com.eko.dcvisits.app.ui.location.LocationProvider
+import com.eko.dcvisits.app.util.AppLocale
 import com.eko.dcvisits.app.util.Ist
 import com.eko.dcvisits.core.dwell.CspSite
 import com.eko.dcvisits.core.dwell.DwellEvent
@@ -335,23 +336,25 @@ class TrackingService : Service() {
 
     // ---- foreground notification ----------------------------------------
 
+    /** Copy in the app language the DC picked (Profile → Language), also on Android 10–12. */
+    private fun strings(): StringLookup = StringLookup.of(AppLocale.localized(this))
+
     private fun createChannel() {
         val nm = getSystemService(NotificationManager::class.java)
-        if (nm.getNotificationChannel(CHANNEL) == null) {
-            nm.createNotificationChannel(
-                NotificationChannel(CHANNEL, "On duty", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "Your duty time, visits today, GPS and sync status while you are on duty"
-                },
-            )
-        }
-        if (nm.getNotificationChannel(ALERT_CHANNEL) == null) {
-            nm.createNotificationChannel(
-                NotificationChannel(ALERT_CHANNEL, "GPS alerts", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "Warns you when GPS or location permission is off during duty"
-                    enableVibration(true)
-                },
-            )
-        }
+        val str = strings()
+        // Re-creating an existing channel only refreshes its name/description, so the
+        // channel labels follow a language change; importance set by the user is kept.
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL, str.get(R.string.channel_on_duty_name), NotificationManager.IMPORTANCE_LOW).apply {
+                description = str.get(R.string.channel_on_duty_desc)
+            },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(ALERT_CHANNEL, str.get(R.string.channel_gps_alerts_name), NotificationManager.IMPORTANCE_HIGH).apply {
+                description = str.get(R.string.channel_gps_alerts_desc)
+                enableVibration(true)
+            },
+        )
     }
 
     private fun openApp(): android.app.PendingIntent = android.app.PendingIntent.getActivity(
@@ -372,6 +375,7 @@ class TrackingService : Service() {
                 pendingSync = pendingSync,
                 batterySaver = power?.isPowerSaveMode == true,
             ),
+            strings(),
         )
         return NotificationCompat.Builder(this, CHANNEL)
             .setContentTitle(copy.title)
@@ -389,7 +393,8 @@ class TrackingService : Service() {
     private fun postGpsAlert(status: GpsStatus) {
         ticksSinceAlert = 0
         alertedFor = status
-        val copy = DutyNotificationText.gpsAlert(status)
+        val str = strings()
+        val copy = DutyNotificationText.gpsAlert(status, str)
         val settings = if (status == GpsStatus.GPS_OFF) LocationAccess.locationSettingsIntent() else LocationAccess.appSettingsIntent(this)
         val toSettings = android.app.PendingIntent.getActivity(
             this, 1, settings, android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
@@ -403,7 +408,7 @@ class TrackingService : Service() {
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(toSettings)
-            .addAction(0, if (status == GpsStatus.GPS_OFF) "Turn on GPS" else "Open settings", toSettings)
+            .addAction(0, str.get(if (status == GpsStatus.GPS_OFF) R.string.action_turn_on_gps else R.string.action_open_settings), toSettings)
             .setAutoCancel(false)
             .build()
         runCatching { getSystemService(NotificationManager::class.java).notify(ALERT_ID, n) }

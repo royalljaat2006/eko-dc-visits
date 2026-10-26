@@ -67,6 +67,9 @@ import com.eko.dcvisits.app.ui.theme.EkoBlue
 import com.eko.dcvisits.app.ui.theme.EkoCyan
 import com.eko.dcvisits.app.ui.location.rememberLocationAsker
 import kotlin.math.roundToInt
+import androidx.compose.ui.res.stringResource
+import com.eko.dcvisits.app.R
+import com.eko.dcvisits.app.ui.text.asString
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -112,16 +115,16 @@ fun VisitsScreen(vm: VisitsViewModel = viewModel()) {
         item {
             Entrance(index = 0) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Log a visit", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
-                    TextButton(onClick = { vm.refresh(context) }) { Text("Refresh", color = EkoBlue) }
+                    Text(stringResource(R.string.visits_title), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
+                    TextButton(onClick = { vm.refresh(context) }) { Text(stringResource(R.string.action_refresh), color = EkoBlue) }
                 }
             }
         }
         item {
             Entrance(index = 1) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    GlassTag("Today: ${ui.todayVisits.size} synced", tint = EkoCyan)
-                    if (pending > 0) GlassTag("$pending queued", tint = EkoAmber)
+                    GlassTag(stringResource(R.string.visits_today_synced, ui.todayVisits.size), tint = EkoCyan)
+                    if (pending > 0) GlassTag(stringResource(R.string.visits_queued, pending), tint = EkoAmber)
                 }
             }
         }
@@ -130,8 +133,8 @@ fun VisitsScreen(vm: VisitsViewModel = viewModel()) {
                 Entrance(index = 2) {
                     GlassCard(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(msg, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                            TextButton(onClick = vm::clearMessage) { Text("OK", color = EkoBlue) }
+                            Text(msg.asString(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                            TextButton(onClick = vm::clearMessage) { Text(stringResource(R.string.action_ok), color = EkoBlue) }
                         }
                     }
                 }
@@ -155,7 +158,7 @@ fun VisitsScreen(vm: VisitsViewModel = viewModel()) {
 
         item {
             Entrance(index = 4) {
-                Text("Tap a CSP to check in", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onBackground)
+                Text(stringResource(R.string.visits_tap_to_check_in), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onBackground)
             }
         }
         itemsIndexed(csps, key = { _, it -> it.cspLocationId }) { i, csp ->
@@ -194,21 +197,21 @@ private fun ActiveVisitCard(
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.size(7.dp).clip(CircleShape).background(EkoCyan))
-                Text("ACTIVE GEOFENCE", style = MaterialTheme.typography.labelSmall, color = EkoCyan)
+                Text(stringResource(R.string.visits_active_geofence), style = MaterialTheme.typography.labelSmall, color = EkoCyan)
             }
             Text(cspCode, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
             Text(
-                "Checked in — add physical proofs, verify signage, then check out.",
+                stringResource(R.string.visits_active_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Photos: ${captured.size}/${PHOTO_CATEGORIES.size}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+                Text(stringResource(R.string.visits_photos_progress, captured.size, PHOTO_CATEGORIES.size), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
                 if (captured.size < PHOTO_CATEGORIES.size) {
-                    GlassTag("Required", tint = EkoAmber)
+                    GlassTag(stringResource(R.string.tag_required), tint = EkoAmber)
                 } else {
-                    GlassTag("Complete", tint = EkoCyan)
+                    GlassTag(stringResource(R.string.tag_complete), tint = EkoCyan)
                 }
             }
 
@@ -229,7 +232,7 @@ private fun ActiveVisitCard(
             }
 
             GlowButton(
-                text = "Check out",
+                text = stringResource(R.string.action_check_out),
                 onClick = onCheckOut,
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
@@ -247,7 +250,7 @@ private fun PhotoSlot(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    val label = category.replace('_', ' ')
+    val label = photoCategoryText(category).asString()
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(
             Modifier
@@ -263,7 +266,7 @@ private fun PhotoSlot(
                 Image(bitmap = bitmap.asImageBitmap(), contentDescription = label, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 Icon(
                     Icons.Filled.CheckCircle,
-                    contentDescription = "Verified",
+                    contentDescription = stringResource(R.string.cd_verified),
                     tint = EkoCyan,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -291,18 +294,18 @@ private fun CspRow(
                 Text(csp.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
                 advisory?.let { adv ->
                     GlassTag(
-                        text = distanceLabel(adv),
+                        text = advisoryDistanceLabel(adv),
                         tint = if (adv.inside) EkoCyan else EkoAmber,
                     )
                 }
             }
             Text(
-                "${csp.code} · last visit ${csp.lastVisitDate ?: "never"}",
+                stringResource(R.string.visits_code_last_visit, csp.code, csp.lastVisitDate ?: stringResource(R.string.label_never)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             GlowButton(
-                text = "Check in here",
+                text = stringResource(R.string.action_check_in_here),
                 onClick = onCheckIn,
                 enabled = enabled,
                 modifier = Modifier.padding(top = 8.dp),
@@ -311,10 +314,12 @@ private fun CspRow(
     }
 }
 
-private fun distanceLabel(adv: GeoAdvisory): String {
+@Composable
+private fun advisoryDistanceLabel(adv: GeoAdvisory): String {
     val m = adv.distanceM.roundToInt()
-    val distance = if (m < 1000) "${m}m" else "%.1fkm".format(adv.distanceM / 1000)
-    return if (adv.inside) "Inside $distance" else "$distance away"
+    val distance = if (m < 1000) stringResource(R.string.distance_m_short, m)
+    else stringResource(R.string.distance_km_short, adv.distanceM / 1000)
+    return stringResource(if (adv.inside) R.string.distance_inside else R.string.distance_away, distance)
 }
 
 @Composable
@@ -330,11 +335,11 @@ private fun OutOfRadiusDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surface,
-        title = { Text("You're ${distanceM.roundToInt()} m from $cspCode") },
+        title = { Text(stringResource(R.string.out_of_radius_title, distanceM.roundToInt(), cspCode)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "The check-in still goes through (geofencing is advisory). Pick a reason so your Circle Head has context.",
+                    stringResource(R.string.out_of_radius_body),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 OUT_OF_RADIUS_REASONS.forEach { (code, label) ->
@@ -346,20 +351,21 @@ private fun OutOfRadiusDialog(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         RadioButton(selected = reason == code, onClick = { reason = code })
-                        Text(label)
+                        Text(stringResource(label))
                     }
                 }
                 OutlinedTextField(
                     value = remarks,
                     onValueChange = { remarks = it.take(500) },
-                    label = { Text("Remarks (optional)") },
+                    label = { Text(stringResource(R.string.remarks_optional)) },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(reason, remarks.ifBlank { null }) }) { Text("Check in anyway") }
+            TextButton(onClick = { onConfirm(reason, remarks.ifBlank { null }) }) { Text(stringResource(R.string.action_check_in_anyway)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+
     )
 }

@@ -31,6 +31,14 @@ import com.eko.dcvisits.app.ui.components.GlassCard
 import com.eko.dcvisits.app.ui.components.ScreenContainer
 import com.eko.dcvisits.app.ui.scorecard.ScorecardScreen
 import com.eko.dcvisits.app.ui.theme.EkoBlue
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.eko.dcvisits.app.R
+import com.eko.dcvisits.app.ui.text.roleLabel
+import com.eko.dcvisits.app.util.AppLocale
 
 /**
  * Identity + sign-out + (role-permitting) a path to the Scorecard. Deliberately
@@ -48,7 +56,7 @@ fun ProfileScreen(role: String, onSignOut: () -> Unit) {
         Column(Modifier.fillMaxSize()) {
             TextButton(onClick = { showScorecard = false }) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = EkoBlue, modifier = Modifier.padding(end = 6.dp))
-                Text("Back to profile", color = EkoBlue)
+                Text(stringResource(R.string.profile_back), color = EkoBlue)
             }
             ScorecardScreen()
         }
@@ -61,14 +69,14 @@ fun ProfileScreen(role: String, onSignOut: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Entrance(index = 0) {
-                Text("Profile", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
+                Text(stringResource(R.string.tab_profile), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
             }
             Entrance(index = 1) {
                 GlassCard(Modifier.fillMaxWidth(), cornerRadius = 20.dp, contentPadding = 18.dp) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(session?.user?.name ?: "—", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
                         Text(
-                            role.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() },
+                            roleLabel(role),
                             style = MaterialTheme.typography.labelLarge,
                             color = EkoBlue,
                         )
@@ -85,16 +93,56 @@ fun ProfileScreen(role: String, onSignOut: () -> Unit) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Icon(Icons.Filled.Star, contentDescription = null, tint = EkoBlue)
-                                Text("My Scorecard", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                                Text(stringResource(R.string.profile_my_scorecard), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                             }
-                            Text("View →", color = EkoBlue)
+                            Text(stringResource(R.string.profile_view), color = EkoBlue)
                         }
                     }
                 }
             }
             Entrance(index = 3) {
-                GhostGlassButton(text = "Sign out", onClick = onSignOut, modifier = Modifier.fillMaxWidth())
+                LanguageCard()
+            }
+            Entrance(index = 4) {
+                GhostGlassButton(text = stringResource(R.string.action_sign_out), onClick = onSignOut, modifier = Modifier.fillMaxWidth())
             }
         }
     }
 }
+
+/**
+ * In-app language: System default / English / हिंदी. AppLocale.set() hands the choice
+ * to AppCompat, which persists it and recreates the activity, so the whole UI switches
+ * at once (the selected tab is saved, so the DC lands back on Profile).
+ */
+@Composable
+private fun LanguageCard() {
+    val context = LocalContext.current
+    val current = remember { AppLocale.current(context) }
+    val options = listOf(
+        AppLocale.SYSTEM to R.string.language_system_default,
+        AppLocale.ENGLISH to R.string.language_english,
+        AppLocale.HINDI to R.string.language_hindi,
+    )
+    GlassCard(Modifier.fillMaxWidth(), cornerRadius = 20.dp, contentPadding = 14.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Filled.Translate, contentDescription = null, tint = EkoBlue)
+                Text(stringResource(R.string.profile_language), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            }
+            options.forEach { (tag, label) ->
+                val onSelect = { if (tag != current) AppLocale.set(context, tag) }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .selectable(selected = tag == current, onClick = onSelect),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(selected = tag == current, onClick = onSelect)
+                    Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                }
+            }
+        }
+    }
+}
+

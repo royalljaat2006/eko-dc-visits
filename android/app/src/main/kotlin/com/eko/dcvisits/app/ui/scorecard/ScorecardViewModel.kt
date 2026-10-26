@@ -7,12 +7,14 @@ import com.eko.dcvisits.app.di.ServiceLocator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import com.eko.dcvisits.app.R
+import com.eko.dcvisits.app.ui.text.UiText
 
 data class ScorecardUi(
     val loading: Boolean = true,
     val card: ScorecardRowDto? = null,
     val dashboardUrl: String? = null,
-    val error: String? = null,
+    val error: UiText? = null,
 )
 
 class ScorecardViewModel : ViewModel() {
@@ -30,7 +32,8 @@ class ScorecardViewModel : ViewModel() {
                 loading = false,
                 card = card,
                 dashboardUrl = url,
-                error = if (card == null) "Scorecard unavailable offline" else null,
+                error = if (card == null) UiText.res(R.string.scorecard_unavailable_offline) else null,
+
             )
         }
     }

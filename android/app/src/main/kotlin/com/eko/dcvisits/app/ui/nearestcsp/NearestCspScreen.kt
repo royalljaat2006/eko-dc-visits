@@ -47,6 +47,10 @@ import com.eko.dcvisits.app.ui.theme.EkoViolet
 import com.eko.dcvisits.app.util.Ist
 import java.time.Instant
 import kotlin.math.roundToInt
+import androidx.compose.ui.res.stringResource
+import com.eko.dcvisits.app.R
+import com.eko.dcvisits.app.ui.text.asString
+import com.eko.dcvisits.app.ui.text.distanceAway
 
 /**
  * "Navigate" tab (C2 v0.12.0): the DC's nearest eligible CSP, with in-app
@@ -70,8 +74,8 @@ fun NearestCspScreen(vm: NearestCspViewModel = viewModel()) {
             item {
                 Entrance(index = 0) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("Navigate", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
-                        TextButton(onClick = { vm.refresh(context) }, enabled = !busy) { Text("Refresh recommendation", color = EkoBlue) }
+                        Text(stringResource(R.string.tab_navigate), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
+                        TextButton(onClick = { vm.refresh(context) }, enabled = !busy) { Text(stringResource(R.string.nearest_refresh), color = EkoBlue) }
                     }
                 }
             }
@@ -79,8 +83,10 @@ fun NearestCspScreen(vm: NearestCspViewModel = viewModel()) {
                 item {
                     Entrance(index = 1) {
                         Text(
-                            "Updated ${Ist.display(Instant.ofEpochMilli(ui.lastUpdatedAtMs!!).toString())} IST" +
-                                (ui.fixAccuracyM?.let { " · GPS accuracy ±${it.roundToInt()} m" } ?: " · no fresh GPS fix"),
+                            Ist.display(Instant.ofEpochMilli(ui.lastUpdatedAtMs!!).toString()).let { at ->
+                                ui.fixAccuracyM?.let { stringResource(R.string.nearest_updated_accuracy, at, it.roundToInt()) }
+                                    ?: stringResource(R.string.nearest_updated_no_fix, at)
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -91,9 +97,9 @@ fun NearestCspScreen(vm: NearestCspViewModel = viewModel()) {
                 Entrance(index = 2) {
                     when (ui.state) {
                         NearestCspState.LOADING -> LoadingState()
-                        NearestCspState.INACTIVE_SESSION -> StateBanner("Check In to see your nearest CSP.", tint = EkoBlue)
+                        NearestCspState.INACTIVE_SESSION -> StateBanner(stringResource(R.string.nearest_check_in_first), tint = EkoBlue)
                         NearestCspState.NO_ELIGIBLE_CSP -> NoEligibleCspBanner()
-                        NearestCspState.ERROR -> StateBanner(ui.errorMessage ?: "Could not load nearest CSP.", tint = EkoRed)
+                        NearestCspState.ERROR -> StateBanner(ui.errorMessage?.asString() ?: stringResource(R.string.nearest_load_failed), tint = EkoRed)
                         NearestCspState.NO_FIX -> GpsUnavailableBanner()
                         NearestCspState.STALE_GPS -> LocationStaleBanner()
                         NearestCspState.OK -> {}
@@ -111,7 +117,8 @@ fun NearestCspScreen(vm: NearestCspViewModel = viewModel()) {
                         Entrance(index = 4) {
                             TextButton(onClick = { showOthers = !showOthers }) {
                                 Text(
-                                    if (showOthers) "Hide other eligible CSPs" else "Other eligible CSPs (${others.size})",
+                                    if (showOthers) stringResource(R.string.nearest_hide_others)
+                                    else stringResource(R.string.nearest_other_eligible, others.size),
                                     color = EkoBlue,
                                 )
                             }
@@ -126,7 +133,7 @@ fun NearestCspScreen(vm: NearestCspViewModel = viewModel()) {
                     }
                 }
             } else if (ui.state != NearestCspState.LOADING) {
-                item { EmptyState("Nothing to navigate to right now.") }
+                item { EmptyState(stringResource(R.string.nearest_nothing)) }
             }
         }
     }
@@ -144,7 +151,7 @@ private fun NearestCspCard(item: NearestCspItemDto, recommended: Boolean, compac
             if (recommended) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("★", color = EkoViolet)
-                    Text("RECOMMENDED NEXT STOP", style = MaterialTheme.typography.labelMedium, color = EkoViolet)
+                    Text(stringResource(R.string.nearest_recommended), style = MaterialTheme.typography.labelMedium, color = EkoViolet)
                 }
             }
             Text(
@@ -161,21 +168,22 @@ private fun NearestCspCard(item: NearestCspItemDto, recommended: Boolean, compac
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item.distance_m?.let {
                     GlassTag(
-                        formatDistance(it) + (if (item.distance_basis == "straight_line") " · straight-line" else ""),
+                        if (item.distance_basis == "straight_line") stringResource(R.string.distance_straight_line, distanceAway(it))
+                        else distanceAway(it),
                         tint = EkoCyan,
                     )
                 }
                 GlassTag(
-                    if (item.last_visit_date != null) "Last visit: ${item.last_visit_date}" else "Never visited",
+                    if (item.last_visit_date != null) stringResource(R.string.label_last_visit, item.last_visit_date)
+                    else stringResource(R.string.label_never_visited),
                     tint = if (item.last_visit_date != null) EkoGreen else EkoAmber,
                 )
             }
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                GlowButton(text = "Navigate", onClick = onNavigate)
+                GlowButton(text = stringResource(R.string.action_navigate), onClick = onNavigate)
             }
         }
     }
 }
 
-private fun formatDistance(m: Double): String =
-    if (m < 1000) "${m.roundToInt()} m away" else "${"%.1f".format(m / 1000)} km away"
+

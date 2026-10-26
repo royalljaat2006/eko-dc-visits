@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.eko.dcvisits.app.R
+import com.eko.dcvisits.app.ui.text.UiText
 
 class CspDetailsViewModel : ViewModel() {
     private val repo = ServiceLocator.cspRepository
@@ -35,8 +37,8 @@ class CspDetailsViewModel : ViewModel() {
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy
 
-    private val _message = MutableStateFlow<String?>(null)
-    val message: StateFlow<String?> = _message
+    private val _message = MutableStateFlow<UiText?>(null)
+    val message: StateFlow<UiText?> = _message
 
     fun start(context: Context) {
         viewModelScope.launch { repo.refresh() }
@@ -75,9 +77,10 @@ class CspDetailsViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 repo.proposeEdit(cspLocationId, field, value.trim())
-                _message.value = "Change submitted — pending Circle Head approval"
+                _message.value = UiText.res(R.string.csps_change_submitted)
             } catch (e: Exception) {
-                _message.value = e.message ?: "Could not submit the change"
+                _message.value = UiText.messageOr(e, R.string.csps_could_not_submit)
+
             }
             _busy.value = false
         }

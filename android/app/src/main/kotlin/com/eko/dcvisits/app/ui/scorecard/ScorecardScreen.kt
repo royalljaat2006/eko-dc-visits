@@ -43,6 +43,9 @@ import com.eko.dcvisits.app.ui.theme.EkoAmber
 import com.eko.dcvisits.app.ui.theme.EkoBlue
 import com.eko.dcvisits.app.ui.theme.EkoCyan
 import com.eko.dcvisits.app.ui.theme.EkoViolet
+import androidx.compose.ui.res.stringResource
+import com.eko.dcvisits.app.R
+import com.eko.dcvisits.app.ui.text.asString
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -58,9 +61,9 @@ fun ScorecardScreen(vm: ScorecardViewModel = viewModel()) {
      ) {
         Entrance(index = 0) {
             Column {
-                Text("My scorecard", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
+                Text(stringResource(R.string.scorecard_title), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
                 Text(
-                    "dc_score_v1 — transparent, never affects pay.",
+                    stringResource(R.string.scorecard_subtitle),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -82,7 +85,7 @@ fun ScorecardScreen(vm: ScorecardViewModel = viewModel()) {
                             ScoreRing(points = c.points)
                         }
                         Text(
-                            "Visits ${c.visits_done}  ·  geo-verified ${c.geo_verified_visits}  ·  streak ${c.streak_days}d",
+                            stringResource(R.string.scorecard_stats, c.visits_done, c.geo_verified_visits, c.streak_days),
                             color = MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -93,7 +96,7 @@ fun ScorecardScreen(vm: ScorecardViewModel = viewModel()) {
                             }
                         }
                         Text(
-                            "Formula: visit +50 · geo-verified +20 · on-time (≤09:30 IST) +30 · streak-day +10 (cap 7).",
+                            stringResource(R.string.scorecard_formula),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -106,12 +109,12 @@ fun ScorecardScreen(vm: ScorecardViewModel = viewModel()) {
             Entrance(index = 2) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     GlowButton(
-                        text = "Open My Dashboard",
+                        text = stringResource(R.string.scorecard_open_dashboard),
                         onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
-                        "This link is yours only.",
+                        stringResource(R.string.scorecard_link_private),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -119,7 +122,7 @@ fun ScorecardScreen(vm: ScorecardViewModel = viewModel()) {
             }
         }
 
-        ui.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        ui.error?.let { Text(it.asString(), color = MaterialTheme.colorScheme.error) }
      }
     }
 }
@@ -153,7 +156,8 @@ private fun ScoreRing(points: Int) {
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("${count.value.toInt()}", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onSurface)
-            Text("points today", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.scorecard_points_today), style
+ = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

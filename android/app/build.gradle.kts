@@ -92,6 +92,13 @@ android {
         compose = true
         buildConfig = true
     }
+    // The in-app language switch needs every language in the install: never split
+    // strings by language if this ever ships as an App Bundle.
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         // Compress native libs + dex — this AGP/Gradle combo was inserting
@@ -111,6 +118,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
+    // Per-app language (in-app Hindi/English switch) with persistence on Android 10–12.
+    implementation(libs.androidx.appcompat)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

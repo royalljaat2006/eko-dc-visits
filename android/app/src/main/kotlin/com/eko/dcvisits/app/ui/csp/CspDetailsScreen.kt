@@ -50,9 +50,16 @@ import com.eko.dcvisits.app.ui.theme.EkoCyan
 import com.eko.dcvisits.app.ui.theme.EkoGreen
 import com.eko.dcvisits.app.util.Ist
 import kotlin.math.roundToInt
+import androidx.annotation.StringRes
+import androidx.compose.ui.res.stringResource
+import com.eko.dcvisits.app.R
+import com.eko.dcvisits.app.ui.text.asString
+import com.eko.dcvisits.app.ui.text.distanceAway
 
-private enum class CspFilter(val label: String) { ALL("All"), PENDING("Pending today"), VISITED("Visited today") }
-private enum class CspSort(val label: String) { DISTANCE("Nearest first"), NAME("Name") }
+private enum class CspFilter(@StringRes val label: Int) {
+    ALL(R.string.filter_all), PENDING(R.string.label_pending_today), VISITED(R.string.label_visited_today),
+}
+private enum class CspSort(@StringRes val label: Int) { DISTANCE(R.string.sort_nearest_first), NAME(R.string.sort_name) }
 
 @Composable
 fun CspDetailsScreen(vm: CspDetailsViewModel = viewModel()) {
@@ -90,8 +97,8 @@ fun CspDetailsScreen(vm: CspDetailsViewModel = viewModel()) {
         item {
             Entrance(index = 0) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("My CSPs (${visible.size}/${csps.size})", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
-                    TextButton(onClick = { vm.refresh(context) }, enabled = !busy) { Text("Refresh", color = EkoBlue) }
+                    Text(stringResource(R.string.csps_title, visible.size, csps.size), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
+                    TextButton(onClick = { vm.refresh(context) }, enabled = !busy) { Text(stringResource(R.string.action_refresh), color = EkoBlue) }
                 }
             }
         }
@@ -100,7 +107,7 @@ fun CspDetailsScreen(vm: CspDetailsViewModel = viewModel()) {
                 GlassTextField(
                     value = query,
                     onValueChange = { query = it },
-                    label = "Search by name or CSP code",
+                    label = stringResource(R.string.csps_search),
                 )
             }
         }
@@ -109,7 +116,7 @@ fun CspDetailsScreen(vm: CspDetailsViewModel = viewModel()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         CspFilter.entries.forEach { f ->
-                            FilterChip(f.label, selected = filter == f, onClick = { filter = f })
+                            FilterChip(stringResource(f.label), selected = filter == f, onClick = { filter = f })
                         }
                     }
                     SortDropdown(sort = sort, onSelect = { sort = it })
@@ -121,8 +128,8 @@ fun CspDetailsScreen(vm: CspDetailsViewModel = viewModel()) {
                 Entrance(index = 3) {
                     GlassCard(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(msg, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                            TextButton(onClick = vm::clearMessage) { Text("OK", color = EkoBlue) }
+                            Text(msg.asString(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                            TextButton(onClick = vm::clearMessage) { Text(stringResource(R.string.action_ok), color = EkoBlue) }
                         }
                     }
                 }
@@ -131,13 +138,13 @@ fun CspDetailsScreen(vm: CspDetailsViewModel = viewModel()) {
         if (csps.isEmpty()) {
             item {
                 Text(
-                    "No assigned CSPs cached yet. Pull to refresh when you have signal.",
+                    stringResource(R.string.csps_none_cached),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         } else if (visible.isEmpty()) {
             item {
-                Text("No CSPs match this search/filter.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.csps_no_match), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         itemsIndexed(visible, key = { _, it -> it.cspLocationId }) { i, csp ->
@@ -187,25 +194,28 @@ private fun CspCard(
     GlassCard(Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                GlassTag(if (visitedToday) "Visited today" else "Pending today", tint = if (visitedToday) EkoGreen else EkoAmber)
-                if (csp.coordinateConfidence == "UNVERIFIED") GlassTag("Coordinates unverified", tint = EkoAmber)
+                GlassTag(stringResource(if (visitedToday) R.string.label_visited_today else R.string.label_pending_today), tint = if (visitedToday) EkoGreen else EkoAmber)
+                if (csp.coordinateConfidence == "UNVERIFIED") GlassTag(stringResource(R.string.tag_coordinates_unverified), tint = EkoAmber)
             }
             Text(csp.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(csp.code, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (csp.address.isNotBlank()) Text(csp.address, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
-                "Lat ${"%.5f".format(csp.lat)}, Lng ${"%.5f".format(csp.lng)}  ·  ${csp.coordinateConfidence}",
+                stringResource(R.string.csps_lat_lng, csp.lat, csp.lng, csp.coordinateConfidence),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                distanceM?.let { GlassTag(formatDistance(it), tint = EkoCyan) }
-                GlassTag("Last visit: ${csp.lastVisitDate ?: "never"}", tint = EkoAmber)
+                distanceM?.let { GlassTag(distanceAway(it), tint = EkoCyan) }
+                GlassTag(stringResource(R.string.label_last_visit, csp.lastVisitDate ?: stringResource(R.string.label_never)), tint = EkoAmber)
             }
 
             if (profile.isNotEmpty()) {
                 TextButton(onClick = { expanded = !expanded }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-                    Text(if (expanded) "Hide details" else "Show details (${profile.size})", color = EkoCyan)
+                    Text(
+                        if (expanded) stringResource(R.string.csps_hide_details) else stringResource(R.string.csps_show_details, profile.size),
+                        color = EkoCyan,
+                    )
                 }
                 if (expanded) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -221,8 +231,8 @@ private fun CspCard(
             }
 
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                GlowButton(text = "Get Directions", onClick = onDirections)
-                GhostGlassButton(text = "Suggest edit", onClick = onSuggestEdit)
+                GlowButton(text = stringResource(R.string.action_get_directions), onClick = onDirections)
+                GhostGlassButton(text = stringResource(R.string.action_suggest_edit), onClick = onSuggestEdit)
             }
         }
     }
@@ -242,12 +252,12 @@ private fun SortDropdown(sort: CspSort, onSelect: (CspSort) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         TextButton(onClick = { expanded = true }) {
-            Text("Sort: ${sort.label}", color = EkoBlue)
-            Icon(Icons.Filled.ArrowDropDown, contentDescription = "Change sort", tint = EkoBlue)
+            Text(stringResource(R.string.sort_label, stringResource(sort.label)), color = EkoBlue)
+            Icon(Icons.Filled.ArrowDropDown, contentDescription = stringResource(R.string.cd_change_sort), tint = EkoBlue)
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             CspSort.entries.forEach { s ->
-                DropdownMenuItem(text = { Text(s.label) }, onClick = { onSelect(s); expanded = false })
+                DropdownMenuItem(text = { Text(stringResource(s.label)) }, onClick = { onSelect(s); expanded = false })
             }
         }
     }
@@ -268,11 +278,11 @@ private fun SuggestEditDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surface,
-        title = { Text("Suggest an edit — ${csp.code}") },
+        title = { Text(stringResource(R.string.suggest_edit_title, csp.code)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "One field at a time. The change stays pending until your Circle Head approves it.",
+                    stringResource(R.string.suggest_edit_body),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Box {
@@ -280,10 +290,10 @@ private fun SuggestEditDialog(
                         value = field,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Field") },
+                        label = { Text(stringResource(R.string.suggest_edit_field)) },
                         trailingIcon = {
                             IconButton(onClick = { expanded = true }) {
-                                Icon(Icons.Filled.ArrowDropDown, contentDescription = "Choose field")
+                                Icon(Icons.Filled.ArrowDropDown, contentDescription = stringResource(R.string.cd_choose_field))
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -297,17 +307,16 @@ private fun SuggestEditDialog(
                 OutlinedTextField(
                     value = value,
                     onValueChange = { value = it },
-                    label = { Text("New value") },
+                    label = { Text(stringResource(R.string.suggest_edit_new_value)) },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSubmit(field, value) }, enabled = value.isNotBlank() && !busy) { Text("Submit") }
+            TextButton(onClick = { onSubmit(field, value) }, enabled = value.isNotBlank() && !busy) { Text(stringResource(R.string.action_submit)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
 }
 
-private fun formatDistance(m: Double): String =
-    if (m < 1000) "${m.roundToInt()} m away" else "${"%.1f".format(m / 1000)} km away"
+
