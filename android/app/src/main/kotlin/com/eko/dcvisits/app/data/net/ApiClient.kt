@@ -31,7 +31,15 @@ object ApiClient {
 
     val api: C2Api by lazy { build(BuildConfig.API_BASE_URL) }
 
-    fun build(baseUrl: String): C2Api {
+    /**
+     * Token refresh only. Its own OkHttpClient (own Dispatcher, no authenticator):
+     * the authenticator blocks an [api] dispatcher thread while refreshing, so if
+     * the refresh shared that dispatcher, 5 simultaneous 401s would fill every
+     * per-host slot and the refresh could never run (deadlock).
+     */
+    val authApi: C2Api by lazy { build(BuildConfig.API_BASE_URL, withAuthenticator = false) }
+
+    fun build(baseUrl: String, withAuthenticator: Boolean = true): C2Api {
         val logging = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC
             else HttpLoggingInterceptor.Level.NONE
@@ -41,7 +49,7 @@ object ApiClient {
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .addInterceptor(logging)
-            .authenticator(SessionAuthenticator)
+            .apply { if (withAuthenticator) authenticator(SessionAuthenticator) }
             .build()
         return Retrofit.Builder()
             .baseUrl(baseUrl)
@@ -65,7 +73,8 @@ private object SessionAuthenticator : Authenticator {
     override fun authenticate(route: Route?, response: OkResponse): Request? {
         if (response.request.url.encodedPath.endsWith("/auth/token/refresh")) return null
         if (priorResponseCount(response) >= 2) return null
-        val fresh = runBlocking { ServiceLocator.authRepository.tryRefresh() } ?: return null
+        val sent = response.request.header("Authorization")?.removePrefix("Bearer ")
+        val fresh = runBlocking { ServiceLocator.authRepository.tryRefresh(failedToken = sent) } ?: return null
         return response.request.newBuilder()
             .header("Authorization", bearer(fresh))
             .build()

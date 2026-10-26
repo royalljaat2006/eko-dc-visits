@@ -14,11 +14,15 @@ import com.eko.dcvisits.app.data.crypto.DeviceKey
 import com.eko.dcvisits.app.data.session.Session
 import com.eko.dcvisits.app.data.session.SessionStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import com.eko.dcvisits.app.data.net.ApiException
 
 class AuthRepository(
     private val session: SessionStore,
     private val db: AppDatabase,
     private val api: C2Api = ApiClient.api,
+    private val refreshApi: C2Api = ApiClient.authApi,
 ) {
     val sessionFlow: Flow<Session?> = session.sessionFlow
 
@@ -56,20 +60,33 @@ class AuthRepository(
     /**
      * Silent re-auth for the OkHttp Authenticator (~1h access token expiry).
      * Rotates the refresh token. Returns the fresh access token, or null when
-     * refresh itself fails — in which case the session is cleared and the app
-     * falls back to the login screen. Never throws.
+     * refresh fails. Only a server verdict (4xx: token expired/revoked) clears
+     * the session and sends the DC to login; a network blip keeps the session so
+     * a DC in a weak-signal area is never logged out. Never throws.
+     *
+     * Serialized: refresh tokens are single-use, so concurrent 401s must not all
+     * spend it. [failedToken] is the access token the rejected request carried —
+     * if the session already holds a different one, another caller refreshed in
+     * the meantime and that token is simply reused.
      */
-    suspend fun tryRefresh(): String? {
-        val s = session.current() ?: return null
-        return try {
-            val res = api.refresh(RefreshBody(s.refreshToken)).bodyOrThrow()
+    suspend fun tryRefresh(failedToken: String? = null): String? = refreshLock.withLock {
+        val s = session.current() ?: return@withLock null
+        if (failedToken != null && failedToken != s.accessToken) return@withLock s.accessToken
+        try {
+            val res = refreshApi.refresh(RefreshBody(s.refreshToken)).bodyOrThrow()
             session.save(s.copy(accessToken = res.access_token, refreshToken = res.refresh_token))
             res.access_token
+        } catch (e: ApiException) {
+            // Only "this refresh token is no longer valid" ends the session — never a
+            // 429 rate limit or a 5xx outage.
+            if (!e.networkFailure && (e.status == 401 || e.status == 403)) session.clear()
+            null
         } catch (_: Exception) {
-            session.clear()
             null
         }
     }
+
+    private val refreshLock = Mutex()
 
     /** Local sign-out. The outbox journal is kept — unsynced evidence is never dropped. */
     suspend fun signOut() {

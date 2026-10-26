@@ -23,7 +23,12 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "eko-dc-visits.db",
-                ).fallbackToDestructiveMigration().build().also { instance = it }
+                )
+                    // Never wipe the outbox on an app update: it may hold unsynced
+                    // attendance/visit evidence. Any future schema change ships a
+                    // real Migration; only a downgrade (dev builds) may reset.
+                    .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
+                    .build().also { instance = it }
             }
     }
 }

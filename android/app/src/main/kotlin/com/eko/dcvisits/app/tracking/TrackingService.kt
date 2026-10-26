@@ -33,7 +33,11 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -58,7 +62,10 @@ import java.time.Instant
  */
 class TrackingService : Service() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1))
+    // A failed write (e.g. Room) must not crash the whole app mid-shift — log it and keep tracking.
+    private val crashGuard = CoroutineExceptionHandler { _, e -> android.util.Log.e("TrackingService", "tracking task failed", e) }
+    @Volatile private var lastSession: com.eko.dcvisits.app.data.session.Session? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1) + crashGuard)
 
     private val fused by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private val outbox by lazy { ServiceLocator.outboxRepository(this) }
@@ -114,7 +121,16 @@ class TrackingService : Service() {
                 stopEverything()
                 return START_NOT_STICKY
             }
-            else -> if (!started) startTracking()
+            else -> if (!started) {
+                startTracking()
+                // A null intent is the OS restarting us (START_STICKY), possibly long after
+                // End Day or sign-out: only keep running if the DC is still on duty.
+                if (intent == null) scope.launch {
+                    val onDuty = session.current() != null &&
+                        ServiceLocator.attendanceRepository.localDayState.first() == com.eko.dcvisits.app.data.repo.DayState.ON_DUTY
+                    if (!onDuty) withContext(Dispatchers.Main) { stopEverything() }
+                }
+            }
         }
         return START_STICKY
     }
@@ -277,7 +293,9 @@ class TrackingService : Service() {
 
     private suspend fun flush() {
         if (buffer.isEmpty()) return
-        val s = session.current() ?: return
+        // Sign-out stops this service and clears the session right after: fall back to
+        // the last known session so the final buffered points are still saved.
+        val s = session.current()?.also { lastSession = it } ?: lastSession ?: return
         val pts = ArrayList<SyncPayloads.TrackPt>(buffer.size)
         while (buffer.isNotEmpty() && pts.size < 500) pts.add(buffer.removeFirst())
         val payload: JsonObject = SyncPayloads.trackChunkEvent(
@@ -298,8 +316,11 @@ class TrackingService : Service() {
         runCatching { fused.removeLocationUpdates(callback) }
         runCatching { unregisterReceiver(gpsReceiver) }
         getSystemService(NotificationManager::class.java).cancel(ALERT_ID)
-        scope.launch { flush() }
-        scope.cancel()
+        // Save the last buffered points BEFORE cancelling the scope — cancelling first
+        // dropped up to ~3 minutes of route at every End Day.
+        scope.launch {
+            withContext(NonCancellable) { flush() }
+        }.invokeOnCompletion { scope.cancel() }
         stopForegroundCompat()
         stopSelf()
     }

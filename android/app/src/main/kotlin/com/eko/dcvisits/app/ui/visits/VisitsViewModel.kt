@@ -14,9 +14,14 @@ import com.eko.dcvisits.app.data.sync.SyncPayloads
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import com.eko.dcvisits.app.data.net.ApiClient
+import com.eko.dcvisits.app.util.Ist
 
 /** Out-of-radius reason codes — must match checkin-event.schema.json. */
 val OUT_OF_RADIUS_REASONS = listOf(
@@ -57,16 +62,40 @@ class VisitsViewModel : ViewModel() {
         csps.cspFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val pendingCheckins: StateFlow<Int> =
-        ServiceLocator.outboxRepository().recent
-            .map { rows ->
-                rows.count {
-                    it.type == SyncPayloads.OP_VISIT_CHECKIN && it.state in setOf("PENDING", "IN_FLIGHT")
-                }
-            }
+        ServiceLocator.outboxRepository().pendingCheckinCount
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     private val _ui = MutableStateFlow(VisitsUi())
     val ui: StateFlow<VisitsUi> = _ui
+
+    init {
+        // The open visit used to live only in memory: after the app was closed or
+        // killed, the DC could neither add photos nor check out. Rebuild it from the
+        // outbox — the latest check-in of today (manual or auto) with no check-out.
+        viewModelScope.launch { restoreOpenVisit() }
+    }
+
+    private suspend fun restoreOpenVisit() {
+        if (_ui.value.awaitingPhotoFor != null) return
+        val rows = ServiceLocator.outboxRepository().dayOps.first()
+        val today = Ist.today()
+        fun payloadOf(json: String) = runCatching { ApiClient.json.decodeFromString(JsonObject.serializer(), json) }.getOrNull()
+        val closed = rows.filter { it.type == SyncPayloads.OP_VISIT_CHECKOUT }
+            .mapNotNull { payloadOf(it.payload)?.get("visit_id")?.jsonPrimitive?.content }
+            .toSet()
+        val open = rows.asSequence()
+            .filter { it.type == SyncPayloads.OP_VISIT_CHECKIN }
+            .mapNotNull { payloadOf(it.payload) } // rows are newest first
+            .firstOrNull { p ->
+                val wall = p["timestamps"]?.jsonObject?.get("device_wall_time")?.jsonPrimitive?.content
+                wall != null && Ist.date(java.time.Instant.parse(wall)) == today &&
+                    p["id"]?.jsonPrimitive?.content !in closed
+            } ?: return
+        val visitId = open["id"]?.jsonPrimitive?.content ?: return
+        val locationId = open["location_id"]?.jsonPrimitive?.content
+        val code = locationId?.let { csps.byId(it)?.code } ?: ""
+        _ui.value = _ui.value.copy(awaitingPhotoFor = visitId, awaitingPhotoCsp = code)
+    }
 
     fun refresh(context: Context? = null) {
         viewModelScope.launch {

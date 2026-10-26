@@ -13,6 +13,8 @@ import com.eko.dcvisits.core.outbox.Backoff
 import com.eko.dcvisits.core.outbox.OpState
 import com.eko.dcvisits.core.outbox.Tier
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonObject
 import java.time.Instant
 
@@ -31,16 +33,26 @@ class OutboxRepository(
     private val session: SessionStore,
     private val api: C2Api = ApiClient.api,
     private val appVersion: String,
-    private val contractVersion: String = "0.8.0",
+    private val contractVersion: String = "0.13.0",
     private val backoff: Backoff = Backoff(),
     private val maxOpsPerBatch: Int = 50,
+    /** Keep one request well under the server's 16 MiB body limit (photos are ~0.4 MB base64 each). */
+    private val maxBatchPayloadChars: Int = 4_000_000,
 ) {
     val recent: Flow<List<OutboxEntity>> get() = dao.recent()
+
+    /** Attendance + visit ops from the last ~36 h — unaffected by how many track chunks pile up. */
+    val dayOps: Flow<List<OutboxEntity>> get() = dao.dayOps(System.currentTimeMillis() - 36 * 3600 * 1000L)
+
+    /** seq must be unique and increasing — the UI and the tracking service enqueue concurrently. */
+    private val enqueueLock = Mutex()
     val pendingCount: Flow<Int> get() = dao.pendingCount()
+    val pendingCheckinCount: Flow<Int> get() = dao.pendingCheckinCount()
 
     /** Commit one evidence op. Returns its client op_id (== the payload `id`). */
     suspend fun enqueue(opType: String, payload: JsonObject, label: String): String {
         val opId = payload["id"].asStringOrNull() ?: Uuidv7.next()
+        enqueueLock.withLock {
         val seq = dao.maxSeq() + 1
         dao.insertIfAbsent(
             OutboxEntity(
@@ -57,6 +69,7 @@ class OutboxRepository(
                 label = label,
             )
         )
+        }
         return opId
     }
 
@@ -66,18 +79,23 @@ class OutboxRepository(
      * the queue reached a terminal-only state, false when work remains.
      */
     suspend fun drainOnce(now: Instant = Instant.now()): Boolean {
-        val s = session.current() ?: return true // not signed in — nothing to send
+        if (session.current() == null) return true // not signed in — nothing to send
         recoverInFlight()
 
         while (true) {
+            // Re-read every batch: a long backlog can outlive the 1h access token, and
+            // the authenticator stores the refreshed one in the session.
+            val s = session.current() ?: return false
             val nowMs = now.toEpochMilli().coerceAtLeast(System.currentTimeMillis())
-            val rows = dao.all()
-            val eligible = rows
-                .filter { it.state == OpState.PENDING.name && it.notBeforeMs <= nowMs }
-                .sortedWith(compareBy({ Tier.valueOf(it.tier).ordinal }, { it.seq }))
-                .take(maxOpsPerBatch)
+            val rows = dao.nonTerminal()
+            val eligible = takeWithinBudget(
+                rows
+                    .filter { it.state == OpState.PENDING.name && it.notBeforeMs <= nowMs }
+                    .sortedWith(compareBy({ Tier.valueOf(it.tier).ordinal }, { it.seq }))
+            )
             if (eligible.isEmpty()) {
-                return rows.none { it.state == OpState.PENDING.name || it.state == OpState.IN_FLIGHT.name }
+                pruneSynced(nowMs)
+                return rows.isEmpty()
             }
 
             val batchId = Uuidv7.next()
@@ -91,7 +109,7 @@ class OutboxRepository(
                     payload = ApiClient.json.decodeFromString(JsonObject.serializer(), it.payload),
                 )
             }
-            val nonTerminal = rows.filter { it.state == OpState.PENDING.name || it.state == OpState.IN_FLIGHT.name }
+            val nonTerminal = rows
             val unsigned = SyncPayloads.batch(
                 batchId = batchId,
                 deviceId = s.deviceId,
@@ -121,32 +139,54 @@ class OutboxRepository(
 
             val results = response.body()?.results.orEmpty().associateBy { it.op_id }
             val updated = eligible.map { row ->
-                val code = results[row.opId]?.result
-                val newState = when (code) {
-                    "accepted", "accepted-flagged", "duplicate" -> OpState.ACKED
-                    "quarantined" -> OpState.QUARANTINED
-                    "rejected" -> OpState.REJECTED
-                    else -> OpState.PENDING // server didn't rule on it — retry it
-                }
-                if (newState == OpState.PENDING) {
-                    row.copy(state = OpState.PENDING.name, inFlightBatchId = null)
-                } else {
-                    row.copy(state = newState.name, inFlightBatchId = null)
+                when (results[row.opId]?.result) {
+                    "accepted", "accepted-flagged", "duplicate" -> row.copy(state = OpState.ACKED.name, inFlightBatchId = null)
+                    "quarantined" -> row.copy(state = OpState.QUARANTINED.name, inFlightBatchId = null)
+                    "rejected" -> row.copy(state = OpState.REJECTED.name, inFlightBatchId = null)
+                    // Server didn't rule on it — retry later with backoff, never in a hot loop.
+                    else -> {
+                        val attempts = row.attempts + 1
+                        row.copy(
+                            state = OpState.PENDING.name,
+                            attempts = attempts,
+                            notBeforeMs = nowMs + backoff.nextDelayMs(attempts, null) { Math.random() },
+                            inFlightBatchId = null,
+                        )
+                    }
                 }
             }
             dao.upsertAll(updated)
         }
     }
 
+    /** Oldest-first ops up to [maxOpsPerBatch] and [maxBatchPayloadChars]; always at least one. */
+    private fun takeWithinBudget(sorted: List<OutboxEntity>): List<OutboxEntity> {
+        val out = ArrayList<OutboxEntity>()
+        var chars = 0L
+        for (row in sorted) {
+            if (out.size >= maxOpsPerBatch) break
+            if (out.isNotEmpty() && chars + row.payload.length > maxBatchPayloadChars) break
+            out += row
+            chars += row.payload.length
+        }
+        return out
+    }
+
+    /** Free phone storage: drop synced photo bytes now, synced history after a week. */
+    private suspend fun pruneSynced(nowMs: Long) {
+        dao.stripAckedPhotoPayloads()
+        dao.deleteAckedBefore(nowMs - 7L * 24 * 3600 * 1000)
+    }
+
     private suspend fun recoverInFlight() {
-        val stuck = dao.all().filter { it.state == OpState.IN_FLIGHT.name }
+        val stuck = dao.nonTerminal().filter { it.state == OpState.IN_FLIGHT.name }
         if (stuck.isNotEmpty()) {
             dao.upsertAll(stuck.map { it.copy(state = OpState.PENDING.name, inFlightBatchId = null) })
         }
     }
 
     private suspend fun requeueFailed(batchId: String, nowMs: Long, retryAfterMs: Long?) {
-        val failed = dao.all().filter { it.state == OpState.IN_FLIGHT.name && it.inFlightBatchId == batchId }
+        val failed = dao.nonTerminal().filter { it.state == OpState.IN_FLIGHT.name && it.inFlightBatchId == batchId }
         if (failed.isEmpty()) return
         dao.upsertAll(
             failed.map {

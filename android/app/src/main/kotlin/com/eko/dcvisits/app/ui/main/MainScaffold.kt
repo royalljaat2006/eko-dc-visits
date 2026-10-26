@@ -63,6 +63,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eko.dcvisits.app.data.repo.DayState
 import com.eko.dcvisits.app.di.ServiceLocator
+import com.eko.dcvisits.app.tracking.BatteryOptimization
 import com.eko.dcvisits.app.tracking.TrackingService
 import com.eko.dcvisits.app.ui.approvals.ApprovalsScreen
 import com.eko.dcvisits.app.ui.attendance.AttendanceScreen
@@ -117,11 +118,11 @@ fun MainScaffold(
     val gated = role == "DC" && day == DayState.NOT_STARTED
 
     LaunchedEffect(role, day) {
-        if (role == "DC" && day == DayState.ON_DUTY) TrackingService.start(context)
+        if (role == "DC" && day == DayState.ON_DUTY) { TrackingService.start(context); BatteryOptimization.askIfNeeded(context) }
         else if (day == DayState.ENDED) TrackingService.stop(context)
     }
 
-    val onSignOut = { scope.launch { ServiceLocator.authRepository.signOut(); onSignedOut() }; Unit }
+    val onSignOut = { TrackingService.stop(context); scope.launch { ServiceLocator.authRepository.signOut(); onSignedOut() }; Unit }
     val body: @Composable () -> Unit = {
         Box(Modifier.fillMaxSize()) {
             AnimatedContent(
