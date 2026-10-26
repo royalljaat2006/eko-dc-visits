@@ -8,6 +8,8 @@
  * this transcription with spec-driven codegen (see web/README.md).
  */
 
+import { singleFlight } from '../lib/auth.ts';
+
 // ---------------------------------------------------------------------------
 // Types transcribed from contracts/c2-api/openapi.yaml + contracts/c1-entities/*
 // ---------------------------------------------------------------------------
@@ -234,21 +236,24 @@ interface RequestOpts {
   signal?: AbortSignal;
 }
 
-async function request(opts: RequestOpts): Promise<unknown> {
+function networkError(err: unknown): ApiError {
+  return new ApiError(
+    {
+      type: 'about:blank',
+      title: 'API unreachable',
+      status: 0,
+      detail: err instanceof Error ? err.message : 'Network request failed',
+    },
+    true,
+  );
+}
+
+async function send(opts: RequestOpts, accessToken: string | null): Promise<Response> {
   const headers: Record<string, string> = {};
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
-  if (opts.auth) {
-    const s = getSession();
-    if (!s) {
-      onUnauthorized();
-      throw new ApiError(problemFromStatus(401, 'Not signed in'));
-    }
-    headers['Authorization'] = `Bearer ${s.access_token}`;
-  }
-
-  let res: Response;
+  if (accessToken !== null) headers['Authorization'] = `Bearer ${accessToken}`;
   try {
-    res = await fetch(BASE + opts.path, {
+    return await fetch(BASE + opts.path, {
       method: opts.method,
       headers,
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
@@ -256,22 +261,68 @@ async function request(opts: RequestOpts): Promise<unknown> {
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err;
-    throw new ApiError(
-      {
-        type: 'about:blank',
-        title: 'API unreachable',
-        status: 0,
-        detail: err instanceof Error ? err.message : 'Network request failed',
-      },
-      true,
-    );
+    throw networkError(err);
   }
+}
 
-  if (res.status === 401 && opts.auth) {
-    // Session expired/revoked. C2 v0.1.0 defines no refresh endpoint → re-login.
-    clearSession();
-    onUnauthorized();
-    throw new ApiError(await problemFromResponse(res));
+/**
+ * POST /auth/token/refresh (C2 v0.9.0). Refresh tokens are SINGLE-USE and
+ * rotate, so the new pair is stored immediately, and concurrent callers share
+ * one in-flight exchange (singleFlight) so parallel 401s spend the token once.
+ * Resolves true on success; false when the server rejected the refresh (the
+ * session is then dead). Network failures throw (session left intact).
+ */
+const refreshAccessToken = singleFlight(async (): Promise<boolean> => {
+  const s = getSession();
+  if (!s) return false;
+  let res: Response;
+  try {
+    res = await fetch(BASE + '/auth/token/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: s.refresh_token }),
+    });
+  } catch (err) {
+    throw networkError(err);
+  }
+  if (!res.ok) return false;
+  const data = (await res.json()) as { access_token?: unknown; refresh_token?: unknown };
+  if (typeof data.access_token !== 'string' || typeof data.refresh_token !== 'string') return false;
+  // Re-read: the user may have logged out while the refresh was in flight.
+  const current = getSession();
+  if (!current || current.refresh_token !== s.refresh_token) return false;
+  storeSession({ ...current, access_token: data.access_token, refresh_token: data.refresh_token });
+  return true;
+});
+
+async function request(opts: RequestOpts): Promise<unknown> {
+  let res: Response;
+  if (opts.auth) {
+    const s = getSession();
+    if (!s) {
+      onUnauthorized();
+      throw new ApiError(problemFromStatus(401, 'Not signed in'));
+    }
+    res = await send(opts, s.access_token);
+
+    if (res.status === 401) {
+      // Access JWT (~1h) expired: try ONE silent refresh, then retry once.
+      // If another call already rotated the token while this one was in
+      // flight, skip the refresh and just retry with the newer token.
+      const latest = getSession();
+      let renewed = latest !== null && latest.access_token !== s.access_token;
+      if (!renewed && latest !== null) renewed = await refreshAccessToken();
+      const fresh = renewed ? getSession() : null;
+      if (fresh) res = await send(opts, fresh.access_token);
+      if (res.status === 401) {
+        // Refresh rejected or retry still unauthorized → session dead, re-login.
+        clearSession();
+        onUnauthorized();
+        throw new ApiError(await problemFromResponse(res));
+      }
+    }
+  } else {
+    res = await send(opts, null);
   }
 
   if (!res.ok) throw new ApiError(await problemFromResponse(res));
@@ -308,10 +359,12 @@ export async function requestOtp(phone: string): Promise<void> {
 }
 
 /** POST /auth/otp/verify → session. Sends browser-derived device info (spec requires device.hardware). */
-export async function verifyOtp(phone: string, otp: string): Promise<LoginResponse> {
+export async function verifyOtp(phone: string, otp: string, name?: string): Promise<LoginResponse> {
   const body = {
     phone,
     otp,
+    // Only sent after a 422 "Name Required" (unregistered number → self-register as DC).
+    ...(name !== undefined ? { name } : {}),
     device: {
       hardware: {
         manufacturer: 'web',

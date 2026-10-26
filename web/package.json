@@ -9,7 +9,7 @@
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "test": "node --test src/lib/format.test.ts src/lib/chips.test.ts"
+    "test": "node --test src/lib/format.test.ts src/lib/chips.test.ts src/lib/importRows.test.ts src/lib/auth.test.ts"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
