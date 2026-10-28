@@ -30,6 +30,8 @@ class CspRepository(
 
     suspend fun byId(id: String): CspCacheEntity? = dao.byId(id)
 
+    suspend fun all(): List<CspCacheEntity> = dao.all()
+
     suspend fun sites(): List<CspSite> =
         dao.all().map { CspSite(it.cspLocationId, it.lat, it.lng, it.radiusM) }
 

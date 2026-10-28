@@ -96,6 +96,13 @@ class VisitsViewModel : ViewModel() {
 
     private suspend fun restoreOpenVisit() {
         if (_ui.value.awaitingPhotoFor != null) return
+        val (visitId, locationId) = findOpenVisit() ?: return
+        val code = locationId?.let { csps.byId(it)?.code } ?: ""
+        _ui.value = _ui.value.copy(awaitingPhotoFor = visitId, awaitingPhotoCsp = code)
+    }
+
+    /** Today's latest check-in (manual or auto) with no check-out, as (visit id, location id). */
+    private suspend fun findOpenVisit(): Pair<String, String?>? {
         val rows = ServiceLocator.outboxRepository().dayOps.first()
         val today = Ist.today()
         fun payloadOf(json: String) = runCatching { ApiClient.json.decodeFromString(JsonObject.serializer(), json) }.getOrNull()
@@ -109,11 +116,9 @@ class VisitsViewModel : ViewModel() {
                 val wall = p["timestamps"]?.jsonObject?.get("device_wall_time")?.jsonPrimitive?.content
                 wall != null && Ist.date(java.time.Instant.parse(wall)) == today &&
                     p["id"]?.jsonPrimitive?.content !in closed
-            } ?: return
-        val visitId = open["id"]?.jsonPrimitive?.content ?: return
-        val locationId = open["location_id"]?.jsonPrimitive?.content
-        val code = locationId?.let { csps.byId(it)?.code } ?: ""
-        _ui.value = _ui.value.copy(awaitingPhotoFor = visitId, awaitingPhotoCsp = code)
+            } ?: return null
+        val visitId = open["id"]?.jsonPrimitive?.content ?: return null
+        return visitId to open["location_id"]?.jsonPrimitive?.content
     }
 
     fun refresh(context: Context? = null) {
@@ -135,6 +140,17 @@ class VisitsViewModel : ViewModel() {
         if (_ui.value.busy) return
         _ui.value = _ui.value.copy(busy = true, message = null)
         viewModelScope.launch {
+            // An auto check-in may already have opened this visit while the screen was up:
+            // reopen it instead of logging a second visit at the same CSP.
+            findOpenVisit()?.takeIf { it.second == csp.cspLocationId }?.let { (visitId, _) ->
+                _ui.value = _ui.value.copy(
+                    busy = false,
+                    awaitingPhotoFor = visitId,
+                    awaitingPhotoCsp = csp.code,
+                    message = UiText.res(R.string.visits_already_checked_in, csp.code),
+                )
+                return@launch
+            }
             val fix = LocationProvider.currentFix(context)
             if (fix == null) {
                 _ui.value = _ui.value.copy(

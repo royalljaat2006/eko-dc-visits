@@ -3,6 +3,7 @@ package com.eko.dcvisits.app
 import android.app.Application
 import com.eko.dcvisits.app.data.sync.SyncWorker
 import com.eko.dcvisits.app.di.ServiceLocator
+import com.eko.dcvisits.app.tracking.DailyReminderWorker
 
 class DcVisitsApp : Application() {
     override fun onCreate() {
@@ -10,5 +11,6 @@ class DcVisitsApp : Application() {
         ServiceLocator.init(this)
         // Backstop drain so a multi-day offline backlog clears on its own.
         SyncWorker.schedulePeriodic(this)
+        DailyReminderWorker.scheduleAll(this)
     }
 }
