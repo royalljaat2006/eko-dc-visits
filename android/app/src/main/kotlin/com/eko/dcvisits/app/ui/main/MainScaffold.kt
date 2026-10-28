@@ -35,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
@@ -77,6 +78,8 @@ import com.eko.dcvisits.app.ui.logi.LogiScreen
 import com.eko.dcvisits.app.ui.nearestcsp.NearestCspScreen
 import com.eko.dcvisits.app.ui.location.LocationGate
 import com.eko.dcvisits.app.ui.profile.ProfileScreen
+import com.eko.dcvisits.app.ui.team.TeamScreen
+import com.eko.dcvisits.app.ui.team.TeamVisitsScreen
 import com.eko.dcvisits.app.ui.theme.EkoBlue
 import com.eko.dcvisits.app.ui.visits.VisitsScreen
 import kotlinx.coroutines.launch
@@ -94,6 +97,9 @@ private enum class Tab(@StringRes val label: Int, val icon: ImageVector, val dcG
     LOGI(R.string.tab_logi, Icons.Filled.Route, dcGated = true),
     APPROVALS(R.string.tab_approvals, Icons.Filled.RateReview, dcGated = false),
     PROFILE(R.string.tab_profile, Icons.Filled.Person, dcGated = false),
+    // Admin / national head: every DC at a glance (read-only).
+    TEAM(R.string.tab_team, Icons.Filled.Groups, dcGated = false),
+    TEAM_VISITS(R.string.tab_visits, Icons.AutoMirrored.Filled.List, dcGated = false),
 }
 
 @Composable
@@ -115,10 +121,13 @@ fun MainScaffold(
     val tabs = when (role) {
         "DC" -> listOf(Tab.HOME, Tab.MY_CSPS, Tab.NAVIGATE, Tab.VISITS, Tab.LOGI, Tab.PROFILE)
         "CIRCLE_HEAD" -> listOf(Tab.HOME, Tab.APPROVALS, Tab.PROFILE)
-        "CORPORATE_ADMIN" -> listOf(Tab.HOME, Tab.APPROVALS, Tab.PROFILE)
+        "CORPORATE_ADMIN" -> listOf(Tab.TEAM, Tab.TEAM_VISITS, Tab.APPROVALS, Tab.PROFILE)
+        "NATIONAL_HEAD" -> listOf(Tab.TEAM, Tab.TEAM_VISITS, Tab.PROFILE)
         else -> listOf(Tab.HOME, Tab.PROFILE)
     }
     var selected by rememberSaveable { mutableStateOf(Tab.HOME) }
+    // The role arrives after the first frame (session loads async): land on that role's first tab.
+    LaunchedEffect(tabs) { if (selected !in tabs) selected = tabs.first() }
     val gated = role == "DC" && day == DayState.NOT_STARTED
 
     LaunchedEffect(role, day) {
@@ -142,6 +151,8 @@ fun MainScaffold(
                     tab == Tab.NAVIGATE -> NearestCspScreen()
                     tab == Tab.LOGI -> LogiScreen()
                     tab == Tab.APPROVALS -> ApprovalsScreen()
+                    tab == Tab.TEAM -> TeamScreen()
+                    tab == Tab.TEAM_VISITS -> TeamVisitsScreen()
                     tab == Tab.PROFILE -> ProfileScreen(role = role, onSignOut = onSignOut)
                     else -> AttendanceScreen(attendanceVm)
                 }

@@ -88,6 +88,18 @@ interface C2Api {
         @Query("date") date: String,
     ): Response<ScorecardResponse>
 
+    @GET("dashboard/overview")
+    suspend fun overview(
+        @Header("Authorization") bearer: String,
+        @Query("date") date: String,
+    ): Response<OverviewResponse>
+
+    @GET("dashboard/live-locations")
+    suspend fun liveLocations(
+        @Header("Authorization") bearer: String,
+        @Query("stale_after_s") staleAfterS: Int,
+    ): Response<LiveLocationsResponse>
+
     @POST("sync/batches")
     suspend fun submitBatch(
         @Header("Authorization") bearer: String,
