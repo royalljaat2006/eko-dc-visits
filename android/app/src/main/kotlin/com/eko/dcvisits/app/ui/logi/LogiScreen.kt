@@ -37,6 +37,9 @@ import com.eko.dcvisits.app.ui.theme.EkoBlue
 import com.eko.dcvisits.app.ui.theme.EkoGreen
 import com.eko.dcvisits.app.ui.theme.EkoViolet
 import kotlin.math.roundToInt
+import androidx.compose.ui.res.stringResource
+import com.eko.dcvisits.app.R
+import com.eko.dcvisits.app.ui.text.distanceLabel
 
 /**
  * "Logi" tab: a single place for the day's field logistics — today's summary,
@@ -62,8 +65,8 @@ fun LogiScreen(vm: LogiViewModel = viewModel()) {
             item {
                 Entrance(index = 0) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("Today's logistics", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
-                        TextButton(onClick = { vm.refresh(context) }) { Text("Refresh", color = EkoBlue) }
+                        Text(stringResource(R.string.logi_title), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
+                        TextButton(onClick = { vm.refresh(context) }) { Text(stringResource(R.string.action_refresh), color = EkoBlue) }
                     }
                 }
             }
@@ -71,16 +74,19 @@ fun LogiScreen(vm: LogiViewModel = viewModel()) {
                 item { LoadingState() }
             } else {
                 if (day == DayState.NOT_STARTED) {
-                    item { Entrance(index = 1) { StateBanner("Check In on Home to start today's tracking and itinerary.", tint = EkoBlue) } }
+                    item { Entrance(index = 1) { StateBanner(stringResource(R.string.logi_check_in_first), tint = EkoBlue) } }
                 }
                 if (ui.stale) {
-                    item { Entrance(index = 1) { StateBanner("Couldn't reach the server just now — showing the last known plan; it may be stale.", tint = EkoAmber) } }
+                    item { Entrance(index = 1) { StateBanner(stringResource(R.string.logi_stale), tint = EkoAmber) } }
                 }
                 ui.openVisit?.let { visit ->
                     item {
                         Entrance(index = 2) {
                             StateBanner(
-                                "You have an open visit at ${visit.location_code ?: visit.location_name ?: "a CSP"} — finish it on the Visits tab before starting another.",
+                                stringResource(
+                                    R.string.logi_open_visit,
+                                    visit.location_code ?: visit.location_name ?: stringResource(R.string.logi_a_csp),
+                                ),
                                 tint = EkoViolet,
                             )
                         }
@@ -95,14 +101,14 @@ fun LogiScreen(vm: LogiViewModel = viewModel()) {
 
                 item {
                     Entrance(index = 4) {
-                        Text("Smart next stop", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
+                        Text(stringResource(R.string.logi_smart_next_stop), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
                     }
                 }
                 item {
                     Entrance(index = 5) {
                         when {
                             ui.recommendedState == "no_eligible_csp" -> NoEligibleCspBanner()
-                            ui.recommended == null -> StateBanner("No recommendation available right now.", tint = EkoAmber)
+                            ui.recommended == null -> StateBanner(stringResource(R.string.logi_no_recommendation), tint = EkoAmber)
                             else -> NextStopCard(
                                 name = ui.recommended!!.name,
                                 code = ui.recommended!!.code,
@@ -119,10 +125,10 @@ fun LogiScreen(vm: LogiViewModel = viewModel()) {
                 item {
                     Entrance(index = 6) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("Today's itinerary (${ui.stops.size})", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
+                            Text(stringResource(R.string.logi_itinerary, ui.stops.size), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
                             if (pendingStops.size > 1) {
                                 TextButton(onClick = { openMultiStopRoute(context, pendingStops.take(9).map { it.csp.lat to it.csp.lng }) }) {
-                                    Text("Open route in Maps", color = EkoBlue)
+                                    Text(stringResource(R.string.logi_open_route), color = EkoBlue)
                                 }
                             }
                         }
@@ -131,14 +137,14 @@ fun LogiScreen(vm: LogiViewModel = viewModel()) {
                 item {
                     Entrance(index = 7) {
                         Text(
-                            "Sorted by straight-line distance from your last known location — not an optimized multi-stop route (no routing provider is configured).",
+                            stringResource(R.string.logi_sorted_note),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
                 if (ui.stops.isEmpty()) {
-                    item { StateBanner("No assigned CSPs cached yet.", tint = EkoAmber) }
+                    item { StateBanner(stringResource(R.string.logi_none_cached), tint = EkoAmber) }
                 }
                 itemsIndexed(ui.stops, key = { _, s -> s.csp.cspLocationId }) { i, stop ->
                     Entrance(index = i + 8) {
@@ -155,16 +161,16 @@ private fun FieldSummaryCard(ui: LogiUiState) {
     GlassCard(Modifier.fillMaxWidth(), cornerRadius = 18.dp, contentPadding = 16.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                SummaryStat("Assigned", "${ui.assignedCount}")
-                SummaryStat("Visited today", "${ui.visitedTodayCount}")
-                SummaryStat("Pending today", "${(ui.assignedCount - ui.visitedTodayCount).coerceAtLeast(0)}")
+                SummaryStat(stringResource(R.string.label_assigned), "${ui.assignedCount}")
+                SummaryStat(stringResource(R.string.label_visited_today), "${ui.visitedTodayCount}")
+                SummaryStat(stringResource(R.string.label_pending_today), "${(ui.assignedCount - ui.visitedTodayCount).coerceAtLeast(0)}")
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                SummaryStat("Distance travelled", ui.kmToday?.let { "%.1f km".format(it) } ?: "—")
-                SummaryStat("GPS points today", ui.routePointsToday?.toString() ?: "—")
+                SummaryStat(stringResource(R.string.logi_distance_travelled), ui.kmToday?.let { stringResource(R.string.distance_km, it) } ?: "—")
+                SummaryStat(stringResource(R.string.logi_gps_points_today), ui.routePointsToday?.toString() ?: "—")
             }
             Text(
-                "Distance travelled is a provisional GPS estimate (track_straightline_v0) — not a planned-route figure; no routing provider is configured to compute one.",
+                stringResource(R.string.logi_distance_note),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -187,10 +193,10 @@ private fun NextStopCard(name: String, code: String, distanceM: Double?, onNavig
             Text(name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(code, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             distanceM?.let {
-                GlassTag(formatDistance(it) + " · straight-line", tint = EkoBlue)
+                GlassTag(stringResource(R.string.distance_straight_line, distanceLabel(it)), tint = EkoBlue)
             }
             Row(Modifier.padding(top = 8.dp)) {
-                GlowButton(text = "Navigate", onClick = onNavigate)
+                GlowButton(text = stringResource(R.string.action_navigate), onClick = onNavigate)
             }
         }
     }
@@ -205,14 +211,12 @@ private fun ItineraryRow(stop: LogiStop) {
                 Text(stop.csp.name, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(stop.csp.code, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            stop.distanceM?.let { GlassTag(formatDistance(it), tint = EkoBlue) }
-            GlassTag(if (stop.visitedToday) "Visited" else "Pending", tint = if (stop.visitedToday) EkoGreen else EkoAmber)
+            stop.distanceM?.let { GlassTag(distanceLabel(it), tint = EkoBlue) }
+            GlassTag(stringResource(if (stop.visitedToday) R.string.label_visited else R.string.label_pending), tint = if (stop.visitedToday) EkoGreen else EkoAmber)
         }
     }
 }
 
-private fun formatDistance(m: Double): String =
-    if (m < 1000) "${m.roundToInt()} m" else "${"%.1f".format(m / 1000)} km"
 
 /** Google Maps multi-stop directions — destination is the last stop, everything else is a waypoint. */
 private fun openMultiStopRoute(context: android.content.Context, stops: List<Pair<Double, Double>>) {

@@ -1,9 +1,9 @@
 package com.eko.dcvisits.app
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -24,7 +24,12 @@ import com.eko.dcvisits.app.ui.login.LoginScreen
 import com.eko.dcvisits.app.ui.main.MainScaffold
 import com.eko.dcvisits.app.ui.theme.DcVisitsTheme
 
-class MainActivity : ComponentActivity() {
+/**
+ * AppCompatActivity (not plain ComponentActivity) so AppCompatDelegate's per-app
+ * language applies — and persists — on Android 10–12 too; on a language switch
+ * AppCompat recreates this activity and Compose re-renders in the new language.
+ */
+class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

@@ -1,0 +1,337 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Eko CSP विज़िट</string>
+
+    <!-- ===== Common actions / words ===== -->
+    <string name="action_cancel">रद्द करें</string>
+    <string name="action_ok">ठीक है</string>
+    <string name="action_refresh">रिफ़्रेश करें</string>
+    <string name="action_navigate">नेविगेट करें</string>
+    <string name="action_submit">जमा करें</string>
+    <string name="action_open_settings">सेटिंग्स खोलें</string>
+    <string name="action_turn_on_gps">GPS चालू करें</string>
+    <string name="action_sign_out">लॉग आउट</string>
+    <string name="action_sign_in">लॉगिन करें</string>
+    <string name="action_retry_now">अभी दोबारा कोशिश करें</string>
+    <string name="action_grant">अनुमति दें</string>
+    <string name="action_not_now">अभी नहीं</string>
+    <string name="action_later">बाद में</string>
+    <string name="action_check_out">चेक आउट</string>
+    <string name="action_approve">मंज़ूर करें</string>
+    <string name="action_reject">अस्वीकार करें</string>
+    <string name="error_something_went_wrong">कुछ गड़बड़ हो गई</string>
+    <string name="error_cant_reach_server">सर्वर से कनेक्ट नहीं हो पा रहा। अपना इंटरनेट चेक करें।</string>
+
+    <!-- Shared labels -->
+    <string name="label_assigned">असाइन किए गए</string>
+    <string name="label_visited_today">आज विज़िट हुए</string>
+    <string name="label_pending_today">आज बाकी</string>
+    <string name="label_visited">विज़िट हो गया</string>
+    <string name="label_pending">बाकी</string>
+    <string name="label_last_visit">पिछली विज़िट: %1$s</string>
+    <string name="label_never">कभी नहीं</string>
+    <string name="label_never_visited">कभी विज़िट नहीं हुआ</string>
+
+    <!-- Distances -->
+    <string name="distance_m">%1$d मीटर</string>
+    <string name="distance_km">%1$.1f किमी</string>
+    <string name="distance_m_away">%1$d मीटर दूर</string>
+    <string name="distance_km_away">%1$.1f किमी दूर</string>
+    <string name="distance_m_short">%1$d मी</string>
+    <string name="distance_km_short">%1$.1f किमी</string>
+    <string name="distance_inside">अंदर · %1$s</string>
+    <string name="distance_away">%1$s दूर</string>
+    <string name="distance_straight_line">%1$s · सीधी दूरी</string>
+
+    <!-- ===== Roles ===== -->
+    <string name="role_dc">DC</string>
+    <string name="role_circle_head">सर्कल हेड</string>
+    <string name="role_national_head">नेशनल हेड</string>
+    <string name="role_hr_admin">HR एडमिन</string>
+    <string name="role_corporate_admin">कॉर्पोरेट एडमिन</string>
+    <string name="role_bank_official">बैंक अधिकारी</string>
+
+    <!-- ===== Main scaffold / tabs ===== -->
+    <string name="tab_home">होम</string>
+    <string name="tab_my_csps">मेरे CSP</string>
+    <string name="tab_navigate">नेविगेट</string>
+    <string name="tab_visits">विज़िट</string>
+    <string name="tab_logi">लॉजी</string>
+    <string name="tab_approvals">मंज़ूरी</string>
+    <string name="tab_profile">प्रोफ़ाइल</string>
+    <string name="gate_notice">बाकी सेक्शन खोलने के लिए हाज़िरी लगाएँ (चेक इन करें)।</string>
+
+    <!-- ===== Login ===== -->
+    <string name="login_subtitle">अपने रजिस्टर्ड मोबाइल नंबर से लॉगिन करें</string>
+    <string name="login_mobile_number">मोबाइल नंबर</string>
+    <string name="login_send_otp">OTP भेजें</string>
+    <string name="login_phone_hint">Eko में रजिस्टर्ड मोबाइल नंबर डालें। OTP SMS से आएगा।</string>
+    <string name="login_otp_sent_to">OTP +91 %1$s पर भेजा गया</string>
+    <string name="login_otp_label">6 अंकों का OTP</string>
+    <string name="login_new_number_name">नया नंबर — आप DC के रूप में रजिस्टर हो रहे हैं। आपका नाम क्या है?</string>
+    <string name="login_full_name">पूरा नाम</string>
+    <string name="login_verify">वेरिफ़ाई करें और लॉगिन करें</string>
+    <string name="login_change_number">नंबर बदलें</string>
+
+    <!-- ===== Profile ===== -->
+    <string name="profile_back">प्रोफ़ाइल पर वापस जाएँ</string>
+    <string name="profile_my_scorecard">मेरा स्कोरकार्ड</string>
+    <string name="profile_view">देखें →</string>
+    <string name="profile_language">भाषा</string>
+    <string name="language_system_default">फ़ोन की भाषा</string>
+    <string name="language_english">English</string>
+    <string name="language_hindi">हिंदी</string>
+
+    <!-- ===== Home / attendance ===== -->
+    <string name="attendance_active_banner">हाज़िरी चालू है — विज़िट, नेविगेट, मेरे CSP और लॉजी खुल गए हैं।</string>
+    <string name="attendance_check_in_start_day">चेक इन — दिन शुरू करें</string>
+    <string name="attendance_end_day">दिन खत्म करें</string>
+    <string name="attendance_end_day_title">आज का दिन खत्म करें?</string>
+    <string name="attendance_end_day_body">रूट ट्रैकिंग बंद हो जाएगी और आज के घंटे/दूरी फ़ाइनल हो जाएँगे। गलती से खत्म किया हो तो आप फिर से शुरू कर सकते हैं।</string>
+    <string name="attendance_resume_day">दिन फिर से शुरू करें</string>
+    <string name="attendance_resume_hint">गलती से खत्म हो गया या अभी काम चल रहा है? फिर से शुरू करने पर आज की रूट ट्रैकिंग दोबारा चालू हो जाएगी। पिछली तारीखें नहीं बदलेंगी।</string>
+    <string name="attendance_resume_title">आज का दिन फिर से शुरू करें?</string>
+    <string name="attendance_resume_body">जब तक आप दिन खत्म नहीं करते, रूट ट्रैकिंग फिर से चलेगी। आपके दिन में पूरा काम का समय गिना जाएगा, बीच का यह समय भी। रात 21:00 IST पर अपने-आप चेक आउट अब भी लागू रहेगा।</string>
+    <string name="attendance_resume_confirm">शुरू करें और ट्रैक करें</string>
+    <string name="stat_csps">CSP</string>
+    <string name="stat_of_assigned">%1$d में से</string>
+    <string name="stat_remaining">बाकी</string>
+    <string name="stat_today_lower">आज</string>
+    <string name="home_recommended_next_stop">अगला सुझाया गया CSP</string>
+    <string name="home_finding_nearest">आपका सबसे नज़दीकी CSP ढूँढ रहे हैं…</string>
+    <string name="home_recommendation_failed">अभी सुझाव लोड नहीं हो पाया — नेविगेट टैब देखें।</string>
+    <string name="home_quick_actions">जल्दी के काम</string>
+    <string name="stat_duty_hours">ड्यूटी के घंटे</string>
+    <string name="stat_hours_value">%1$.1f घंटे</string>
+    <string name="stat_continuous_sync">लगातार सिंक</string>
+    <string name="stat_today">आज</string>
+    <string name="stat_transit_today">आज का सफ़र</string>
+    <string name="stat_gps_polling">हर ~20 सेकंड GPS</string>
+    <string name="stat_first_punch">पहली पंच</string>
+    <string name="stat_check_in_time">चेक इन का समय</string>
+    <string name="stat_check_out">चेक आउट</string>
+    <string name="stat_shift_boundary">शिफ़्ट की सीमा</string>
+    <string name="stat_auto_close_guard">अपने-आप बंद होने की सुरक्षा</string>
+    <string name="home_gps_chip">GPS: चालू · हर ~20 सेकंड · कभी रोकता नहीं · ADR-0004</string>
+    <string name="home_location_off">लोकेशन बंद — दिन बिना लोकेशन के दर्ज हुआ (यह चलेगा)।</string>
+    <string name="home_location_logged">लोकेशन दर्ज हुई (±%1$d मीटर)</string>
+    <string name="home_gps_footer">हाज़िरी के साथ GPS दर्ज होता है, पर ज़रूरी नहीं है। अगर आप दिन खत्म करना भूल जाएँ तो रात 21:00 IST पर अपने-आप चेक आउट हो जाएगा।</string>
+    <string name="status_not_started">शुरू नहीं हुआ</string>
+    <string name="status_not_started_sub">दिन शुरू करने के लिए नीचे टैप करें</string>
+    <string name="status_on_duty">ड्यूटी पर</string>
+    <string name="status_on_duty_sub">आपका रूट ट्रैक हो रहा है</string>
+    <string name="status_day_ended">दिन खत्म</string>
+    <string name="status_day_ended_sub">कल मिलते हैं</string>
+    <string name="attendance_checked_in">चेक इन हो गया — आप ड्यूटी पर हैं</string>
+    <string name="attendance_day_resumed">दिन फिर से शुरू — ट्रैकिंग दोबारा चालू</string>
+    <string name="attendance_could_not_record">दर्ज नहीं हो पाया</string>
+
+    <!-- ===== Visits ===== -->
+    <string name="reason_inside_premises_gps_weak">दुकान के अंदर हूँ, GPS कमज़ोर है</string>
+    <string name="reason_csp_relocated">CSP की जगह बदल गई है</string>
+    <string name="reason_master_pin_wrong">सेव की गई लोकेशन गलत है</string>
+    <string name="reason_other">अन्य</string>
+    <string name="photo_category_shopfront">दुकान बाहर से</string>
+    <string name="photo_category_inside">दुकान अंदर से</string>
+    <string name="photo_category_qr_device">QR / डिवाइस</string>
+    <string name="photo_category_branding">ब्रांडिंग</string>
+    <string name="visits_title">विज़िट दर्ज करें</string>
+    <string name="visits_today_synced">आज: %1$d सिंक हुए</string>
+    <string name="visits_queued">%1$d कतार में</string>
+    <string name="visits_tap_to_check_in">चेक इन के लिए CSP पर टैप करें</string>
+    <string name="visits_active_geofence">चालू जियोफ़ेंस</string>
+    <string name="visits_active_hint">चेक इन हो गया — फ़ोटो सबूत लें, बोर्ड/साइनेज जाँचें, फिर चेक आउट करें।</string>
+    <string name="visits_photos_progress">फ़ोटो: %1$d/%2$d</string>
+    <string name="tag_required">ज़रूरी</string>
+    <string name="tag_complete">पूरा</string>
+    <string name="cd_verified">वेरिफ़ाइड</string>
+    <string name="visits_code_last_visit">%1$s · पिछली विज़िट %2$s</string>
+    <string name="action_check_in_here">यहाँ चेक इन करें</string>
+    <string name="out_of_radius_title">आप %2$s से %1$d मीटर दूर हैं</string>
+    <string name="out_of_radius_body">चेक इन फिर भी दर्ज होगा (जियोफ़ेंस सिर्फ़ सलाह है)। एक कारण चुनें ताकि आपके सर्कल हेड को जानकारी रहे।</string>
+    <string name="remarks_optional">टिप्पणी (वैकल्पिक)</string>
+    <string name="action_check_in_anyway">फिर भी चेक इन करें</string>
+    <string name="visits_gps_fix_failed">GPS लोकेशन नहीं मिली — खुली जगह में दोबारा कोशिश करें।</string>
+    <string name="visits_turn_on_location">चेक इन के लिए लोकेशन चालू करें (लोकेशन ज़रूरी है)।</string>
+    <string name="visits_lost_fix">GPS लोकेशन छूट गई — दोबारा कोशिश करें।</string>
+    <string name="visits_checked_out">चेक आउट हो गया — सिंक हो जाएगा</string>
+    <string name="visits_could_not_check_out">चेक आउट नहीं हो पाया</string>
+    <string name="visits_photo_queued">%1$s फ़ोटो कतार में है</string>
+    <string name="visits_could_not_attach_photo">फ़ोटो नहीं जुड़ पाया</string>
+    <string name="visits_recorded">%1$s की विज़िट दर्ज हो गई — सिंक हो जाएगी</string>
+    <string name="visits_could_not_record">विज़िट दर्ज नहीं हो पाई</string>
+
+    <!-- ===== Camera ===== -->
+    <string name="camera_photo_tag">फ़ोटो: %1$s</string>
+    <string name="camera_unavailable">कैमरा नहीं खुल पाया: %1$s</string>
+    <string name="camera_capture_failed">फ़ोटो नहीं खिंच पाया: %1$s</string>
+
+    <!-- ===== My CSPs ===== -->
+    <string name="filter_all">सभी</string>
+    <string name="sort_nearest_first">सबसे नज़दीकी पहले</string>
+    <string name="sort_name">नाम</string>
+    <string name="sort_label">क्रम: %1$s</string>
+    <string name="cd_change_sort">क्रम बदलें</string>
+    <string name="csps_title">मेरे CSP (%1$d/%2$d)</string>
+    <string name="csps_search">नाम या CSP कोड से खोजें</string>
+    <string name="csps_none_cached">अभी कोई असाइन किया गया CSP सेव नहीं है। नेटवर्क मिलने पर रिफ़्रेश करें।</string>
+    <string name="csps_no_match">इस खोज/फ़िल्टर से कोई CSP नहीं मिला।</string>
+    <string name="tag_coordinates_unverified">लोकेशन वेरिफ़ाइड नहीं</string>
+    <string name="csps_lat_lng">"Lat %1$.5f, Lng %2$.5f  ·  %3$s"</string>
+    <string name="csps_show_details">पूरी जानकारी देखें (%1$d)</string>
+    <string name="csps_hide_details">जानकारी छिपाएँ</string>
+    <string name="action_get_directions">रास्ता देखें</string>
+    <string name="action_suggest_edit">बदलाव सुझाएँ</string>
+    <string name="suggest_edit_title">बदलाव सुझाएँ — %1$s</string>
+    <string name="suggest_edit_body">एक बार में एक ही फ़ील्ड। जब तक आपके सर्कल हेड मंज़ूर नहीं करते, बदलाव पेंडिंग रहेगा।</string>
+    <string name="suggest_edit_field">फ़ील्ड</string>
+    <string name="cd_choose_field">फ़ील्ड चुनें</string>
+    <string name="suggest_edit_new_value">नई जानकारी</string>
+    <string name="csps_change_submitted">बदलाव भेज दिया गया — सर्कल हेड की मंज़ूरी बाकी है</string>
+    <string name="csps_could_not_submit">बदलाव नहीं भेजा जा सका</string>
+
+    <!-- ===== Logi ===== -->
+    <string name="logi_title">आज की प्लानिंग</string>
+    <string name="logi_check_in_first">आज की ट्रैकिंग और प्लान शुरू करने के लिए होम पर चेक इन करें।</string>
+    <string name="logi_stale">अभी सर्वर से कनेक्ट नहीं हो पाया — पिछला प्लान दिखा रहे हैं; यह पुराना हो सकता है।</string>
+    <string name="logi_open_visit">%1$s पर आपकी एक विज़िट खुली है — नई विज़िट से पहले उसे विज़िट टैब में पूरा करें।</string>
+    <string name="logi_a_csp">एक CSP</string>
+    <string name="logi_smart_next_stop">अगला सही CSP</string>
+    <string name="logi_no_recommendation">अभी कोई सुझाव नहीं है।</string>
+    <string name="logi_itinerary">आज का प्लान (%1$d)</string>
+    <string name="logi_open_route">Maps में रूट खोलें</string>
+    <string name="logi_sorted_note">आपकी पिछली लोकेशन से सीधी दूरी के हिसाब से क्रम में — यह कई जगहों का सबसे अच्छा रूट नहीं है (कोई रूटिंग सर्विस सेट नहीं है)।</string>
+    <string name="logi_none_cached">अभी कोई असाइन किया गया CSP सेव नहीं है।</string>
+    <string name="logi_distance_travelled">तय की गई दूरी</string>
+    <string name="logi_gps_points_today">आज के GPS पॉइंट</string>
+    <string name="logi_distance_note">तय की गई दूरी GPS से निकाला गया अंदाज़ा है (track_straightline_v0) — यह प्लान किए गए रूट की दूरी नहीं है; इसके लिए कोई रूटिंग सर्विस सेट नहीं है।</string>
+
+    <!-- ===== Navigate (nearest CSP) ===== -->
+    <string name="nearest_refresh">सुझाव रिफ़्रेश करें</string>
+    <string name="nearest_updated_accuracy">%1$s IST पर अपडेट · GPS सटीकता ±%2$d मीटर</string>
+    <string name="nearest_updated_no_fix">%1$s IST पर अपडेट · नई GPS लोकेशन नहीं मिली</string>
+    <string name="nearest_check_in_first">अपना सबसे नज़दीकी CSP देखने के लिए चेक इन करें।</string>
+    <string name="nearest_load_failed">नज़दीकी CSP लोड नहीं हो पाया।</string>
+    <string name="nearest_hide_others">बाकी CSP छिपाएँ</string>
+    <string name="nearest_other_eligible">बाकी CSP (%1$d)</string>
+    <string name="nearest_nothing">अभी जाने के लिए कोई CSP नहीं है।</string>
+    <string name="nearest_recommended">अगला सुझाया गया CSP</string>
+
+    <!-- ===== Scorecard ===== -->
+    <string name="scorecard_title">मेरा स्कोरकार्ड</string>
+    <string name="scorecard_subtitle">dc_score_v1 — पूरी तरह साफ़, सैलरी पर कोई असर नहीं।</string>
+    <string name="scorecard_stats">"विज़िट %1$d  ·  जियो-वेरिफ़ाइड %2$d  ·  लगातार %3$d दिन"</string>
+    <string name="scorecard_formula">फ़ॉर्मूला: विज़िट +50 · जियो-वेरिफ़ाइड +20 · समय पर (≤09:30 IST) +30 · लगातार हर दिन +10 (अधिकतम 7)।</string>
+    <string name="scorecard_open_dashboard">मेरा डैशबोर्ड खोलें</string>
+    <string name="scorecard_link_private">यह लिंक सिर्फ़ आपके लिए है।</string>
+    <string name="scorecard_points_today">आज के पॉइंट</string>
+    <string name="scorecard_unavailable_offline">ऑफ़लाइन में स्कोरकार्ड नहीं दिखेगा</string>
+
+    <!-- ===== Approvals ===== -->
+    <string name="approvals_title">मंज़ूरी (%1$d)</string>
+    <string name="approvals_none">आपके सर्कल में कुछ भी पेंडिंग नहीं है।</string>
+    <string name="approvals_proposed_by">%1$s ने सुझाया</string>
+    <string name="approvals_a_dc">एक DC</string>
+    <string name="approvals_reject_title">यह बदलाव अस्वीकार करें</string>
+    <string name="approvals_reason_label">कारण (DC को भेजा जाएगा)</string>
+    <string name="approvals_load_failed">लिस्ट लोड नहीं हो पाई</string>
+    <string name="approvals_applied">CSP मास्टर में लागू हो गया</string>
+    <string name="approvals_rejected">अस्वीकार किया — DC को बता दिया गया</string>
+    <string name="approvals_decision_failed">फ़ैसला सेव नहीं हो पाया</string>
+
+    <!-- ===== Field-state banners ===== -->
+    <string name="banner_offline">आप ऑफ़लाइन हैं — कुछ भी खोया नहीं है। बदलाव फ़ोन में सेव हैं और नेटवर्क आते ही अपने-आप सिंक हो जाएँगे।</string>
+    <plurals name="banner_pending_sync">
+        <item quantity="one">%1$d अपडेट फ़ोन में सेव है, सिंक होना बाकी है।</item>
+        <item quantity="other">%1$d अपडेट फ़ोन में सेव हैं, सिंक होना बाकी है।</item>
+    </plurals>
+    <string name="banner_sync_failed">कुछ अपडेट अभी सिंक नहीं हुए। वे सुरक्षित कतार में हैं — हम कोशिश करते रहेंगे।</string>
+    <string name="banner_gps_unavailable">लोकेशन बंद है। दूरी और नेविगेशन के लिए इसे चालू करें — GPS की वजह से यहाँ कोई काम नहीं रुकता।</string>
+    <string name="banner_location_stale">आपकी पिछली लोकेशन कुछ मिनट पुरानी है — दिखाई गई दूरी थोड़ी अलग हो सकती है।</string>
+    <string name="banner_permission_required">दूरी और नेविगेशन के लिए लोकेशन की अनुमति चाहिए।</string>
+    <string name="banner_session_expired">आपका सेशन खत्म हो गया। आगे बढ़ने के लिए दोबारा लॉगिन करें।</string>
+    <string name="banner_no_eligible_csp">आज आपके सभी असाइन किए गए CSP की विज़िट हो चुकी है। 🎉</string>
+
+    <!-- ===== Location prompts ===== -->
+    <string name="location_permission_needed">लोकेशन की अनुमति चाहिए</string>
+    <string name="location_permission_body">Eko दर्ज करता है कि आप कहाँ चेक इन करते हैं और ड्यूटी के दौरान आपका रूट। कृपया सेटिंग्स → अनुमतियाँ (Permissions) में इस ऐप को लोकेशन की अनुमति दें।</string>
+    <string name="gps_is_off">GPS बंद है</string>
+    <string name="gps_off_body">लोकेशन चालू करें ताकि आपके चेक इन और रूट दर्ज हो सकें।</string>
+    <string name="gps_off_action_body">GPS के बिना यह बिना लोकेशन के दर्ज होगा और जाँच के लिए फ़्लैग हो सकता है।</string>
+    <string name="action_continue_without_gps">GPS के बिना आगे बढ़ें</string>
+
+    <!-- ===== On-duty notification (tracking/) ===== -->
+    <string name="channel_on_duty_name">ड्यूटी पर</string>
+    <string name="channel_on_duty_desc">ड्यूटी के दौरान आपका ड्यूटी समय, आज की विज़िट, GPS और सिंक की स्थिति</string>
+    <string name="channel_gps_alerts_name">GPS अलर्ट</string>
+    <string name="channel_gps_alerts_desc">ड्यूटी के दौरान GPS या लोकेशन की अनुमति बंद होने पर चेतावनी देता है</string>
+    <string name="notif_on_duty">ड्यूटी पर</string>
+    <string name="notif_on_duty_elapsed">ड्यूटी पर · %1$s</string>
+    <string name="notif_gps_off_title">GPS बंद है — रूट दर्ज नहीं हो रहा</string>
+    <string name="notif_permission_needed">लोकेशन की अनुमति चाहिए</string>
+    <string name="notif_visits_of">आज की विज़िट: %2$d में से %1$d CSP</string>
+    <string name="notif_visits">आज की विज़िट: %1$d</string>
+    <string name="notif_gps_live_last_fix">GPS चालू · आखिरी लोकेशन %1$s</string>
+    <string name="notif_gps_waiting">GPS चालू · लोकेशन का इंतज़ार</string>
+    <string name="notif_gps_off_line">अपनी विज़िट दर्ज करते रहने के लिए लोकेशन चालू करें</string>
+    <string name="notif_no_permission_line">अपना रूट दर्ज करने के लिए इस ऐप को लोकेशन की अनुमति दें</string>
+    <string name="notif_all_synced">सब सिंक हो गया</string>
+    <string name="notif_waiting_to_sync">%1$d सिंक होना बाकी</string>
+    <string name="notif_on_duty_since">%1$s IST से ड्यूटी पर</string>
+    <string name="notif_battery_saver">%1$s · बैटरी सेवर चालू है</string>
+    <string name="notif_gps_live">GPS चालू</string>
+    <string name="tab_team">टीम</string>
+    <string name="team_title">आज की टीम</string>
+    <string name="team_updated">%1$s पर अपडेट · हर 30 सेकंड में रिफ्रेश</string>
+    <string name="team_load_failed">टीम का डेटा लोड नहीं हुआ। इंटरनेट देखें और रिफ्रेश दबाएँ।</string>
+    <string name="team_kpi_on_duty">ड्यूटी पर</string>
+    <string name="team_kpi_visits">विज़िट</string>
+    <string name="team_kpi_flagged">फ़्लैग</string>
+    <string name="team_kpi_unassigned">बिना DC के CSP</string>
+    <string name="team_empty">कोई DC नहीं मिला।</string>
+    <string name="team_auto_closed">अपने आप बंद</string>
+    <string name="team_started">शुरू %1$s</string>
+    <string name="team_ended">खत्म %1$s</string>
+    <string name="team_hours">%1$s घंटे</string>
+    <string name="team_counts">विज़िट: %1$d · KM: %2$s · CSP: %3$d</string>
+    <string name="team_live">लाइव · %1$s</string>
+    <string name="team_last_seen">आखिरी लोकेशन %1$s</string>
+    <string name="team_no_location">अभी कोई लोकेशन नहीं</string>
+    <string name="team_open_map">मैप</string>
+    <string name="team_today">आज, %1$s</string>
+    <string name="team_visits_summary">%1$d विज़िट · %2$d अंदर · %3$d बाहर</string>
+    <string name="team_no_visits">इस दिन कोई विज़िट नहीं।</string>
+    <string name="team_inside">अंदर</string>
+    <string name="team_outside">बाहर</string>
+    <string name="team_visit_line">CSP %1$s · चेक इन %2$s</string>
+    <string name="team_checked_out">चेक आउट %1$s</string>
+    <string name="team_still_open">अभी खुली है</string>
+    <string name="team_photos">%1$d फ़ोटो</string>
+    <string name="visits_already_checked_in">%1$s पर पहले से चेक इन है — फ़ोटो लें या चेक आउट करें।</string>
+    <string name="channel_reminders_name">रोज़ के रिमाइंडर</string>
+    <string name="channel_reminders_desc">आज की CSP विज़िट के लिए सुबह और शाम के रिमाइंडर</string>
+    <string name="remind_morning_title">सुप्रभात! चेक इन का समय</string>
+    <string name="remind_morning_check_in">ऐप खोलें और दिन शुरू करने के लिए चेक इन दबाएँ।</string>
+    <string name="remind_today_title">आज की CSP विज़िट</string>
+    <string name="remind_pending">आज %2$d में से %1$d CSP पर जाना बाकी है</string>
+    <string name="remind_nearest">सबसे नज़दीक: %1$s · %2$s km दूर</string>
+    <string name="remind_open_logi">आज का रास्ता देखने के लिए लॉजी खोलें।</string>
+    <string name="remind_evening_title">आज का काम पूरा हुआ?</string>
+    <string name="remind_visited">आज की विज़िट: %1$d</string>
+    <string name="remind_evening_end_day">काम पूरा हो गया? होम पर दिन खत्म करें दबाएँ।</string>
+    <string name="remind_auto_close">भूल गए तो दिन रात 21:00 बजे अपने आप बंद हो जाएगा।</string>
+    <string name="notif_alert_gps_off_title">GPS बंद है</string>
+    <string name="notif_alert_gps_off_summary">आपका रूट और विज़िट दर्ज नहीं हो रहे। लोकेशन चालू करने के लिए टैप करें।</string>
+    <string name="notif_alert_not_recorded">आपका रूट और विज़िट दर्ज नहीं हो रहे।</string>
+    <string name="notif_alert_tap_location">लोकेशन सेटिंग्स खोलकर GPS चालू करने के लिए टैप करें।</string>
+    <string name="notif_alert_perm_title">लोकेशन की अनुमति बंद है</string>
+    <string name="notif_alert_perm_summary">Eko को लोकेशन की अनुमति दें ताकि आपका रूट और विज़िट दर्ज हो सकें।</string>
+    <string name="notif_alert_tap_app_settings">ऐप सेटिंग्स खोलने के लिए टैप करें।</string>
+    <string name="notif_alert_back_title">GPS वापस चालू है</string>
+    <string name="notif_alert_resumed">रिकॉर्डिंग फिर से शुरू।</string>
+    <string name="duration_h_m">%1$d घंटे %2$d मिनट</string>
+    <string name="duration_m">%1$d मिनट</string>
+    <string name="ago_seconds">%1$d सेकंड पहले</string>
+    <string name="ago_minutes">%1$d मिनट पहले</string>
+    <string name="ago_hours">%1$d घंटे पहले</string>
+</resources>

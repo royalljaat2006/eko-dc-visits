@@ -46,6 +46,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.eko.dcvisits.app.ui.components.GhostGlassButton
 import com.eko.dcvisits.app.ui.components.GlassTag
 import com.eko.dcvisits.app.ui.components.pressScale
+import androidx.compose.ui.res.stringResource
+import com.eko.dcvisits.app.R
+import com.eko.dcvisits.app.ui.text.asString
+import com.eko.dcvisits.app.ui.visits.photoCategoryText
 
 /**
  * In-app camera only (hard gate #1, BUILD_PLAN §7.2) — there is no gallery or
@@ -77,7 +81,7 @@ fun PhotoCaptureScreen(
                 provider.bindToLifecycle(
                     lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageCapture,
                 )
-            }.onFailure { error = "Camera unavailable: ${it.message}" }
+            }.onFailure { error = context.getString(R.string.camera_unavailable, it.message.orEmpty()) }
         }, ContextCompat.getMainExecutor(context))
         onDispose { runCatching { future.get().unbindAll() } }
     }
@@ -87,7 +91,7 @@ fun PhotoCaptureScreen(
             AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
 
             GlassTag(
-                "Photo: ${category.replace('_', ' ')}",
+                stringResource(R.string.camera_photo_tag, photoCategoryText(category).asString()),
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
@@ -127,7 +131,7 @@ fun PhotoCaptureScreen(
 
                                     override fun onError(exc: ImageCaptureException) {
                                         busy = false
-                                        error = "Capture failed: ${exc.message}"
+                                        error = context.getString(R.string.camera_capture_failed, exc.message.orEmpty())
                                     }
                                 },
                             )
@@ -140,7 +144,8 @@ fun PhotoCaptureScreen(
                     if (busy) CircularProgressIndicator(color = Color.Black, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
                 }
 
-                GhostGlassButton(text = "Cancel", onClick = onCancel)
+                GhostGlassButton(text = stringResource(R.string.action_cancel), onClick = onCancel)
+
             }
         }
     }

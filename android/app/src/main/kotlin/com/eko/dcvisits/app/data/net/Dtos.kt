@@ -274,6 +274,53 @@ data class ScorecardResponse(
     val items: List<ScorecardRowDto> = emptyList(),
 )
 
+// ---- admin team view (GET /dashboard/overview, /dashboard/live-locations) ----
+
+@Serializable
+data class OverviewAttendanceDto(val total_dcs: Int = 0, val on_duty: Int = 0, val ended: Int = 0, val not_started: Int = 0)
+
+@Serializable
+data class OverviewVisitsDto(val total: Int = 0, val geo_verified: Int = 0, val flagged: Int = 0, val late_sync: Int = 0)
+
+@Serializable
+data class OverviewCspsDto(val total: Int = 0, val assigned: Int = 0, val unassigned: Int = 0)
+
+@Serializable
+data class OverviewDcDto(
+    val dc_user_id: String,
+    val dc_name: String,
+    val csp_count: Int = 0,
+    val attendance: String = "NOT_STARTED",
+    val visits_today: Int = 0,
+    val km_today: Double? = null,
+)
+
+/** Subset of C2 /dashboard/overview (CORPORATE_ADMIN + NATIONAL_HEAD only). */
+@Serializable
+data class OverviewResponse(
+    val date: String,
+    val attendance: OverviewAttendanceDto = OverviewAttendanceDto(),
+    val visits: OverviewVisitsDto = OverviewVisitsDto(),
+    val csps: OverviewCspsDto = OverviewCspsDto(),
+    val assignments_by_dc: List<OverviewDcDto> = emptyList(),
+)
+
+@Serializable
+data class LiveLocationRowDto(
+    val dc_user_id: String,
+    val name: String,
+    val on_duty: Boolean = false,
+    /** no_fix | off_duty | stale | live */
+    val state: String,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val accuracy_m: Double? = null,
+    val captured_at: String? = null,
+)
+
+@Serializable
+data class LiveLocationsResponse(val items: List<LiveLocationRowDto> = emptyList())
+
 // ---- sync (C3) ------------------------------------------------------
 
 @Serializable

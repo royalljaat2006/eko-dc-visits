@@ -20,6 +20,9 @@ import com.eko.dcvisits.app.ui.theme.EkoAmber
 import com.eko.dcvisits.app.ui.theme.EkoBlue
 import com.eko.dcvisits.app.ui.theme.EkoGreen
 import com.eko.dcvisits.app.ui.theme.EkoRed
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import com.eko.dcvisits.app.R
 
 /**
  * One reusable shape for every "what happened + what can I do about it" state
@@ -49,35 +52,36 @@ fun StateBanner(
 
 @Composable
 fun OfflineBanner(modifier: Modifier = Modifier) =
-    StateBanner("You're offline — nothing is lost. Changes are saved on-device and sync automatically once you have signal.", modifier, tint = EkoAmber)
+    StateBanner(stringResource(R.string.banner_offline), modifier, tint = EkoAmber)
 
 @Composable
 fun PendingSyncBanner(count: Int, modifier: Modifier = Modifier) =
-    StateBanner("$count update${if (count == 1) "" else "s"} saved on-device, waiting to sync.", modifier, tint = EkoBlue)
+    StateBanner(pluralStringResource(R.plurals.banner_pending_sync, count, count), modifier, tint = EkoBlue)
 
 @Composable
 fun SyncFailedBanner(onRetry: () -> Unit, modifier: Modifier = Modifier) =
-    StateBanner("Some updates couldn't sync yet. They're safely queued — we'll keep retrying.", modifier, tint = EkoRed, actionLabel = "Retry now", onAction = onRetry)
+    StateBanner(stringResource(R.string.banner_sync_failed), modifier, tint = EkoRed, actionLabel = stringResource(R.string.action_retry_now), onAction = onRetry)
 
 @Composable
 fun GpsUnavailableBanner(modifier: Modifier = Modifier) =
-    StateBanner("Location is off. Turn it on for distance and navigation — nothing here is ever blocked by GPS.", modifier, tint = EkoAmber)
+    StateBanner(stringResource(R.string.banner_gps_unavailable), modifier, tint = EkoAmber)
 
 @Composable
 fun LocationStaleBanner(modifier: Modifier = Modifier) =
-    StateBanner("Your last known location is a few minutes old — distances shown may be a little off.", modifier, tint = EkoAmber)
+    StateBanner(stringResource(R.string.banner_location_stale), modifier, tint = EkoAmber)
 
 @Composable
 fun PermissionRequiredBanner(onGrant: () -> Unit, modifier: Modifier = Modifier) =
-    StateBanner("Location permission is needed for distance and navigation.", modifier, tint = EkoAmber, actionLabel = "Grant", onAction = onGrant)
+    StateBanner(stringResource(R.string.banner_permission_required), modifier, tint = EkoAmber, actionLabel = stringResource(R.string.action_grant), onAction = onGrant)
 
 @Composable
 fun SessionExpiredBanner(onSignIn: () -> Unit, modifier: Modifier = Modifier) =
-    StateBanner("Your session expired. Sign in again to continue.", modifier, tint = EkoRed, actionLabel = "Sign in", onAction = onSignIn)
+    StateBanner(stringResource(R.string.banner_session_expired), modifier, tint = EkoRed, actionLabel = stringResource(R.string.action_sign_in), onAction = onSignIn)
 
 @Composable
 fun NoEligibleCspBanner(modifier: Modifier = Modifier) =
-    StateBanner("All your assigned CSPs are already visited today. 🎉", modifier, tint = EkoGreen)
+    StateBanner(stringResource(R.string.banner_no_eligible_csp), modifier
+, tint = EkoGreen)
 
 @Composable
 fun EmptyState(message: String, modifier: Modifier = Modifier) {

@@ -7,11 +7,13 @@ import com.eko.dcvisits.app.di.ServiceLocator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import com.eko.dcvisits.app.R
+import com.eko.dcvisits.app.ui.text.UiText
 
 data class ApprovalsUi(
     val loading: Boolean = true,
     val items: List<CspChangeRequestDto> = emptyList(),
-    val message: String? = null,
+    val message: UiText? = null,
 )
 
 class ApprovalsViewModel : ViewModel() {
@@ -25,7 +27,7 @@ class ApprovalsViewModel : ViewModel() {
         viewModelScope.launch {
             runCatching { repo.queue("PENDING") }
                 .onSuccess { _ui.value = ApprovalsUi(loading = false, items = it) }
-                .onFailure { _ui.value = ApprovalsUi(loading = false, message = it.message ?: "Could not load the queue") }
+                .onFailure { _ui.value = ApprovalsUi(loading = false, message = UiText.messageOr(it, R.string.approvals_load_failed)) }
         }
     }
 
@@ -38,10 +40,11 @@ class ApprovalsViewModel : ViewModel() {
                 .onSuccess {
                     _ui.value = _ui.value.copy(
                         items = _ui.value.items.filterNot { r -> r.id == id },
-                        message = if (decision == "APPROVED") "Applied to the CSP master" else "Rejected — DC notified",
+                        message = UiText.res(if (decision == "APPROVED") R.string.approvals_applied else R.string.approvals_rejected),
                     )
                 }
-                .onFailure { _ui.value = _ui.value.copy(message = it.message ?: "Decision failed") }
+                .onFailure { _ui.value = _ui.value.copy(message = UiText.messageOr(it, R.string.approvals_decision_failed))
+ }
         }
     }
 

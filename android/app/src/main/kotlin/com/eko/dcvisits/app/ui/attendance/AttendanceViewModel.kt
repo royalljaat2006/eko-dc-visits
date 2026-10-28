@@ -14,11 +14,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.eko.dcvisits.app.R
+import com.eko.dcvisits.app.ui.text.UiText
 
 data class AttendanceUi(
     val busy: Boolean = false,
     val summary: AttendanceRowDto? = null,
-    val message: String? = null,
+    val message: UiText? = null,
     val lastFixAccuracyM: Double? = null,
     val locationOff: Boolean = false,
     val visitedTodayCount: Int = 0,
@@ -87,16 +89,17 @@ class AttendanceViewModel : ViewModel() {
                 _ui.value = _ui.value.copy(
                     busy = false,
                     message = when (which) {
-                        Act.START -> "Checked in — you're on duty"
-                        Act.END -> "Day ended"
-                        Act.RESUME -> "Day resumed — tracking again"
+                        Act.START -> UiText.res(R.string.attendance_checked_in)
+                        Act.END -> UiText.res(R.string.status_day_ended)
+                        Act.RESUME -> UiText.res(R.string.attendance_day_resumed)
                     },
                     lastFixAccuracyM = fix?.accuracyM,
                     locationOff = fix == null && !LocationProvider.isLocationEnabled(context),
                 )
                 refresh()
             } catch (e: Exception) {
-                _ui.value = _ui.value.copy(busy = false, message = e.message ?: "Could not record")
+                _ui.value = _ui.value.copy(busy = false, message = UiText.messageOr(e, R.string.attendance_could_not_record))
+
             }
         }
     }

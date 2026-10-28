@@ -44,7 +44,8 @@ Login: a 10-digit phone registered in the backend; the OTP arrives by SMS
 - **All network I/O lives in `src/api/client.ts`** — no `fetch` anywhere else
   ("no raw HTTP to internal endpoints", CONTRIBUTING.md). The client maps
   problem-details bodies to a typed `ApiError` and turns any `401` on an
-  authenticated call into session-clear + redirect to `#/login`.
+  authenticated call into one silent token refresh + retry, and only then
+  session-clear + redirect to `#/login`.
 - No `any` on API data paths.
 
 ## M0 deviations / notes (to revisit in M1)
@@ -52,8 +53,11 @@ Login: a 10-digit phone registered in the backend; the OTP arrives by SMS
 - **Hand-transcribed types**: `src/api/client.ts` transcribes the C2 shapes it needs.
   M1 replaces this with spec-driven codegen (e.g. `openapi-typescript`) so the client
   can never drift from the contract.
-- **No token refresh**: C2 v0.1.0 returns a `refresh_token` but defines no refresh
-  endpoint, so expiry (≈1 h JWT) simply forces re-login via the 401 path.
+- **Token refresh**: on a `401` from an authenticated call the client exchanges the
+  stored `refresh_token` at `POST /auth/token/refresh` (C2 v0.9.0) once, stores the
+  rotated pair (refresh tokens are single-use), and retries the request once.
+  Concurrent 401s share one in-flight refresh. If the refresh is rejected the
+  session is cleared and the user lands on `#/login`.
 - `Visit.dc_name`, `location_name`, `location_code`, `planned` are optional in the
   spec; absent values render as `—` / "Unplanned" is only shown when `planned=false`.
 - `POST /auth/otp/verify` requires `device.hardware` (schema is phone-oriented);

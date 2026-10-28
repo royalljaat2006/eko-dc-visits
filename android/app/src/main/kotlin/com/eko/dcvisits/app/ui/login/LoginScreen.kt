@@ -43,6 +43,9 @@ import com.eko.dcvisits.app.ui.components.GlassTextField
 import com.eko.dcvisits.app.ui.components.GlowButton
 import com.eko.dcvisits.app.ui.components.glassSurface
 import com.eko.dcvisits.app.ui.theme.EkoBlue
+import androidx.compose.ui.res.stringResource
+import com.eko.dcvisits.app.R
+import com.eko.dcvisits.app.ui.text.asString
 
 @Composable
 fun LoginScreen(
@@ -72,9 +75,9 @@ fun LoginScreen(
             }
             Entrance(index = 1) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Eko CSP Visits", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
+                    Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
                     Text(
-                        "Sign in with your registered mobile number",
+                        stringResource(R.string.login_subtitle),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -98,50 +101,50 @@ fun LoginScreen(
                                         GlassTextField(
                                             value = s.phone,
                                             onValueChange = vm::onPhone,
-                                            label = "Mobile number",
+                                            label = stringResource(R.string.login_mobile_number),
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                                         )
                                         GlowButton(
-                                            text = "Send OTP",
+                                            text = stringResource(R.string.login_send_otp),
                                             onClick = vm::requestOtp,
                                             enabled = s.phoneValid && !s.loading,
                                             loading = s.loading,
                                             modifier = Modifier.fillMaxWidth(),
                                         )
                                         Text(
-                                            "Use your registered Eko mobile number. An OTP is sent by SMS.",
+                                            stringResource(R.string.login_phone_hint),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
                                     else -> {
-                                        Text("OTP sent to +91 ${s.phone}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                                        Text(stringResource(R.string.login_otp_sent_to, s.phone), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                                         GlassTextField(
                                             value = s.otp,
                                             onValueChange = vm::onOtp,
-                                            label = "6-digit OTP",
+                                            label = stringResource(R.string.login_otp_label),
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                                         )
                                         if (s.needsName) {
                                             Text(
-                                                "New number — you're registering as a DC. What's your name?",
+                                                stringResource(R.string.login_new_number_name),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                             GlassTextField(
                                                 value = s.name,
                                                 onValueChange = vm::onName,
-                                                label = "Full name",
+                                                label = stringResource(R.string.login_full_name),
                                             )
                                         }
                                         GlowButton(
-                                            text = "Verify & sign in",
+                                            text = stringResource(R.string.login_verify),
                                             onClick = { vm.verify(onSignedIn) },
                                             enabled = s.canVerify && !s.loading,
                                             loading = s.loading,
                                             modifier = Modifier.fillMaxWidth(),
                                         )
-                                        TextButton(onClick = vm::back) { Text("Change number", color = EkoBlue) }
+                                        TextButton(onClick = vm::back) { Text(stringResource(R.string.login_change_number), color = EkoBlue) }
                                     }
                                 }
                             }
@@ -149,7 +152,8 @@ fun LoginScreen(
 
                         if (s.loading) CircularProgressIndicator(color = EkoBlue, modifier = Modifier.size(20.dp))
                         s.error?.let {
-                            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                            Text(it.asString(), color = MaterialTheme.colorScheme.error
+, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }

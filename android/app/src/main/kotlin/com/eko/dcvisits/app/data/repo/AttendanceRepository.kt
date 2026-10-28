@@ -37,7 +37,7 @@ class AttendanceRepository(
     private val api: C2Api = ApiClient.api,
 ) {
     /** Local, optimistic day state from today's enqueued attendance ops (IST). */
-    val localDayState: Flow<DayState> = outbox.recent.map { rows ->
+    val localDayState: Flow<DayState> = outbox.dayOps.map { rows ->
         when (todaysAttendance(rows).lastOrNull()?.second) {
             "START" -> DayState.ON_DUTY
             "END" -> DayState.ENDED
@@ -46,7 +46,7 @@ class AttendanceRepository(
     }
 
     /** When today's current duty stretch began (the latest START after any END), for the on-duty notification. */
-    val onDutySince: Flow<java.time.Instant?> = outbox.recent.map { rows ->
+    val onDutySince: Flow<java.time.Instant?> = outbox.dayOps.map { rows ->
         val ops = todaysAttendance(rows)
         if (ops.lastOrNull()?.second != "START") null
         else ops.lastOrNull { it.second == "START" }?.first?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }

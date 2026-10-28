@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.eko.dcvisits.app.R
+import com.eko.dcvisits.app.ui.text.UiText
 
 data class LoginUiState(
     val phone: String = "",
@@ -17,7 +19,7 @@ data class LoginUiState(
     /** Set once the server reports this is a brand-new number (422) — shows the name field. */
     val needsName: Boolean = false,
     val loading: Boolean = false,
-    val error: String? = null,
+    val error: UiText? = null,
 ) {
     enum class Step { PHONE, OTP }
     val phoneValid: Boolean get() = phone.matches(Regex("^[6-9][0-9]{9}$"))
@@ -70,8 +72,9 @@ class LoginViewModel : ViewModel() {
         }
     }
 
-    private fun Throwable.readable(): String = when (this) {
-        is ApiException -> if (networkFailure) "Can't reach the server. Check your connection." else message
-        else -> message ?: "Something went wrong"
+    private fun Throwable.readable(): UiText = when (this) {
+        is ApiException -> if (networkFailure) UiText.res(R.string.error_cant_reach_server) else UiText.Raw(message)
+        else -> UiText.messageOr(this, R.string.error_something_went_wrong)
     }
+
 }

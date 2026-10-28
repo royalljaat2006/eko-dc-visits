@@ -16,6 +16,7 @@ object Ist {
     val ZONE: ZoneId = ZoneOffset.ofHoursMinutes(5, 30)
     private val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     private val DISPLAY: DateTimeFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm")
+    private val HHMM: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
     /** Today's IST calendar date as YYYY-MM-DD. */
     fun today(now: Instant = Instant.now()): String = date(now)
@@ -29,6 +30,16 @@ object Ist {
         if (iso.isNullOrBlank()) return "—"
         return try {
             ZonedDateTime.ofInstant(Instant.parse(iso), ZONE).format(DISPLAY)
+        } catch (_: Exception) {
+            "—"
+        }
+    }
+
+    /** Render a UTC ISO instant as `HH:mm` IST; em dash when absent/invalid. */
+    fun time(iso: String?): String {
+        if (iso.isNullOrBlank()) return "—"
+        return try {
+            ZonedDateTime.ofInstant(Instant.parse(iso), ZONE).format(HHMM)
         } catch (_: Exception) {
             "—"
         }

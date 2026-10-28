@@ -1,4 +1,337 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Eko CSP Visits</string>
+
+    <!-- ===== Common actions / words ===== -->
+    <string name="action_cancel">Cancel</string>
+    <string name="action_ok">OK</string>
+    <string name="action_refresh">Refresh</string>
+    <string name="action_navigate">Navigate</string>
+    <string name="action_submit">Submit</string>
+    <string name="action_open_settings">Open settings</string>
+    <string name="action_turn_on_gps">Turn on GPS</string>
+    <string name="action_sign_out">Sign out</string>
+    <string name="action_sign_in">Sign in</string>
+    <string name="action_retry_now">Retry now</string>
+    <string name="action_grant">Grant</string>
+    <string name="action_not_now">Not now</string>
+    <string name="action_later">Later</string>
+    <string name="action_check_out">Check out</string>
+    <string name="action_approve">Approve</string>
+    <string name="action_reject">Reject</string>
+    <string name="error_something_went_wrong">Something went wrong</string>
+    <string name="error_cant_reach_server">Can\'t reach the server. Check your connection.</string>
+
+    <!-- Shared labels -->
+    <string name="label_assigned">Assigned</string>
+    <string name="label_visited_today">Visited today</string>
+    <string name="label_pending_today">Pending today</string>
+    <string name="label_visited">Visited</string>
+    <string name="label_pending">Pending</string>
+    <string name="label_last_visit">Last visit: %1$s</string>
+    <string name="label_never">never</string>
+    <string name="label_never_visited">Never visited</string>
+
+    <!-- Distances -->
+    <string name="distance_m">%1$d m</string>
+    <string name="distance_km">%1$.1f km</string>
+    <string name="distance_m_away">%1$d m away</string>
+    <string name="distance_km_away">%1$.1f km away</string>
+    <string name="distance_m_short">%1$dm</string>
+    <string name="distance_km_short">%1$.1fkm</string>
+    <string name="distance_inside">Inside %1$s</string>
+    <string name="distance_away">%1$s away</string>
+    <string name="distance_straight_line">%1$s · straight-line</string>
+
+    <!-- ===== Roles (display only; the role codes themselves are never translated) ===== -->
+    <string name="role_dc">DC</string>
+    <string name="role_circle_head">Circle head</string>
+    <string name="role_national_head">National head</string>
+    <string name="role_hr_admin">Hr admin</string>
+    <string name="role_corporate_admin">Corporate admin</string>
+    <string name="role_bank_official">Bank official</string>
+
+    <!-- ===== Main scaffold / tabs ===== -->
+    <string name="tab_home">Home</string>
+    <string name="tab_my_csps">My CSPs</string>
+    <string name="tab_navigate">Navigate</string>
+    <string name="tab_visits">Visits</string>
+    <string name="tab_logi">Logi</string>
+    <string name="tab_approvals">Approvals</string>
+    <string name="tab_profile">Profile</string>
+    <string name="gate_notice">Mark attendance (Check In) to unlock the other sections.</string>
+
+    <!-- ===== Login ===== -->
+    <string name="login_subtitle">Sign in with your registered mobile number</string>
+    <string name="login_mobile_number">Mobile number</string>
+    <string name="login_send_otp">Send OTP</string>
+    <string name="login_phone_hint">Use your registered Eko mobile number. An OTP is sent by SMS.</string>
+    <string name="login_otp_sent_to">OTP sent to +91 %1$s</string>
+    <string name="login_otp_label">6-digit OTP</string>
+    <string name="login_new_number_name">New number — you\'re registering as a DC. What\'s your name?</string>
+    <string name="login_full_name">Full name</string>
+    <string name="login_verify">Verify &amp; sign in</string>
+    <string name="login_change_number">Change number</string>
+
+    <!-- ===== Profile ===== -->
+    <string name="profile_back">Back to profile</string>
+    <string name="profile_my_scorecard">My Scorecard</string>
+    <string name="profile_view">View →</string>
+    <string name="profile_language">Language</string>
+    <string name="language_system_default">System default</string>
+    <string name="language_english">English</string>
+    <string name="language_hindi">हिंदी</string>
+
+    <!-- ===== Home / attendance ===== -->
+    <string name="attendance_active_banner">Attendance active — Visits, Navigate, My CSPs and Logi unlocked.</string>
+    <string name="attendance_check_in_start_day">Check In — Start Day</string>
+    <string name="attendance_end_day">End Day</string>
+    <string name="attendance_end_day_title">End today\'s day?</string>
+    <string name="attendance_end_day_body">Route tracking stops and today\'s hours/distance are finalized. You can still Resume if you end by mistake.</string>
+    <string name="attendance_resume_day">Resume Day</string>
+    <string name="attendance_resume_hint">Ended by mistake, or still working? Resuming turns route tracking back on for today. Past dates stay locked.</string>
+    <string name="attendance_resume_title">Resume today\'s day?</string>
+    <string name="attendance_resume_body">Route tracking starts again until you End Day. Your day will then cover the whole period worked, including this gap. The 21:00 IST auto-checkout still applies.</string>
+    <string name="attendance_resume_confirm">Resume &amp; track</string>
+    <string name="stat_csps">CSPs</string>
+    <string name="stat_of_assigned">of %1$d</string>
+    <string name="stat_remaining">Remaining</string>
+    <string name="stat_today_lower">today</string>
+    <string name="home_recommended_next_stop">Recommended next stop</string>
+    <string name="home_finding_nearest">Finding your nearest CSP…</string>
+    <string name="home_recommendation_failed">Couldn\'t load a recommendation right now — check the Navigate tab.</string>
+    <string name="home_quick_actions">Quick actions</string>
+    <string name="stat_duty_hours">Duty Hours</string>
+    <string name="stat_hours_value">%1$.1fh</string>
+    <string name="stat_continuous_sync">Continuous sync</string>
+    <string name="stat_today">Today</string>
+    <string name="stat_transit_today">Transit Today</string>
+    <string name="stat_gps_polling">~20s GPS polling</string>
+    <string name="stat_first_punch">First Punch</string>
+    <string name="stat_check_in_time">Check-in time</string>
+    <string name="stat_check_out">Check-out</string>
+    <string name="stat_shift_boundary">Shift Boundary</string>
+    <string name="stat_auto_close_guard">Auto-close safe guard</string>
+    <string name="home_gps_chip">GPS: live · polling ~20s · never blocks · ADR-0004</string>
+    <string name="home_location_off">Location off — day recorded without a fix (that\'s allowed).</string>
+    <string name="home_location_logged">Location logged (±%1$d m)</string>
+    <string name="home_gps_footer">GPS is logged with attendance, never required. Auto-checkout runs at 21:00 IST if you forget End Day.</string>
+    <string name="status_not_started">Not started</string>
+    <string name="status_not_started_sub">Tap below to begin your day</string>
+    <string name="status_on_duty">On duty</string>
+    <string name="status_on_duty_sub">Tracking your route</string>
+    <string name="status_day_ended">Day ended</string>
+    <string name="status_day_ended_sub">See you tomorrow</string>
+    <string name="attendance_checked_in">Checked in — you\'re on duty</string>
+    <string name="attendance_day_resumed">Day resumed — tracking again</string>
+    <string name="attendance_could_not_record">Could not record</string>
+
+    <!-- ===== Visits ===== -->
+    <string name="reason_inside_premises_gps_weak">Inside the shop, GPS weak</string>
+    <string name="reason_csp_relocated">CSP has moved</string>
+    <string name="reason_master_pin_wrong">Saved location is wrong</string>
+    <string name="reason_other">Other</string>
+    <string name="photo_category_shopfront">SHOPFRONT</string>
+    <string name="photo_category_inside">INSIDE</string>
+    <string name="photo_category_qr_device">QR DEVICE</string>
+    <string name="photo_category_branding">BRANDING</string>
+    <string name="visits_title">Log a visit</string>
+    <string name="visits_today_synced">Today: %1$d synced</string>
+    <string name="visits_queued">%1$d queued</string>
+    <string name="visits_tap_to_check_in">Tap a CSP to check in</string>
+    <string name="visits_active_geofence">ACTIVE GEOFENCE</string>
+    <string name="visits_active_hint">Checked in — add physical proofs, verify signage, then check out.</string>
+    <string name="visits_photos_progress">Photos: %1$d/%2$d</string>
+    <string name="tag_required">Required</string>
+    <string name="tag_complete">Complete</string>
+    <string name="cd_verified">Verified</string>
+    <string name="visits_code_last_visit">%1$s · last visit %2$s</string>
+    <string name="action_check_in_here">Check in here</string>
+    <string name="out_of_radius_title">You\'re %1$d m from %2$s</string>
+    <string name="out_of_radius_body">The check-in still goes through (geofencing is advisory). Pick a reason so your Circle Head has context.</string>
+    <string name="remarks_optional">Remarks (optional)</string>
+    <string name="action_check_in_anyway">Check in anyway</string>
+    <string name="visits_gps_fix_failed">Getting a GPS fix failed — try again in the open.</string>
+    <string name="visits_turn_on_location">Turn on location to check in (a fix is required).</string>
+    <string name="visits_lost_fix">Lost the GPS fix — try again.</string>
+    <string name="visits_checked_out">Checked out — will sync</string>
+    <string name="visits_could_not_check_out">Could not check out</string>
+    <string name="visits_photo_queued">%1$s photo queued</string>
+    <string name="visits_could_not_attach_photo">Could not attach the photo</string>
+    <string name="visits_recorded">Visit to %1$s recorded — will sync</string>
+    <string name="visits_could_not_record">Could not record the visit</string>
+
+    <!-- ===== Camera ===== -->
+    <string name="camera_photo_tag">Photo: %1$s</string>
+    <string name="camera_unavailable">Camera unavailable: %1$s</string>
+    <string name="camera_capture_failed">Capture failed: %1$s</string>
+
+    <!-- ===== My CSPs ===== -->
+    <string name="filter_all">All</string>
+    <string name="sort_nearest_first">Nearest first</string>
+    <string name="sort_name">Name</string>
+    <string name="sort_label">Sort: %1$s</string>
+    <string name="cd_change_sort">Change sort</string>
+    <string name="csps_title">My CSPs (%1$d/%2$d)</string>
+    <string name="csps_search">Search by name or CSP code</string>
+    <string name="csps_none_cached">No assigned CSPs cached yet. Pull to refresh when you have signal.</string>
+    <string name="csps_no_match">No CSPs match this search/filter.</string>
+    <string name="tag_coordinates_unverified">Coordinates unverified</string>
+    <string name="csps_lat_lng">"Lat %1$.5f, Lng %2$.5f  ·  %3$s"</string>
+    <string name="csps_show_details">Show details (%1$d)</string>
+    <string name="csps_hide_details">Hide details</string>
+    <string name="action_get_directions">Get Directions</string>
+    <string name="action_suggest_edit">Suggest edit</string>
+    <string name="suggest_edit_title">Suggest an edit — %1$s</string>
+    <string name="suggest_edit_body">One field at a time. The change stays pending until your Circle Head approves it.</string>
+    <string name="suggest_edit_field">Field</string>
+    <string name="cd_choose_field">Choose field</string>
+    <string name="suggest_edit_new_value">New value</string>
+    <string name="csps_change_submitted">Change submitted — pending Circle Head approval</string>
+    <string name="csps_could_not_submit">Could not submit the change</string>
+
+    <!-- ===== Logi ===== -->
+    <string name="logi_title">Today\'s logistics</string>
+    <string name="logi_check_in_first">Check In on Home to start today\'s tracking and itinerary.</string>
+    <string name="logi_stale">Couldn\'t reach the server just now — showing the last known plan; it may be stale.</string>
+    <string name="logi_open_visit">You have an open visit at %1$s — finish it on the Visits tab before starting another.</string>
+    <string name="logi_a_csp">a CSP</string>
+    <string name="logi_smart_next_stop">Smart next stop</string>
+    <string name="logi_no_recommendation">No recommendation available right now.</string>
+    <string name="logi_itinerary">Today\'s itinerary (%1$d)</string>
+    <string name="logi_open_route">Open route in Maps</string>
+    <string name="logi_sorted_note">Sorted by straight-line distance from your last known location — not an optimized multi-stop route (no routing provider is configured).</string>
+    <string name="logi_none_cached">No assigned CSPs cached yet.</string>
+    <string name="logi_distance_travelled">Distance travelled</string>
+    <string name="logi_gps_points_today">GPS points today</string>
+    <string name="logi_distance_note">Distance travelled is a provisional GPS estimate (track_straightline_v0) — not a planned-route figure; no routing provider is configured to compute one.</string>
+
+    <!-- ===== Navigate (nearest CSP) ===== -->
+    <string name="nearest_refresh">Refresh recommendation</string>
+    <string name="nearest_updated_accuracy">Updated %1$s IST · GPS accuracy ±%2$d m</string>
+    <string name="nearest_updated_no_fix">Updated %1$s IST · no fresh GPS fix</string>
+    <string name="nearest_check_in_first">Check In to see your nearest CSP.</string>
+    <string name="nearest_load_failed">Could not load nearest CSP.</string>
+    <string name="nearest_hide_others">Hide other eligible CSPs</string>
+    <string name="nearest_other_eligible">Other eligible CSPs (%1$d)</string>
+    <string name="nearest_nothing">Nothing to navigate to right now.</string>
+    <string name="nearest_recommended">RECOMMENDED NEXT STOP</string>
+
+    <!-- ===== Scorecard ===== -->
+    <string name="scorecard_title">My scorecard</string>
+    <string name="scorecard_subtitle">dc_score_v1 — transparent, never affects pay.</string>
+    <string name="scorecard_stats">"Visits %1$d  ·  geo-verified %2$d  ·  streak %3$dd"</string>
+    <string name="scorecard_formula">Formula: visit +50 · geo-verified +20 · on-time (≤09:30 IST) +30 · streak-day +10 (cap 7).</string>
+    <string name="scorecard_open_dashboard">Open My Dashboard</string>
+    <string name="scorecard_link_private">This link is yours only.</string>
+    <string name="scorecard_points_today">points today</string>
+    <string name="scorecard_unavailable_offline">Scorecard unavailable offline</string>
+
+    <!-- ===== Approvals ===== -->
+    <string name="approvals_title">Approvals (%1$d)</string>
+    <string name="approvals_none">Nothing pending in your circle.</string>
+    <string name="approvals_proposed_by">Proposed by %1$s</string>
+    <string name="approvals_a_dc">a DC</string>
+    <string name="approvals_reject_title">Reject this change</string>
+    <string name="approvals_reason_label">Reason (sent to the DC)</string>
+    <string name="approvals_load_failed">Could not load the queue</string>
+    <string name="approvals_applied">Applied to the CSP master</string>
+    <string name="approvals_rejected">Rejected — DC notified</string>
+    <string name="approvals_decision_failed">Decision failed</string>
+
+    <!-- ===== Field-state banners ===== -->
+    <string name="banner_offline">You\'re offline — nothing is lost. Changes are saved on-device and sync automatically once you have signal.</string>
+    <plurals name="banner_pending_sync">
+        <item quantity="one">%1$d update saved on-device, waiting to sync.</item>
+        <item quantity="other">%1$d updates saved on-device, waiting to sync.</item>
+    </plurals>
+    <string name="banner_sync_failed">Some updates couldn\'t sync yet. They\'re safely queued — we\'ll keep retrying.</string>
+    <string name="banner_gps_unavailable">Location is off. Turn it on for distance and navigation — nothing here is ever blocked by GPS.</string>
+    <string name="banner_location_stale">Your last known location is a few minutes old — distances shown may be a little off.</string>
+    <string name="banner_permission_required">Location permission is needed for distance and navigation.</string>
+    <string name="banner_session_expired">Your session expired. Sign in again to continue.</string>
+    <string name="banner_no_eligible_csp">All your assigned CSPs are already visited today. 🎉</string>
+
+    <!-- ===== Location prompts ===== -->
+    <string name="location_permission_needed">Location permission needed</string>
+    <string name="location_permission_body">Eko records where you check in and your route during duty. Please allow Location for this app in Settings → Permissions.</string>
+    <string name="gps_is_off">GPS is off</string>
+    <string name="gps_off_body">Turn on Location so your check-ins and route are recorded.</string>
+    <string name="gps_off_action_body">Without GPS this will be recorded with no location and may be flagged for review.</string>
+    <string name="action_continue_without_gps">Continue without GPS</string>
+
+    <!-- ===== On-duty notification (tracking/) ===== -->
+    <string name="channel_on_duty_name">On duty</string>
+    <string name="channel_on_duty_desc">Your duty time, visits today, GPS and sync status while you are on duty</string>
+    <string name="channel_gps_alerts_name">GPS alerts</string>
+    <string name="channel_gps_alerts_desc">Warns you when GPS or location permission is off during duty</string>
+    <string name="notif_on_duty">On duty</string>
+    <string name="notif_on_duty_elapsed">On duty · %1$s</string>
+    <string name="notif_gps_off_title">GPS is off — route not recording</string>
+    <string name="notif_permission_needed">Location permission needed</string>
+    <string name="notif_visits_of">Visits today: %1$d of %2$d CSPs</string>
+    <string name="notif_visits">Visits today: %1$d</string>
+    <string name="notif_gps_live_last_fix">GPS live · last fix %1$s</string>
+    <string name="notif_gps_waiting">GPS on · waiting for a fix</string>
+    <string name="notif_gps_off_line">Turn on Location to keep recording your visits</string>
+    <string name="notif_no_permission_line">Allow Location for this app to record your route</string>
+    <string name="notif_all_synced">All synced</string>
+    <string name="notif_waiting_to_sync">%1$d waiting to sync</string>
+    <string name="notif_on_duty_since">On duty since %1$s IST</string>
+    <string name="notif_battery_saver">%1$s · battery saver on</string>
+    <string name="notif_gps_live">GPS live</string>
+    <string name="tab_team">Team</string>
+    <string name="team_title">Team today</string>
+    <string name="team_updated">Updated %1$s · refreshes every 30 s</string>
+    <string name="team_load_failed">Couldn\'t load team data. Check internet and tap Refresh.</string>
+    <string name="team_kpi_on_duty">On duty</string>
+    <string name="team_kpi_visits">Visits</string>
+    <string name="team_kpi_flagged">Flagged</string>
+    <string name="team_kpi_unassigned">CSPs without DC</string>
+    <string name="team_empty">No DCs found.</string>
+    <string name="team_auto_closed">Auto-closed</string>
+    <string name="team_started">Started %1$s</string>
+    <string name="team_ended">Ended %1$s</string>
+    <string name="team_hours">%1$s h</string>
+    <string name="team_counts">Visits: %1$d · KM: %2$s · CSPs: %3$d</string>
+    <string name="team_live">Live · %1$s</string>
+    <string name="team_last_seen">Last seen %1$s</string>
+    <string name="team_no_location">No location yet</string>
+    <string name="team_open_map">Map</string>
+    <string name="team_today">Today, %1$s</string>
+    <string name="team_visits_summary">%1$d visits · %2$d inside · %3$d outside</string>
+    <string name="team_no_visits">No visits on this day.</string>
+    <string name="team_inside">INSIDE</string>
+    <string name="team_outside">OUTSIDE</string>
+    <string name="team_visit_line">CSP %1$s · checked in %2$s</string>
+    <string name="team_checked_out">checked out %1$s</string>
+    <string name="team_still_open">still open</string>
+    <string name="team_photos">%1$d photos</string>
+    <string name="visits_already_checked_in">Already checked in at %1$s — add photos or check out.</string>
+    <string name="channel_reminders_name">Daily reminders</string>
+    <string name="channel_reminders_desc">Morning and evening reminders about today\'s CSP visits</string>
+    <string name="remind_morning_title">Good morning! Time to Check In</string>
+    <string name="remind_morning_check_in">Open the app and tap Check In to start your day.</string>
+    <string name="remind_today_title">Today\'s CSP visits</string>
+    <string name="remind_pending">%1$d of %2$d CSPs still to visit today</string>
+    <string name="remind_nearest">Nearest: %1$s · %2$s km away</string>
+    <string name="remind_open_logi">Open Logi to see today\'s route.</string>
+    <string name="remind_evening_title">Wrapping up for today?</string>
+    <string name="remind_visited">Visits today: %1$d</string>
+    <string name="remind_evening_end_day">Done for the day? Tap End Day on Home.</string>
+    <string name="remind_auto_close">If you forget, the day closes automatically at 21:00.</string>
+    <string name="notif_alert_gps_off_title">GPS is off</string>
+    <string name="notif_alert_gps_off_summary">Your route and visits are not being recorded. Tap to turn Location on.</string>
+    <string name="notif_alert_not_recorded">Your route and visits are not being recorded.</string>
+    <string name="notif_alert_tap_location">Tap to open Location settings and turn GPS on.</string>
+    <string name="notif_alert_perm_title">Location permission is off</string>
+    <string name="notif_alert_perm_summary">Allow Location for Eko so your route and visits can be recorded.</string>
+    <string name="notif_alert_tap_app_settings">Tap to open app settings.</string>
+    <string name="notif_alert_back_title">GPS is back</string>
+    <string name="notif_alert_resumed">Recording resumed.</string>
+    <string name="duration_h_m">%1$dh %2$dm</string>
+    <string name="duration_m">%1$dm</string>
+    <string name="ago_seconds">%1$ds ago</string>
+    <string name="ago_minutes">%1$dm ago</string>
+    <string name="ago_hours">%1$dh ago</string>
 </resources>

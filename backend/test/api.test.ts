@@ -1040,3 +1040,75 @@ test("GET /dashboard/route-history: requires date + dc_user_id, enforces scope, 
   });
   assert.equal(chForbidden.statusCode, 403);
 });
+
+test("a Circle Head cannot pull a CSP out of another circle (transfer + bulk import)", async () => {
+  const { app } = await makeApp();
+  const admin = await login(app, PHONES.admin);
+  const ch = await login(app, PHONES.amPriya);
+  const vikram = await login(app, PHONES.vikram); // Betwa circle — not the head's
+  const CSP_RAMPUR = "018f5a00-0000-7000-8000-000000000109";
+  const MANOJ = "018f5a00-0000-7000-8000-000000000206";
+
+  // Admin moves Rampur Khajuria into vikram's (other) circle.
+  const moved = await app.inject({
+    method: "POST",
+    url: "/api/v1/circle/csp-assignments/transfer",
+    headers: { authorization: `Bearer ${admin.token}` },
+    payload: { csp_location_id: CSP_RAMPUR, to_dc_user_id: vikram.user_id, reason: "TRANSFER" },
+  });
+  assert.equal(moved.statusCode, 200);
+
+  // The head tries to take it back to one of her own DCs — refused both ways.
+  const transfer = await app.inject({
+    method: "POST",
+    url: "/api/v1/circle/csp-assignments/transfer",
+    headers: { authorization: `Bearer ${ch.token}` },
+    payload: { csp_location_id: CSP_RAMPUR, to_dc_user_id: MANOJ, reason: "TRANSFER" },
+  });
+  assert.equal(transfer.statusCode, 403);
+
+  const imported = await app.inject({
+    method: "POST",
+    url: "/api/v1/circle/csp-assignments/import",
+    headers: { authorization: `Bearer ${ch.token}` },
+    payload: { rows: [{ csp_code: "CSP-ND-1005", dc_phone: "9800000006" }] },
+  });
+  assert.equal(imported.statusCode, 200);
+  const row = (imported.json() as { results: { result: string; reason?: string }[] }).results[0]!;
+  assert.equal(row.result, "rejected");
+  assert.match(row.reason ?? "", /another circle/);
+});
+
+test("CSP details import rejects a non-numeric or out-of-range lat/lng", async () => {
+  const { app } = await makeApp();
+  const admin = await login(app, PHONES.admin);
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/v1/circle/csp-details/import",
+    headers: { authorization: `Bearer ${admin.token}` },
+    payload: {
+      dry_run: true,
+      rows: [
+        { csp_code: "CSP-ND-1001", lat: "31.2240N" },
+        { csp_code: "CSP-ND-1002", lng: 200 },
+        { csp_code: "CSP-ND-1003", lat: 25.5, lng: 85.1 },
+      ],
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  const results = (res.json() as { results: { result: string }[] }).results.map((r) => r.result);
+  assert.deepEqual(results, ["rejected", "rejected", "updated"]);
+});
+
+test("OTP verify locks a number after 5 wrong codes", async () => {
+  const { app } = await makeApp();
+  const verify = (otp: string) =>
+    app.inject({
+      method: "POST",
+      url: "/api/v1/auth/otp/verify",
+      payload: { phone: "9800000099", otp, device: { hardware: { manufacturer: "t", model: "t", os_version: "1" } } },
+    });
+  for (let i = 0; i < 5; i++) assert.equal((await verify("111111")).statusCode, 401);
+  // Even the right code is refused while locked.
+  assert.equal((await verify(DEV_OTP)).statusCode, 429);
+});

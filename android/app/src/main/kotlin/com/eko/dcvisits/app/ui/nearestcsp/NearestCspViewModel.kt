@@ -10,6 +10,8 @@ import com.eko.dcvisits.app.ui.location.LocationProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import com.eko.dcvisits.app.R
+import com.eko.dcvisits.app.ui.text.UiText
 
 /** Mirrors the server's /dc/nearest-csp `state` field 1:1 (C2 v0.12.0). */
 enum class NearestCspState { LOADING, INACTIVE_SESSION, NO_ELIGIBLE_CSP, NO_FIX, STALE_GPS, OK, ERROR }
@@ -17,7 +19,7 @@ enum class NearestCspState { LOADING, INACTIVE_SESSION, NO_ELIGIBLE_CSP, NO_FIX,
 data class NearestCspUiState(
     val state: NearestCspState = NearestCspState.LOADING,
     val items: List<NearestCspItemDto> = emptyList(),
-    val errorMessage: String? = null,
+    val errorMessage: UiText? = null,
     /** The fix this recommendation was computed from, if the device could get one just now. */
     val fixAccuracyM: Double? = null,
     val lastUpdatedAtMs: Long? = null,
@@ -54,9 +56,10 @@ class NearestCspViewModel : ViewModel() {
                     lastUpdatedAtMs = System.currentTimeMillis(),
                 )
             } catch (e: ApiException) {
-                _ui.value = NearestCspUiState(state = NearestCspState.ERROR, errorMessage = e.message)
+                _ui.value = NearestCspUiState(state = NearestCspState.ERROR, errorMessage = UiText.Raw(e.message))
             } catch (e: Exception) {
-                _ui.value = NearestCspUiState(state = NearestCspState.ERROR, errorMessage = e.message ?: "Could not load nearest CSP")
+                _ui.value = NearestCspUiState(state = NearestCspState.ERROR, errorMessage = UiText.messageOr(e, R.string.nearest_load_failed))
+
             }
             _busy.value = false
         }

@@ -1,4 +1,4 @@
-import java.util.Properties
+﻿import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -26,7 +26,7 @@ fun apiBaseUrl(default: String?): String =
 
 // Release signing. Each value resolves from an environment variable first (how
 // CI injects secrets), then the matching key in local.properties. If no
-// keystore file is resolvable the release build simply stays unsigned — dev
+// keystore file is resolvable the release build simply stays unsigned â€” dev
 // machines that only ever build debug don't need one, and `assembleRelease`
 // still succeeds (it just emits an -unsigned APK).
 fun secret(env: String, prop: String): String? =
@@ -41,10 +41,10 @@ android {
 
     defaultConfig {
         applicationId = "com.eko.dcvisits"
-        minSdk = 29          // BUILD_PLAN §1 decision 5: BYOD, Android 10+
+        minSdk = 29          // BUILD_PLAN Â§1 decision 5: BYOD, Android 10+
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.13.1"
+        versionCode = 9
+        versionName = "0.14.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -92,10 +92,17 @@ android {
         compose = true
         buildConfig = true
     }
+    // The in-app language switch needs every language in the install: never split
+    // strings by language if this ever ships as an App Bundle.
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        // Compress native libs + dex — this AGP/Gradle combo was inserting
-        // huge (>10–50 MB) page-alignment zero-gaps before the uncompressed
+        // Compress native libs + dex â€” this AGP/Gradle combo was inserting
+        // huge (>10â€“50 MB) page-alignment zero-gaps before the uncompressed
         // lib/ and classes.dex entries, bloating the APK. Legacy packaging
         // compresses them and drops the alignment requirement.
         jniLibs.useLegacyPackaging = true
@@ -111,6 +118,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
+    // Per-app language (in-app Hindi/English switch) with persistence on Android 10â€“12.
+    implementation(libs.androidx.appcompat)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

@@ -1,5 +1,8 @@
 package com.eko.dcvisits.app.tracking
 
+import android.content.Context
+import androidx.annotation.StringRes
+import com.eko.dcvisits.app.R
 import com.eko.dcvisits.app.util.Ist
 import java.time.Duration
 import java.time.Instant
@@ -25,69 +28,88 @@ data class DutySnapshot(
 /** Notification copy: short line for the collapsed card, full lines for the expanded one. */
 data class NotificationCopy(val title: String, val summary: String, val details: List<String>)
 
+/**
+ * Resolves a string resource with format args. In the app this is
+ * `context.getString(id, *args)` on a context in the chosen app language; unit
+ * tests resolve the same ids against res/values/strings.xml so the copy stays
+ * plain-JVM testable.
+ */
+fun interface StringLookup {
+    fun get(@StringRes id: Int, vararg args: Any): String
+
+    companion object {
+        fun of(context: Context): StringLookup = StringLookup { id, args -> context.getString(id, *args) }
+    }
+}
+
 object DutyNotificationText {
     private val HHMM: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
-    fun forDuty(s: DutySnapshot): NotificationCopy {
+    fun forDuty(s: DutySnapshot, str: StringLookup): NotificationCopy {
         val since = s.onDutySince
-        val elapsed = since?.let { duration(Duration.between(it, s.now)) }
+        val elapsed = since?.let { duration(Duration.between(it, s.now), str) }
         val title = when (s.gps) {
-            GpsStatus.OK -> if (elapsed != null) "On duty · $elapsed" else "On duty"
-            GpsStatus.GPS_OFF -> "GPS is off — route not recording"
-            GpsStatus.NO_PERMISSION -> "Location permission needed"
+            GpsStatus.OK -> if (elapsed != null) str.get(R.string.notif_on_duty_elapsed, elapsed) else str.get(R.string.notif_on_duty)
+            GpsStatus.GPS_OFF -> str.get(R.string.notif_gps_off_title)
+            GpsStatus.NO_PERMISSION -> str.get(R.string.notif_permission_needed)
         }
 
         val visits = when {
             s.visitsToday == null -> null
-            s.cspsAssigned != null -> "Visits today: ${s.visitsToday} of ${s.cspsAssigned} CSPs"
-            else -> "Visits today: ${s.visitsToday}"
+            s.cspsAssigned != null -> str.get(R.string.notif_visits_of, s.visitsToday, s.cspsAssigned)
+            else -> str.get(R.string.notif_visits, s.visitsToday)
         }
         val gpsLine = when (s.gps) {
-            GpsStatus.OK -> s.lastFixAt?.let { "GPS live · last fix ${ago(Duration.between(it, s.now))}" } ?: "GPS on · waiting for a fix"
-            GpsStatus.GPS_OFF -> "Turn on Location to keep recording your visits"
-            GpsStatus.NO_PERMISSION -> "Allow Location for this app to record your route"
+            GpsStatus.OK -> s.lastFixAt?.let { str.get(R.string.notif_gps_live_last_fix, ago(Duration.between(it, s.now), str)) }
+                ?: str.get(R.string.notif_gps_waiting)
+            GpsStatus.GPS_OFF -> str.get(R.string.notif_gps_off_line)
+            GpsStatus.NO_PERMISSION -> str.get(R.string.notif_no_permission_line)
         }
-        val sync = if (s.pendingSync <= 0) "All synced" else "${s.pendingSync} waiting to sync"
+        val sync = if (s.pendingSync <= 0) str.get(R.string.notif_all_synced) else str.get(R.string.notif_waiting_to_sync, s.pendingSync)
 
         val details = buildList {
-            since?.let { add("On duty since ${ZonedDateTime.ofInstant(it, Ist.ZONE).format(HHMM)} IST") }
+            since?.let { add(str.get(R.string.notif_on_duty_since, ZonedDateTime.ofInstant(it, Ist.ZONE).format(HHMM))) }
             visits?.let { add(it) }
             add(gpsLine)
-            add(if (s.batterySaver) "$sync · battery saver on" else sync)
+            add(if (s.batterySaver) str.get(R.string.notif_battery_saver, sync) else sync)
         }
-        val summary = listOfNotNull(visits, if (s.gps == GpsStatus.OK) "GPS live" else null, sync).joinToString(" · ")
+        val summary = listOfNotNull(visits, if (s.gps == GpsStatus.OK) str.get(R.string.notif_gps_live) else null, sync).joinToString(" · ")
             .ifEmpty { gpsLine }
         return NotificationCopy(title, if (s.gps == GpsStatus.OK) summary else gpsLine, details)
     }
 
     /** The heads-up alert posted when GPS or its permission disappears mid-duty. */
-    fun gpsAlert(gps: GpsStatus): NotificationCopy = when (gps) {
+    fun gpsAlert(gps: GpsStatus, str: StringLookup): NotificationCopy = when (gps) {
         GpsStatus.GPS_OFF -> NotificationCopy(
-            "GPS is off",
-            "Your route and visits are not being recorded. Tap to turn Location on.",
-            listOf("Your route and visits are not being recorded.", "Tap to open Location settings and turn GPS on."),
+            str.get(R.string.notif_alert_gps_off_title),
+            str.get(R.string.notif_alert_gps_off_summary),
+            listOf(str.get(R.string.notif_alert_not_recorded), str.get(R.string.notif_alert_tap_location)),
         )
         GpsStatus.NO_PERMISSION -> NotificationCopy(
-            "Location permission is off",
-            "Allow Location for Eko so your route and visits can be recorded.",
-            listOf("Allow Location for Eko so your route and visits can be recorded.", "Tap to open app settings."),
+            str.get(R.string.notif_alert_perm_title),
+            str.get(R.string.notif_alert_perm_summary),
+            listOf(str.get(R.string.notif_alert_perm_summary), str.get(R.string.notif_alert_tap_app_settings)),
         )
-        GpsStatus.OK -> NotificationCopy("GPS is back", "Recording resumed.", listOf("Recording resumed."))
+        GpsStatus.OK -> NotificationCopy(
+            str.get(R.string.notif_alert_back_title),
+            str.get(R.string.notif_alert_resumed),
+            listOf(str.get(R.string.notif_alert_resumed)),
+        )
     }
 
-    internal fun duration(d: Duration): String {
+    internal fun duration(d: Duration, str: StringLookup): String {
         val mins = d.toMinutes().coerceAtLeast(0)
         val h = mins / 60
         val m = mins % 60
-        return if (h > 0) "${h}h ${m}m" else "${m}m"
+        return if (h > 0) str.get(R.string.duration_h_m, h, m) else str.get(R.string.duration_m, m)
     }
 
-    internal fun ago(d: Duration): String {
+    internal fun ago(d: Duration, str: StringLookup): String {
         val secs = d.seconds.coerceAtLeast(0)
         return when {
-            secs < 60 -> "${secs}s ago"
-            secs < 3600 -> "${secs / 60}m ago"
-            else -> "${secs / 3600}h ago"
+            secs < 60 -> str.get(R.string.ago_seconds, secs)
+            secs < 3600 -> str.get(R.string.ago_minutes, secs / 60)
+            else -> str.get(R.string.ago_hours, secs / 3600)
         }
     }
 }
