@@ -465,11 +465,13 @@ export class PgRepos implements Repos {
   }
   async mergeAttendanceDay(tenantId: TenantId, dcUserId: string, istDate: string, kind: "START" | "END", occurredAt: string): Promise<void> {
     await this.pool.query(
-      `INSERT INTO attendance_days (tenant_id, dc_user_id, ist_date, started_at, ended_at)
-       VALUES ($1,$2,$3, CASE WHEN $4 = 'START' THEN $5::timestamptz END, CASE WHEN $4 = 'END' THEN $5::timestamptz END)
+      `INSERT INTO attendance_days (tenant_id, dc_user_id, ist_date, started_at, ended_at, last_started_at)
+       VALUES ($1,$2,$3, CASE WHEN $4 = 'START' THEN $5::timestamptz END, CASE WHEN $4 = 'END' THEN $5::timestamptz END,
+               CASE WHEN $4 = 'START' THEN $5::timestamptz END)
        ON CONFLICT (tenant_id, dc_user_id, ist_date) DO UPDATE SET
          started_at = LEAST(attendance_days.started_at, EXCLUDED.started_at),
-         ended_at = GREATEST(attendance_days.ended_at, EXCLUDED.ended_at)`,
+         ended_at = GREATEST(attendance_days.ended_at, EXCLUDED.ended_at),
+         last_started_at = GREATEST(attendance_days.last_started_at, EXCLUDED.last_started_at)`,
       [tenantId, dcUserId, istDate, kind, occurredAt],
     );
   }
@@ -486,6 +488,7 @@ export class PgRepos implements Repos {
       ist_date: istDate,
       started_at: r.started_at ? (r.started_at as Date).toISOString() : null,
       ended_at: r.ended_at ? (r.ended_at as Date).toISOString() : null,
+      last_started_at: r.last_started_at ? (r.last_started_at as Date).toISOString() : null,
     };
   }
   async getAttendanceDaysForDcDates(
@@ -509,6 +512,7 @@ export class PgRepos implements Repos {
         ist_date: date,
         started_at: r.started_at ? (r.started_at as Date).toISOString() : null,
         ended_at: r.ended_at ? (r.ended_at as Date).toISOString() : null,
+        last_started_at: r.last_started_at ? (r.last_started_at as Date).toISOString() : null,
       });
     }
     return out;

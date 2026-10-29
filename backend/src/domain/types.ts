@@ -247,6 +247,8 @@ export interface AttendanceDay {
   ist_date: string;
   started_at: string | null;
   ended_at: string | null;
+  /** Latest START (GREATEST merge). A START after ended_at means End Day was followed by Resume Day. */
+  last_started_at?: string | null;
 }
 
 export type AttendanceStatus = "NOT_STARTED" | "ON_DUTY" | "ENDED" | "AUTO_CLOSED";
