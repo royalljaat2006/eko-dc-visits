@@ -29,7 +29,7 @@ object LocationProvider {
         if (!hasPermission(context)) return null
         val client = LocationServices.getFusedLocationProviderClient(context)
         val request = CurrentLocationRequest.Builder()
-            .setPriority(Priority.PRIORITY_BALANCED_POWER_ACCURACY)
+            .setPriority(Priority.PRIORITY_HIGH_ACCURACY) // real GPS: check-in geofence is radius + accuracy
             .setMaxUpdateAgeMillis(30_000)
             .setDurationMillis(8_000)
             .build()

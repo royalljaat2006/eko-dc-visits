@@ -43,8 +43,8 @@ android {
         applicationId = "com.eko.dcvisits"
         minSdk = 29          // BUILD_PLAN Â§1 decision 5: BYOD, Android 10+
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.14.3"
+        versionCode = 10
+        versionName = "0.14.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
