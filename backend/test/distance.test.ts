@@ -35,6 +35,34 @@ test("kmForPoints: GPS teleports (>800 km/h) are excluded from the sum", () => {
   assert.ok(km < 3, `teleport must not count (got ${km})`);
 });
 
+test("kmForPoints: a phone lying still with poor GPS adds (almost) nothing", () => {
+  // 3 h of fixes every 20 s wandering ±0.002° (~±220 m) around one spot, accuracy 300 m.
+  const points: TrackPoint[] = [];
+  for (let i = 0; i < 540; i++) {
+    const wobble = ((i * 7919) % 9) - 4; // deterministic -4..4
+    points.push({
+      lat: 26.63 + wobble * 0.0005,
+      lng: 85.42 - wobble * 0.0005,
+      t: new Date(Date.UTC(2026, 9, 29, 4, 0, i * 20)).toISOString(),
+      accuracy_m: 300,
+    });
+  }
+  const km = kmForPoints(points);
+  assert.ok(km < 1, `stationary jitter must not become distance (got ${km} km)`);
+});
+
+test("kmForPoints: a real 10 km drive with decent GPS is still counted", () => {
+  // 50 fixes, 0.002° (~222 m) apart in a straight line, every 20 s, accuracy 15 m.
+  const points: TrackPoint[] = Array.from({ length: 50 }, (_, i) => ({
+    lat: 25.36 + i * 0.002,
+    lng: 85.75,
+    t: new Date(Date.UTC(2026, 9, 29, 4, 0, i * 20)).toISOString(),
+    accuracy_m: 15,
+  }));
+  const km = kmForPoints(points);
+  assert.ok(Math.abs(km - 10.9) <= 0.2, `expected ~10.9 km, got ${km}`);
+});
+
 test("track.chunk op: accepted, idempotent, km derivable per IST date", async () => {
   const repos = new MemoryRepos();
   await seedFixtures(repos, { now: NOW });
