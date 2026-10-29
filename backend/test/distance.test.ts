@@ -63,6 +63,17 @@ test("kmForPoints: a real 10 km drive with decent GPS is still counted", () => {
   assert.ok(Math.abs(km - 10.9) <= 0.2, `expected ~10.9 km, got ${km}`);
 });
 
+test("kmForPoints: coarse cell/Wi-Fi fixes (>100 m) are left out of the sum", () => {
+  // The same 10.9 km drive, with a ±400 m network fix wandering ~1 km off between every GPS fix.
+  const points: TrackPoint[] = [];
+  for (let i = 0; i < 50; i++) {
+    points.push({ lat: 25.36 + i * 0.002, lng: 85.75, t: new Date(Date.UTC(2026, 9, 29, 4, 0, i * 20)).toISOString(), accuracy_m: 15 });
+    points.push({ lat: 25.36 + i * 0.002 + 0.009, lng: 85.75, t: new Date(Date.UTC(2026, 9, 29, 4, 0, i * 20 + 10)).toISOString(), accuracy_m: 400 });
+  }
+  const km = kmForPoints(points);
+  assert.ok(Math.abs(km - 10.9) <= 0.2, `coarse fixes must not add distance (got ${km} km)`);
+});
+
 test("track.chunk op: accepted, idempotent, km derivable per IST date", async () => {
   const repos = new MemoryRepos();
   await seedFixtures(repos, { now: NOW });
