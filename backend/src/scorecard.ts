@@ -51,13 +51,28 @@ export function streakDays(daysWithStart: readonly boolean[]): number {
   return streak;
 }
 
+/**
+ * One visit per CSP per day: repeat check-ins at the same location (the old
+ * app's auto check-in re-firing as the DC passed by) score once. Geo-verified
+ * if any of them was INSIDE. The evidence rows themselves stay untouched.
+ */
+export function distinctCspVisits(visits: readonly VisitView[]): VisitView[] {
+  const byDcLocation = new Map<string, VisitView>();
+  for (const v of visits) {
+    const key = `${v.dc_user_id}|${v.location_id}`;
+    const seen = byDcLocation.get(key);
+    if (!seen || (seen.geofence_result !== "INSIDE" && v.geofence_result === "INSIDE")) byDcLocation.set(key, v);
+  }
+  return [...byDcLocation.values()];
+}
+
 export function computeScorecard(
   dc: { id: string; name: string },
   visits: readonly VisitView[],
   attendanceToday: AttendanceDay | null,
   daysWithStart: readonly boolean[],
 ): ScorecardRow {
-  const own = visits.filter((v) => v.dc_user_id === dc.id);
+  const own = distinctCspVisits(visits.filter((v) => v.dc_user_id === dc.id));
   const geoVerified = own.filter((v) => v.geofence_result === "INSIDE").length;
 
   const startedAt = attendanceToday?.started_at ?? null;

@@ -14,7 +14,7 @@ import { applySyncBatch, type Clock } from "./sync/engine.js";
 import { DEV_TOKEN_CONFIG, newRefreshToken, signAccessToken, verifyAccessToken, type TokenConfig } from "./auth/tokens.js";
 import { ekoSendOtp, ekoVerifyOtp, loadEkoConfig } from "./auth/eko.js";
 import { haversineMeters, istDateOf } from "./geo.js";
-import { computeScorecard } from "./scorecard.js";
+import { computeScorecard, distinctCspVisits } from "./scorecard.js";
 import { kmForPoints } from "./distance.js";
 import { deriveAttendance, effectiveEndedAt } from "./attendance.js";
 
@@ -1073,7 +1073,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         }
         const scope = await resolveScope(repos, principal, clock());
 
-        const [dcs, visits, banks, circles, memberships, assignments, locations] = await Promise.all([
+        const [dcs, allVisits, banks, circles, memberships, assignments, locations] = await Promise.all([
           repos.listDcUsers(scope.tenant_id, "ALL"),
           repos.listVisitsByIstDate(scope, q.date),
           repos.listBanks(scope.tenant_id),
@@ -1082,6 +1082,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           repos.listActiveCspAssignments(scope.tenant_id, "ALL", q.date),
           repos.listAllLocations(scope.tenant_id),
         ]);
+        const visits = distinctCspVisits(allVisits); // same CSP twice in a day counts once
 
         const dcIds = dcs.map((d) => d.id);
         // One batched read for the whole tenant's attendance + km — not 2×N.
