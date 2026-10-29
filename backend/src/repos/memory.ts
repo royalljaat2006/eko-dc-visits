@@ -242,6 +242,8 @@ export class MemoryRepos implements Repos {
       ...cur,
       started_at: kind === "START" ? (cur.started_at === null || occurredAt < cur.started_at ? occurredAt : cur.started_at) : cur.started_at,
       ended_at: kind === "END" ? (cur.ended_at === null || occurredAt > cur.ended_at ? occurredAt : cur.ended_at) : cur.ended_at,
+      last_started_at:
+        kind === "START" ? (!cur.last_started_at || occurredAt > cur.last_started_at ? occurredAt : cur.last_started_at) : (cur.last_started_at ?? null),
     };
     this.attendanceDays.set(k, next);
   }

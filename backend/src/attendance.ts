@@ -21,9 +21,20 @@ export interface DerivedAttendance {
   hours_worked: number | null;
 }
 
+/**
+ * The END that actually closes the day, or null while the DC is still on duty.
+ * End Day followed by Resume Day (a later START) reopens the day, so that END
+ * no longer counts. Still commutative: it reads only the merged LEAST/GREATEST values.
+ */
+export function effectiveEndedAt(day: AttendanceDay | null): string | null {
+  if (!day?.ended_at) return null;
+  if (day.last_started_at && new Date(day.last_started_at).getTime() > new Date(day.ended_at).getTime()) return null;
+  return day.ended_at;
+}
+
 export function deriveAttendance(day: AttendanceDay | null, istDate: string, now: Date): DerivedAttendance {
   const started = day?.started_at ?? null;
-  const ended = day?.ended_at ?? null;
+  const ended = effectiveEndedAt(day);
   const hours = (from: string, to: string): number =>
     Math.max(0, Math.round(((new Date(to).getTime() - new Date(from).getTime()) / 3_600_000) * 10) / 10);
 

@@ -16,7 +16,7 @@ import { ekoSendOtp, ekoVerifyOtp, loadEkoConfig } from "./auth/eko.js";
 import { haversineMeters, istDateOf } from "./geo.js";
 import { computeScorecard } from "./scorecard.js";
 import { kmForPoints } from "./distance.js";
-import { deriveAttendance } from "./attendance.js";
+import { deriveAttendance, effectiveEndedAt } from "./attendance.js";
 
 /** Route inventory consumed by contracts:check (paths relative to servers[0].url = /api/v1). */
 export const IMPLEMENTED_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
@@ -901,7 +901,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         const today = istDateOf(clock());
 
         const day = await repos.getAttendanceDay(principal.tenant_id, principal.user_id, today);
-        if (!day?.started_at || day.ended_at) {
+        if (!day?.started_at || effectiveEndedAt(day)) {
           return reply.code(200).send({ state: "inactive_session", items: [] });
         }
 
@@ -1091,7 +1091,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         ]);
         const statusOf = (dcId: string): "NOT_STARTED" | "ON_DUTY" | "ENDED" => {
           const day = attendanceDays.get(`${dcId}|${q.date!}`);
-          return day?.ended_at ? "ENDED" : day?.started_at ? "ON_DUTY" : "NOT_STARTED";
+          return effectiveEndedAt(day ?? null) ? "ENDED" : day?.started_at ? "ON_DUTY" : "NOT_STARTED";
         };
 
         const csps = locations.filter((l) => l.type === "CSP");
@@ -1218,7 +1218,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         const now = clock().getTime();
         const items = dcs.map((dc) => {
           const day = attendance.get(`${dc.id}|${today}`) ?? null;
-          const on_duty = day?.started_at != null && day.ended_at == null;
+          const on_duty = day?.started_at != null && effectiveEndedAt(day) == null;
           const loc = locations.get(dc.id);
           if (!loc) return { dc_user_id: dc.id, name: dc.name, on_duty, state: "no_fix" as const };
           const stale = now - new Date(loc.captured_at).getTime() > staleAfterMs;
