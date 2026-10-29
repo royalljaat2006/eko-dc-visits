@@ -18,6 +18,7 @@ import 'leaflet/dist/leaflet.css';
 import { ApiError, listVisits, type Visit } from '../api/client.ts';
 import { formatIstDateTime, todayIstDate } from '../lib/format.ts';
 import { geofenceChip, syncChip, plannedLabel } from '../lib/chips.ts';
+import { groupRepeatVisits } from '../lib/visitGroups.ts';
 
 const POLL_MS = 10_000;
 
@@ -101,16 +102,19 @@ export function renderDayView(root: HTMLElement): () => void {
       errorBox.hidden = true;
       emptyEl.hidden = visits.length > 0;
 
-      // Table — render exactly what the API returned (see C6 note above).
+      // Table — render exactly what the API returned (see C6 note above); repeat
+      // check-ins at the same CSP fold into one row, their times still shown.
+      const groups = groupRepeatVisits(visits);
       tbody.replaceChildren(
-        ...visits.map((v) => {
+        ...groups.map(({ first: v, repeats }) => {
           const tr = document.createElement('tr');
           const geo = geofenceChip(v.geofence_result, v.out_of_radius_reason);
           const sync = syncChip(v.sync_state);
+          const again = repeats.map((r) => formatIstDateTime(r.checkin.occurred_at).slice(-5)).join(', ');
           tr.append(
             td(v.dc_name ?? '—'),
             td(v.location_name ? `${v.location_name} (${v.location_code ?? '—'})` : (v.location_code ?? '—')),
-            td(formatIstDateTime(v.checkin.occurred_at)),
+            td(formatIstDateTime(v.checkin.occurred_at) + (again ? ` (again ${again})` : '')),
             tdChip(geo.label, geo.className, geo.title),
             td(plannedLabel(v.planned)),
             tdChip(sync.label, sync.className, sync.title),
@@ -119,10 +123,10 @@ export function renderDayView(root: HTMLElement): () => void {
         }),
       );
 
-      // Map markers — one per visit at the check-in fix.
+      // Map markers — one per row, at the first check-in fix.
       markers.clearLayers();
       const points: LT.LatLngExpression[] = [];
-      for (const v of visits) {
+      for (const { first: v } of groups) {
         const { lat, lng } = v.checkin.fix;
         points.push([lat, lng]);
         L.marker([lat, lng], { icon: markerIcon })
