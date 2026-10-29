@@ -49,6 +49,9 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.add
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import com.eko.dcvisits.app.data.net.ApiClient
 import java.time.Instant
 
 /**
@@ -253,6 +256,9 @@ class TrackingService : Service() {
         val s = session.current() ?: return
         when (event) {
             is DwellEvent.CheckIn -> {
+                // One auto visit per CSP per day: a DC living or passing near a CSP kept
+                // re-triggering it (two "visits" at 10:59 and 14:37). A real revisit is a manual check-in.
+                if (event.cspId in cspsCheckedInToday()) return
                 val checkinId = Uuidv7.next()
                 val payload = SyncPayloads.checkinEvent(
                     id = checkinId,
@@ -292,6 +298,20 @@ class TrackingService : Service() {
                 SyncWorker.kick(this)
             }
         }
+    }
+
+    /** Location ids of today's (IST) check-ins, manual or auto, from the local outbox. */
+    private suspend fun cspsCheckedInToday(): Set<String> {
+        val today = Ist.today()
+        return outbox.dayOps.first().asSequence()
+            .filter { it.type == SyncPayloads.OP_VISIT_CHECKIN }
+            .mapNotNull { runCatching { ApiClient.json.decodeFromString(JsonObject.serializer(), it.payload) }.getOrNull() }
+            .filter { p ->
+                val wall = p["timestamps"]?.jsonObject?.get("device_wall_time")?.jsonPrimitive?.content
+                wall != null && Ist.date(Instant.parse(wall)) == today
+            }
+            .mapNotNull { it["location_id"]?.jsonPrimitive?.content }
+            .toSet()
     }
 
     private suspend fun flush() {
