@@ -14,6 +14,8 @@ import { haversineMeters } from "./geo.js";
 const MAX_PLAUSIBLE_KMH = 800;
 /** Smallest move counted even when both fixes claim perfect accuracy. */
 const MIN_MOVE_M = 25;
+/** Coarser fixes are cell/Wi-Fi estimates, not GPS: they wander by hundreds of metres, so they never count. */
+const MAX_ACCURACY_M = 100;
 
 export const DISTANCE_ALGORITHM = "track_straightline_v0" as const;
 
@@ -25,8 +27,10 @@ export const DISTANCE_ALGORITHM = "track_straightline_v0" as const;
  * combined uncertainty. Teleports re-anchor without counting, as before.
  */
 export function kmForPoints(points: readonly TrackPoint[]): number {
-  if (points.length < 2) return 0;
-  const sorted = [...points].sort((a, b) => a.t.localeCompare(b.t));
+  const sorted = points
+    .filter((p) => p.accuracy_m == null || p.accuracy_m <= MAX_ACCURACY_M)
+    .sort((a, b) => a.t.localeCompare(b.t));
+  if (sorted.length < 2) return 0;
   let meters = 0;
   let anchor = sorted[0]!;
   for (let i = 1; i < sorted.length; i++) {

@@ -200,7 +200,9 @@ class TrackingService : Service() {
 
     private fun ensureUpdates() {
         if (requestingUpdates) return
-        val request = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, MOVING_INTERVAL_MS)
+        // HIGH_ACCURACY = real GPS. BALANCED gave cell/Wi-Fi fixes (median ±400 m in the field),
+        // whose wander was summed into fake KM and inflated the visit geofence.
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, MOVING_INTERVAL_MS)
             .setMinUpdateIntervalMillis(MIN_INTERVAL_MS)
             .setMaxUpdateDelayMillis(MAX_BATCH_DELAY_MS)
             .build()
