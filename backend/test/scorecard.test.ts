@@ -9,12 +9,12 @@ import type { AttendanceDay, VisitView } from "../src/domain/types.js";
 
 const DC = { id: "dc-1", name: "Asha" };
 
-function visit(geofence: "INSIDE" | "OUTSIDE_FLAGGED", dcId = DC.id): VisitView {
+function visit(geofence: "INSIDE" | "OUTSIDE_FLAGGED", dcId = DC.id, locationId = `l-${Math.random()}`): VisitView {
   return {
     id: `v-${Math.random()}`,
     dc_user_id: dcId,
     dc_name: "x",
-    location_id: "l",
+    location_id: locationId,
     location_name: "x",
     location_code: "x",
     planned: true,
@@ -81,4 +81,16 @@ test("other DCs' visits never leak into a card (parity + scoping)", () => {
   const row = computeScorecard(DC, [visit("INSIDE", "someone-else")], attendance(null), [false]);
   assert.equal(row.visits_done, 0);
   assert.equal(row.points, 0);
+});
+
+test("same CSP twice in a day counts as one visit (repeat auto check-in)", () => {
+  const row = computeScorecard(
+    DC,
+    [visit("OUTSIDE_FLAGGED", DC.id, "csp-a"), visit("INSIDE", DC.id, "csp-a"), visit("INSIDE", DC.id, "csp-b")],
+    attendance(null),
+    [false],
+  );
+  assert.equal(row.visits_done, 2);
+  assert.equal(row.geo_verified_visits, 2, "geo-verified if any check-in at that CSP was INSIDE");
+  assert.equal(row.points, 2 * SCORE_RULES.VISIT_POINTS + 2 * SCORE_RULES.GEO_VERIFIED_BONUS);
 });
