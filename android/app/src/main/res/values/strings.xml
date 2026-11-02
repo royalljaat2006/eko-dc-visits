@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Eko CSP Visits</string>
+    <string name="app_name">Eko Bharat</string>
 
     <!-- ===== Common actions / words ===== -->
     <string name="action_cancel">Cancel</string>
@@ -346,7 +346,7 @@
     <string name="tab_info">Info</string>
     <string name="info_version">Version %1$s</string>
     <string name="info_what_title">What is this app?</string>
-    <string name="info_what_body">Eko CSP Visits helps Eko\'s District Coordinators (DCs) visit SBI kiosk CSPs, and keeps a clear record of every visit: who went, to which CSP, at what time, and whether they were really there.</string>
+    <string name="info_what_body">Eko Bharat helps Eko\'s District Coordinators (DCs) visit SBI kiosk CSPs, and keeps a clear record of every visit: who went, to which CSP, at what time, and whether they were really there.</string>
     <string name="info_dc_title">Your day, step by step</string>
     <string name="info_dc_body">1. Tap Start Day in the morning.\n2. Go to your CSPs. My CSPs lists them; Navigate shows the nearest one.\n3. Stay at the CSP for about 2 minutes and the app checks you in by itself, or tap Check in.\n4. Take the photos and check out.\n5. Tap End Day in the evening. Your KM is counted automatically.</string>
     <string name="info_admin_title">What you can see</string>

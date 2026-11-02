@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Eko CSP विज़िट</string>
+    <string name="app_name">Eko Bharat</string>
 
     <!-- ===== Common actions / words ===== -->
     <string name="action_cancel">रद्द करें</string>
@@ -346,7 +346,7 @@
     <string name="tab_info">जानकारी</string>
     <string name="info_version">वर्ज़न %1$s</string>
     <string name="info_what_title">यह ऐप क्या है?</string>
-    <string name="info_what_body">Eko CSP विज़िट ऐप Eko के डिस्ट्रिक्ट कोऑर्डिनेटर (DC) को SBI कियोस्क CSP पर विज़िट करने में मदद करता है, और हर विज़िट का साफ़ रिकॉर्ड रखता है: कौन गया, किस CSP पर, कितने बजे, और क्या वह सच में वहाँ था।</string>
+    <string name="info_what_body">Eko Bharat ऐप Eko के डिस्ट्रिक्ट कोऑर्डिनेटर (DC) को SBI कियोस्क CSP पर विज़िट करने में मदद करता है, और हर विज़िट का साफ़ रिकॉर्ड रखता है: कौन गया, किस CSP पर, कितने बजे, और क्या वह सच में वहाँ था।</string>
     <string name="info_dc_title">आपका दिन, एक-एक कदम</string>
     <string name="info_dc_body">1. सुबह Start Day दबाएँ।\n2. अपने CSP पर जाएँ। मेरे CSP में लिस्ट है; नेविगेट सबसे नज़दीकी CSP दिखाता है।\n3. CSP पर लगभग 2 मिनट रुकें, ऐप खुद चेक इन कर देगा, या Check in दबाएँ।\n4. फ़ोटो लें और चेक आउट करें।\n5. शाम को End Day दबाएँ। आपका KM अपने आप गिना जाता है।</string>
     <string name="info_admin_title">आप क्या देख सकते हैं</string>
