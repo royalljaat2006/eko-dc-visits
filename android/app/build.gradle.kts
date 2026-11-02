@@ -26,7 +26,7 @@ fun apiBaseUrl(default: String?): String =
 
 // Release signing. Each value resolves from an environment variable first (how
 // CI injects secrets), then the matching key in local.properties. If no
-// keystore file is resolvable the release build simply stays unsigned Ã¢â‚¬â€ dev
+// keystore file is resolvable the release build simply stays unsigned ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â dev
 // machines that only ever build debug don't need one, and `assembleRelease`
 // still succeeds (it just emits an -unsigned APK).
 fun secret(env: String, prop: String): String? =
@@ -41,10 +41,10 @@ android {
 
     defaultConfig {
         applicationId = "com.eko.dcvisits"
-        minSdk = 29          // BUILD_PLAN Ã‚Â§1 decision 5: BYOD, Android 10+
+        minSdk = 29          // BUILD_PLAN Ãƒâ€šÃ‚Â§1 decision 5: BYOD, Android 10+
         targetSdk = 35
-        versionCode = 13
-        versionName = "0.15.2"
+        versionCode = 14
+        versionName = "0.15.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -101,8 +101,8 @@ android {
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        // Compress native libs + dex Ã¢â‚¬â€ this AGP/Gradle combo was inserting
-        // huge (>10Ã¢â‚¬â€œ50 MB) page-alignment zero-gaps before the uncompressed
+        // Compress native libs + dex ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â this AGP/Gradle combo was inserting
+        // huge (>10ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“50 MB) page-alignment zero-gaps before the uncompressed
         // lib/ and classes.dex entries, bloating the APK. Legacy packaging
         // compresses them and drops the alignment requirement.
         jniLibs.useLegacyPackaging = true
@@ -118,7 +118,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
-    // Per-app language (in-app Hindi/English switch) with persistence on Android 10Ã¢â‚¬â€œ12.
+    // Per-app language (in-app Hindi/English switch) with persistence on Android 10ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“12.
     implementation(libs.androidx.appcompat)
 
     implementation(platform(libs.androidx.compose.bom))
