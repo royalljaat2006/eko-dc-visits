@@ -26,7 +26,7 @@ fun apiBaseUrl(default: String?): String =
 
 // Release signing. Each value resolves from an environment variable first (how
 // CI injects secrets), then the matching key in local.properties. If no
-// keystore file is resolvable the release build simply stays unsigned ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â dev
+// keystore file is resolvable the release build simply stays unsigned ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â dev
 // machines that only ever build debug don't need one, and `assembleRelease`
 // still succeeds (it just emits an -unsigned APK).
 fun secret(env: String, prop: String): String? =
@@ -41,10 +41,10 @@ android {
 
     defaultConfig {
         applicationId = "com.eko.dcvisits"
-        minSdk = 29          // BUILD_PLAN ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§1 decision 5: BYOD, Android 10+
+        minSdk = 29          // BUILD_PLAN ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§1 decision 5: BYOD, Android 10+
         targetSdk = 35
-        versionCode = 15
-        versionName = "0.15.4"
+        versionCode = 16
+        versionName = "0.16.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -101,8 +101,8 @@ android {
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        // Compress native libs + dex ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â this AGP/Gradle combo was inserting
-        // huge (>10ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ50 MB) page-alignment zero-gaps before the uncompressed
+        // Compress native libs + dex ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â this AGP/Gradle combo was inserting
+        // huge (>10ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“50 MB) page-alignment zero-gaps before the uncompressed
         // lib/ and classes.dex entries, bloating the APK. Legacy packaging
         // compresses them and drops the alignment requirement.
         jniLibs.useLegacyPackaging = true
@@ -118,7 +118,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
-    // Per-app language (in-app Hindi/English switch) with persistence on Android 10ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ12.
+    // Per-app language (in-app Hindi/English switch) with persistence on Android 10ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“12.
     implementation(libs.androidx.appcompat)
 
     implementation(platform(libs.androidx.compose.bom))

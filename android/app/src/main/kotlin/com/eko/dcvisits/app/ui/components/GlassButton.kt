@@ -20,7 +20,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -46,7 +48,7 @@ fun GlowButton(
             .alpha(if (enabled) 1f else 0.4f)
             .defaultMinSize(minHeight = MinTouchTarget)
             .clip(CircleShape)
-            .background(fill)
+            .background(Brush.horizontalGradient(listOf(fill, lerp(fill, Color.White, 0.18f))))
             .selectable(selected = false, enabled = enabled, interactionSource = interaction, indication = null, onClick = onClick)
             .padding(vertical = 15.dp, horizontal = 24.dp),
         contentAlignment = Alignment.Center,

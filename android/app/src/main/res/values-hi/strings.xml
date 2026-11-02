@@ -312,7 +312,7 @@
     <string name="team_outside">बाहर</string>
     <string name="team_visit_line">CSP %1$s · चेक इन %2$s</string>
     <string name="team_visit_again">(फिर %1$s)</string>
-    <string name="team_dc_visit_count">%1$d विज़िट</string>
+    <string name="team_dc_visit_count">विज़िट: %1$d</string>
     <string name="team_checked_out">चेक आउट %1$s</string>
     <string name="team_still_open">अभी खुली है</string>
     <string name="team_photos">%1$d फ़ोटो</string>
@@ -343,4 +343,16 @@
     <string name="ago_seconds">%1$d सेकंड पहले</string>
     <string name="ago_minutes">%1$d मिनट पहले</string>
     <string name="ago_hours">%1$d घंटे पहले</string>
+    <string name="tab_info">जानकारी</string>
+    <string name="info_version">वर्ज़न %1$s</string>
+    <string name="info_what_title">यह ऐप क्या है?</string>
+    <string name="info_what_body">Eko CSP विज़िट ऐप Eko के डिस्ट्रिक्ट कोऑर्डिनेटर (DC) को SBI कियोस्क CSP पर विज़िट करने में मदद करता है, और हर विज़िट का साफ़ रिकॉर्ड रखता है: कौन गया, किस CSP पर, कितने बजे, और क्या वह सच में वहाँ था।</string>
+    <string name="info_dc_title">आपका दिन, एक-एक कदम</string>
+    <string name="info_dc_body">1. सुबह Start Day दबाएँ।\n2. अपने CSP पर जाएँ। मेरे CSP में लिस्ट है; नेविगेट सबसे नज़दीकी CSP दिखाता है।\n3. CSP पर लगभग 2 मिनट रुकें, ऐप खुद चेक इन कर देगा, या Check in दबाएँ।\n4. फ़ोटो लें और चेक आउट करें।\n5. शाम को End Day दबाएँ। आपका KM अपने आप गिना जाता है।</string>
+    <string name="info_admin_title">आप क्या देख सकते हैं</string>
+    <string name="info_admin_body">टीम: किसने दिन शुरू किया, शुरू होने का समय, KM और विज़िट।\nलाइव मैप: सारे DC एक ही मैप पर।\nविज़िट: किस DC ने किस CSP पर विज़िट की, और क्या वह CSP के दायरे में था।\nमंज़ूरी: CSP लोकेशन बदलने की रिक्वेस्ट।</string>
+    <string name="info_colours_title">रंगों का मतलब</string>
+    <string name="info_colours_body">लाइव (हरा): पिछले 5 मिनट में लोकेशन आई है।\nपुरानी लोकेशन (पीला): 5 मिनट से ज़्यादा से नई लोकेशन नहीं आई। DC को कॉल करें।\nINSIDE: चेक इन के समय DC CSP पर था।\nOUTSIDE: DC CSP की सेव लोकेशन से दूर था। एक बार जाँच लें।</string>
+    <string name="info_privacy_title">प्राइवेसी</string>
+    <string name="info_privacy_body">लोकेशन सिर्फ़ ड्यूटी के समय रिकॉर्ड होती है, Start Day से End Day तक, और रात 9 बजे हमेशा बंद हो जाती है।</string>
 </resources>

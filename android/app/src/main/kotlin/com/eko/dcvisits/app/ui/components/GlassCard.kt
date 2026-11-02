@@ -40,7 +40,7 @@ fun Modifier.glassSurface(
     borderAlpha: Float = 0.28f,
     solid: Boolean = false,
 ): Modifier = this
-    .shadow(elevation = 2.dp, shape = shape, ambientColor = Color.Black.copy(alpha = 0.10f), spotColor = Color.Black.copy(alpha = 0.10f))
+    .shadow(elevation = 6.dp, shape = shape, ambientColor = Color(0xFF17346E).copy(alpha = 0.08f), spotColor = Color(0xFF17346E).copy(alpha = 0.10f))
     .clip(shape)
     .background(
         when {
@@ -49,7 +49,7 @@ fun Modifier.glassSurface(
             else -> tint.copy(alpha = (fillAlphaTop + fillAlphaBottom).coerceAtMost(1f))
         },
     )
-    .border(1.dp, Color.Black.copy(alpha = 0.06f), shape)
+    .border(1.dp, Color.Black.copy(alpha = 0.04f), shape)
 
 /** A flat card with inner padding — the default building block for every screen. */
 @Composable

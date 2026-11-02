@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import com.eko.dcvisits.app.ui.theme.EkoYellow
 
 /**
  * The page background every screen sits on: a flat, neutral fill — no motion,
@@ -18,5 +20,11 @@ import androidx.compose.ui.Modifier
  */
 @Composable
 fun AnimatedGlassBackground(modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+    // A still, faint Eko-yellow wash at the top — brand warmth with no motion or blur.
+    val page = MaterialTheme.colorScheme.background
+    Box(
+        modifier.fillMaxSize().background(
+            Brush.verticalGradient(0f to EkoYellow.copy(alpha = 0.16f), 0.35f to page, 1f to page),
+        ),
+    )
 }

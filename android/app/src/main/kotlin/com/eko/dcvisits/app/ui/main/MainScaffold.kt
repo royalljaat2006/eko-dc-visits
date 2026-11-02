@@ -38,6 +38,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Person
@@ -85,6 +86,8 @@ import com.eko.dcvisits.app.ui.team.LiveMapScreen
 import com.eko.dcvisits.app.ui.team.TeamScreen
 import com.eko.dcvisits.app.ui.team.TeamVisitsScreen
 import com.eko.dcvisits.app.ui.theme.EkoBlue
+import com.eko.dcvisits.app.ui.theme.EkoYellow
+import com.eko.dcvisits.app.ui.info.InfoScreen
 import com.eko.dcvisits.app.ui.visits.VisitsScreen
 import kotlinx.coroutines.launch
 import androidx.annotation.StringRes
@@ -105,6 +108,8 @@ private enum class Tab(@StringRes val label: Int, val icon: ImageVector, val dcG
     TEAM(R.string.tab_team, Icons.Filled.Groups, dcGated = false),
     LIVE_MAP(R.string.tab_live_map, Icons.Filled.Map, dcGated = false),
     TEAM_VISITS(R.string.tab_visits, Icons.AutoMirrored.Filled.List, dcGated = false),
+    // "i": what the app does, in plain words — open to everyone, even before Start Day.
+    INFO(R.string.tab_info, Icons.Filled.Info, dcGated = false),
 }
 
 @Composable
@@ -124,11 +129,11 @@ fun MainScaffold(
 
     val role = session?.user?.role ?: "DC"
     val tabs = when (role) {
-        "DC" -> listOf(Tab.HOME, Tab.MY_CSPS, Tab.NAVIGATE, Tab.VISITS, Tab.LOGI, Tab.PROFILE)
-        "CIRCLE_HEAD" -> listOf(Tab.HOME, Tab.APPROVALS, Tab.PROFILE)
-        "CORPORATE_ADMIN" -> listOf(Tab.TEAM, Tab.LIVE_MAP, Tab.TEAM_VISITS, Tab.APPROVALS, Tab.PROFILE)
-        "NATIONAL_HEAD" -> listOf(Tab.TEAM, Tab.LIVE_MAP, Tab.TEAM_VISITS, Tab.PROFILE)
-        else -> listOf(Tab.HOME, Tab.PROFILE)
+        "DC" -> listOf(Tab.HOME, Tab.MY_CSPS, Tab.NAVIGATE, Tab.VISITS, Tab.LOGI, Tab.PROFILE, Tab.INFO)
+        "CIRCLE_HEAD" -> listOf(Tab.HOME, Tab.APPROVALS, Tab.PROFILE, Tab.INFO)
+        "CORPORATE_ADMIN" -> listOf(Tab.TEAM, Tab.LIVE_MAP, Tab.TEAM_VISITS, Tab.APPROVALS, Tab.PROFILE, Tab.INFO)
+        "NATIONAL_HEAD" -> listOf(Tab.TEAM, Tab.LIVE_MAP, Tab.TEAM_VISITS, Tab.PROFILE, Tab.INFO)
+        else -> listOf(Tab.HOME, Tab.PROFILE, Tab.INFO)
     }
     var selected by rememberSaveable { mutableStateOf(Tab.HOME) }
     // The role arrives after the first frame (session loads async): land on that role's first tab.
@@ -149,7 +154,7 @@ fun MainScaffold(
                 label = "tab-content",
             ) { tab ->
                 when {
-                    tab != Tab.HOME && role == "DC" && gated -> GateNotice()
+                    tab != Tab.HOME && tab != Tab.INFO && role == "DC" && gated -> GateNotice()
                     tab == Tab.HOME -> AttendanceScreen(attendanceVm, onNavigate = { dest -> runCatching { Tab.valueOf(dest) }.getOrNull()?.let { selected = it } })
                     tab == Tab.VISITS -> VisitsScreen()
                     tab == Tab.MY_CSPS -> CspDetailsScreen()
@@ -160,6 +165,7 @@ fun MainScaffold(
                     tab == Tab.LIVE_MAP -> LiveMapScreen()
                     tab == Tab.TEAM_VISITS -> TeamVisitsScreen()
                     tab == Tab.PROFILE -> ProfileScreen(role = role, onSignOut = onSignOut)
+                    tab == Tab.INFO -> InfoScreen(role = role)
                     else -> AttendanceScreen(attendanceVm)
                 }
             }
@@ -238,7 +244,7 @@ private fun BottomGlassNav(tabs: List<Tab>, selected: Tab, gated: Boolean, onSel
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
             tabs.forEach { tab ->
-                NavItem(tab, selected == tab, enabled = !(tab.dcGated && gated), onClick = { onSelect(tab) })
+                NavItem(tab, selected == tab, enabled = !(tab.dcGated && gated), onClick = { onSelect(tab) }, compact = tabs.size > 6)
             }
         }
     }
@@ -267,7 +273,7 @@ private fun SideGlassRail(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             tabs.forEach { tab ->
-                NavItem(tab, selected == tab, enabled = !(tab.dcGated && gated), onClick = { onSelect(tab) })
+                NavItem(tab, selected == tab, enabled = !(tab.dcGated && gated), onClick = { onSelect(tab) }, compact = tabs.size > 6)
             }
             Box(Modifier.weight(1f).size(1.dp))
             Box(
@@ -285,7 +291,7 @@ private fun SideGlassRail(
 }
 
 @Composable
-private fun NavItem(tab: Tab, isSelected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun NavItem(tab: Tab, isSelected: Boolean, enabled: Boolean, onClick: () -> Unit, compact: Boolean = false) {
     val highlight by animateFloatAsState(if (isSelected) 1f else 0f, label = "navHighlight")
     val tint = if (isSelected) EkoBlue else MaterialTheme.colorScheme.onSurfaceVariant
 
@@ -293,10 +299,10 @@ private fun NavItem(tab: Tab, isSelected: Boolean, enabled: Boolean, onClick: ()
         Modifier
             .pressScale()
             .clip(RoundedCornerShape(18.dp))
-            .background(EkoBlue.copy(alpha = 0.12f * highlight))
+            .background(EkoYellow.copy(alpha = 0.30f * highlight))
             .clickable(enabled = enabled, onClick = onClick)
             .alpha(if (enabled) 1f else 0.35f)
-            .padding(horizontal = 12.dp, vertical = 9.dp),
+            .padding(horizontal = if (compact) 8.dp else 12.dp, vertical = 9.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         val label = stringResource(tab.label)
