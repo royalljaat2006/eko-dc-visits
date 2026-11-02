@@ -1,6 +1,7 @@
 package com.eko.dcvisits.app.ui.team
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -83,43 +84,54 @@ fun TeamVisitsScreen(vm: TeamVisitsViewModel = viewModel()) {
             } else if (!ui.loading && ui.visits.isEmpty()) {
                 item { Text(stringResource(R.string.team_no_visits), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
-            itemsIndexed(groups, key = { _, g -> g.first.id }) { i, g ->
-                Entrance(index = i) { VisitCard(g) }
+            // One card per DC, their CSPs inside (newest DC activity first).
+            val byDc = groups.groupBy { it.first.dc_user_id }.values.toList()
+            itemsIndexed(byDc, key = { _, dc -> dc.first().first.dc_user_id }) { i, dc ->
+                Entrance(index = i) { DcVisitsCard(dc) }
             }
         }
     }
 }
 
 @Composable
-private fun VisitCard(g: TeamVisitGroup) {
+private fun DcVisitsCard(visits: List<TeamVisitGroup>) {
+    GlassCard(Modifier.fillMaxWidth(), cornerRadius = 20.dp, contentPadding = 16.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(visits.first().first.dc_name ?: "—", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                GlassTag(stringResource(R.string.team_dc_visit_count, visits.size), tint = EkoBlue)
+            }
+            visits.forEach { CspVisit(it) }
+        }
+    }
+}
+
+@Composable
+private fun CspVisit(g: TeamVisitGroup) {
     val v = g.first
     val context = LocalContext.current
     val csp = v.location_code ?: v.location_name ?: "—"
-    GlassCard(
-        Modifier.fillMaxWidth(),
-        cornerRadius = 20.dp,
-        contentPadding = 16.dp,
-        onClick = { openMap(context, v.checkin.fix.lat, v.checkin.fix.lng, "${v.dc_name ?: ""} · $csp") },
+    Column(
+        Modifier.fillMaxWidth().clickable { openMap(context, v.checkin.fix.lat, v.checkin.fix.lng, "${v.dc_name ?: ""} · $csp") },
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(v.dc_name ?: "—", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
-                if (g.inside) GlassTag(stringResource(R.string.team_inside), tint = EkoGreen)
-                else GlassTag(stringResource(R.string.team_outside), tint = EkoAmber)
-            }
+        Row(verticalAlignment = Alignment.CenterVertically) {
             val again = g.repeats.joinToString(", ") { Ist.time(it.checkin.occurred_at) }
             Text(
                 stringResource(R.string.team_visit_line, csp, Ist.time(v.checkin.occurred_at)) +
                     (if (again.isEmpty()) "" else " " + stringResource(R.string.team_visit_again, again)),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
             )
-            val out = g.checkedOutAt?.let { stringResource(R.string.team_checked_out, Ist.time(it)) } ?: stringResource(R.string.team_still_open)
-            Text(
-                listOf(stringResource(R.string.team_photos, g.photoCount), out).joinToString(" · "),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (g.inside) GlassTag(stringResource(R.string.team_inside), tint = EkoGreen)
+            else GlassTag(stringResource(R.string.team_outside), tint = EkoAmber)
         }
+        val out = g.checkedOutAt?.let { stringResource(R.string.team_checked_out, Ist.time(it)) } ?: stringResource(R.string.team_still_open)
+        Text(
+            listOf(stringResource(R.string.team_photos, g.photoCount), out).joinToString(" · "),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
