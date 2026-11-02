@@ -1,6 +1,15 @@
 package com.eko.dcvisits.app.ui.team
 
 import android.annotation.SuppressLint
+import com.eko.dcvisits.app.ui.components.glassSurface
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import android.content.Context
 import android.view.ViewGroup
 import android.webkit.WebView
@@ -14,8 +23,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -43,8 +50,6 @@ import com.eko.dcvisits.app.R
 import com.eko.dcvisits.app.data.repo.TeamRow
 import com.eko.dcvisits.app.tracking.DutyNotificationText
 import com.eko.dcvisits.app.tracking.StringLookup
-import com.eko.dcvisits.app.ui.components.GlassCard
-import com.eko.dcvisits.app.ui.components.GlassTag
 import com.eko.dcvisits.app.ui.components.ScreenContainer
 import com.eko.dcvisits.app.ui.theme.EkoAmber
 import com.eko.dcvisits.app.ui.theme.EkoBlue
@@ -86,27 +91,35 @@ fun LiveMapScreen(vm: TeamViewModel = viewModel()) {
         if (mapReady) webView.evaluateJavascript("setDcs(${markersJson(rows, str)}, ${JsonPrimitive(selectedId)})", null)
     }
 
-    ScreenContainer { pad ->
-        Column(Modifier.fillMaxSize().padding(pad), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    // No nav-bar clearance: the bottom nav sits below this body, not over it, so the
+    // default 96dp gap was dead space that pushed DCs off-screen.
+    ScreenContainer(navBarClearance = 0.dp) { pad ->
+        Column(Modifier.fillMaxSize().padding(pad), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(stringResource(R.string.live_map_title), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
+                    Text(stringResource(R.string.live_map_title), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
                     ui.updatedAt?.let {
                         Text(stringResource(R.string.team_updated, Ist.time(it)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                if (ui.loading) CircularProgressIndicator(Modifier.padding(end = 8.dp), color = EkoBlue, strokeWidth = 2.dp)
+                if (ui.loading) CircularProgressIndicator(Modifier.padding(end = 8.dp).size(18.dp), color = EkoBlue, strokeWidth = 2.dp)
                 TextButton(onClick = vm::refresh) { Text(stringResource(R.string.action_refresh), color = EkoBlue) }
             }
             if (ui.failed) {
                 Text(stringResource(R.string.team_load_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
-            Box(Modifier.fillMaxWidth().height(340.dp).clip(RoundedCornerShape(20.dp))) {
+            Box(Modifier.fillMaxWidth().height(230.dp).clip(RoundedCornerShape(20.dp))) {
                 AndroidView(factory = { webView }, modifier = Modifier.fillMaxSize())
             }
-            LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Every DC at a glance: two compact columns fit a whole team on one phone screen.
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 items(rows, key = { it.dcUserId }) { r ->
-                    LiveRow(r, selected = r.dcUserId == selectedId, str = str) {
+                    LiveCell(r, selected = r.dcUserId == selectedId, str = str) {
                         selectedId = r.dcUserId
                         if (mapReady) webView.evaluateJavascript("focusDc(${JsonPrimitive(r.dcUserId)})", null)
                     }
@@ -117,28 +130,36 @@ fun LiveMapScreen(vm: TeamViewModel = viewModel()) {
 }
 
 @Composable
-private fun LiveRow(r: TeamRow, selected: Boolean, str: StringLookup, onClick: () -> Unit) {
+private fun LiveCell(r: TeamRow, selected: Boolean, str: StringLookup, onClick: () -> Unit) {
     val (label, tint) = liveChip(r.liveState)
-    GlassCard(
-        Modifier.fillMaxWidth().clickable(enabled = r.lat != null && r.lng != null, onClick = onClick),
-        cornerRadius = 16.dp,
-        contentPadding = 12.dp,
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .glassSurface(shape = shape)
+            .then(if (selected) Modifier.border(1.5.dp, EkoBlue, shape) else Modifier)
+            .clickable(enabled = r.lat != null && r.lng != null, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    r.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = if (selected) EkoBlue else MaterialTheme.colorScheme.onSurface,
-                )
-                val detail = listOfNotNull(
-                    lastSeen(r, str),
-                    r.accuracyM?.let { "±${Math.round(it)} m" },
-                ).joinToString(" · ")
-                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            GlassTag(stringResource(label), tint = tint)
+            Box(Modifier.size(9.dp).background(tint, CircleShape))
+            Text(
+                r.name,
+                style = MaterialTheme.typography.titleSmall,
+                color = if (selected) EkoBlue else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 6.dp),
+            )
         }
+        val ago = r.lastSeenAt?.let { runCatching { DutyNotificationText.ago(Duration.between(Instant.parse(it), Instant.now()), str) }.getOrNull() }
+        Text(
+            listOfNotNull(stringResource(label), ago).joinToString(" · "),
+            style = MaterialTheme.typography.labelSmall,
+            color = tint,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
