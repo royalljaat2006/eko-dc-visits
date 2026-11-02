@@ -298,6 +298,12 @@
     <string name="team_last_seen">आखिरी लोकेशन %1$s</string>
     <string name="team_no_location">अभी कोई लोकेशन नहीं</string>
     <string name="team_open_map">मैप</string>
+    <string name="tab_live_map">लाइव मैप</string>
+    <string name="live_map_title">लाइव मैप</string>
+    <string name="live_state_live">लाइव</string>
+    <string name="live_state_stale">पुरानी लोकेशन</string>
+    <string name="live_state_off_duty">ड्यूटी बंद</string>
+    <string name="live_state_no_fix">लोकेशन नहीं</string>
     <string name="team_today">आज, %1$s</string>
     <string name="team_visits_summary">%1$d विज़िट · %2$d अंदर · %3$d बाहर</string>
     <string name="team_no_visits">इस दिन कोई विज़िट नहीं।</string>
