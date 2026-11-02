@@ -1,4 +1,4 @@
-﻿import java.util.Properties
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -43,8 +43,8 @@ android {
         applicationId = "com.eko.dcvisits"
         minSdk = 29          // BUILD_PLAN Â§1 decision 5: BYOD, Android 10+
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.15.0"
+        versionCode = 12
+        versionName = "0.15.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

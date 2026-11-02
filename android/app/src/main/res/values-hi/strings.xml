@@ -310,6 +310,7 @@
     <string name="team_inside">अंदर</string>
     <string name="team_outside">बाहर</string>
     <string name="team_visit_line">CSP %1$s · चेक इन %2$s</string>
+    <string name="team_visit_again">(फिर %1$s)</string>
     <string name="team_checked_out">चेक आउट %1$s</string>
     <string name="team_still_open">अभी खुली है</string>
     <string name="team_photos">%1$d फ़ोटो</string>

@@ -2,6 +2,7 @@ package com.eko.dcvisits.app.ui.team
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.view.ViewGroup
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.clickable
@@ -180,7 +181,10 @@ private fun liveMapWebView(context: Context, onReady: () -> Unit): WebView {
         .replace("/*LEAFLET_CSS*/", asset("leaflet.css"))
         .replace("/*LEAFLET_JS*/", asset("leaflet.js"))
     return WebView(context).apply {
+        // Fill the Compose box from the start: a WebView that loads at 0x0 leaves Leaflet blank.
+        layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
         webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) = onReady()
         }

@@ -10,6 +10,15 @@
 </head>
 <body>
 <div id="map"></div>
+<div id="err" style="display:none;position:absolute;top:0;left:0;right:0;padding:8px;font:12px sans-serif;color:#b00020;background:#fff8;z-index:2000"></div>
+<script>
+  // A blank map gives the admin nothing to report; show the script error instead.
+  window.onerror = function (msg, src, line) {
+    var e = document.getElementById('err');
+    e.style.display = 'block';
+    e.textContent += 'Map error: ' + msg + ' (line ' + line + ')\n';
+  };
+</script>
 <script>/*LEAFLET_JS*/</script>
 <script>
   // Admin Live Map (same look as the web dashboard's Live Tracking): one circle per DC,
@@ -30,7 +39,12 @@
     });
   }
 
+  // The WebView can load before Compose gives it a size; Leaflet then sees a 0x0
+  // map and draws nothing until told the size changed.
+  window.addEventListener('resize', function () { map.invalidateSize(); });
+
   window.setDcs = function (rows, selectedId) {
+    map.invalidateSize();
     layer.clearLayers();
     byId = {};
     var points = [];
@@ -46,7 +60,7 @@
       byId[r.id] = m;
       points.push([r.lat, r.lng]);
     });
-    if (points.length > 0 && !fitted) {
+    if (points.length > 0 && !fitted && map.getSize().y > 0) {
       map.fitBounds(L.latLngBounds(points).pad(0.2), { maxZoom: 15 });
       fitted = true;
     }

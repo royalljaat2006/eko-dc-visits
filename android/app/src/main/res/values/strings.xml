@@ -310,6 +310,7 @@
     <string name="team_inside">INSIDE</string>
     <string name="team_outside">OUTSIDE</string>
     <string name="team_visit_line">CSP %1$s · checked in %2$s</string>
+    <string name="team_visit_again">(again %1$s)</string>
     <string name="team_checked_out">checked out %1$s</string>
     <string name="team_still_open">still open</string>
     <string name="team_photos">%1$d photos</string>
