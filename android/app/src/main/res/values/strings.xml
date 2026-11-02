@@ -67,7 +67,8 @@
     <string name="login_send_otp">Send OTP</string>
     <string name="login_phone_hint">Use your registered Eko mobile number. An OTP is sent by SMS.</string>
     <string name="login_otp_sent_to">OTP sent to +91 %1$s</string>
-    <string name="login_otp_label">6-digit OTP</string>
+    <string name="login_otp_label">4-digit OTP</string>
+    <string name="login_since">Since 2007</string>
     <string name="login_new_number_name">New number — you\'re registering as a DC. What\'s your name?</string>
     <string name="login_full_name">Full name</string>
     <string name="login_verify">Verify &amp; sign in</string>
@@ -310,6 +311,8 @@
     <string name="team_inside">INSIDE</string>
     <string name="team_outside">OUTSIDE</string>
     <string name="team_visit_line">CSP %1$s · checked in %2$s</string>
+    <string name="team_visit_again">(again %1$s)</string>
+    <string name="team_dc_visit_count">Visits: %1$d</string>
     <string name="team_checked_out">checked out %1$s</string>
     <string name="team_still_open">still open</string>
     <string name="team_photos">%1$d photos</string>
@@ -340,4 +343,16 @@
     <string name="ago_seconds">%1$ds ago</string>
     <string name="ago_minutes">%1$dm ago</string>
     <string name="ago_hours">%1$dh ago</string>
+    <string name="tab_info">Info</string>
+    <string name="info_version">Version %1$s</string>
+    <string name="info_what_title">What is this app?</string>
+    <string name="info_what_body">Eko CSP Visits helps Eko\'s District Coordinators (DCs) visit SBI kiosk CSPs, and keeps a clear record of every visit: who went, to which CSP, at what time, and whether they were really there.</string>
+    <string name="info_dc_title">Your day, step by step</string>
+    <string name="info_dc_body">1. Tap Start Day in the morning.\n2. Go to your CSPs. My CSPs lists them; Navigate shows the nearest one.\n3. Stay at the CSP for about 2 minutes and the app checks you in by itself, or tap Check in.\n4. Take the photos and check out.\n5. Tap End Day in the evening. Your KM is counted automatically.</string>
+    <string name="info_admin_title">What you can see</string>
+    <string name="info_admin_body">Team: who started their day, start time, KM and visits.\nLive Map: every DC on one map.\nVisits: which DC visited which CSP, and whether they were inside the CSP area.\nApprovals: CSP location changes waiting for you.</string>
+    <string name="info_colours_title">What the colours mean</string>
+    <string name="info_colours_body">LIVE (green): location received in the last 5 minutes.\nSTALE (yellow): no new location for over 5 minutes. Call the DC.\nINSIDE: the DC was at the CSP when checking in.\nOUTSIDE: the DC was away from the CSP\'s saved location. Worth a check.</string>
+    <string name="info_privacy_title">Privacy</string>
+    <string name="info_privacy_body">Location is recorded only while a DC is on duty, from Start Day to End Day, and it always stops at 9 PM.</string>
 </resources>

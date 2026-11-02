@@ -1,6 +1,14 @@
 package com.eko.dcvisits.app.ui.team
 
 import android.content.Context
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.Icons
+import androidx.compose.animation.AnimatedVisibility
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -115,7 +123,9 @@ private fun Kpi(label: String, value: String, tint: Color, modifier: Modifier = 
 private fun DcCard(r: TeamRow) {
     val context = LocalContext.current
     val str = StringLookup.of(context)
-    GlassCard(Modifier.fillMaxWidth(), cornerRadius = 20.dp, contentPadding = 16.dp) {
+    // Collapsed: who and whether they're live. Tap to open start time, KM and counts.
+    var expanded by rememberSaveable(r.dcUserId) { mutableStateOf(false) }
+    GlassCard(Modifier.fillMaxWidth(), cornerRadius = 20.dp, contentPadding = 16.dp, onClick = { expanded = !expanded }) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(r.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
@@ -126,25 +136,13 @@ private fun DcCard(r: TeamRow) {
                     else -> stringResource(R.string.status_not_started) to EkoAmber
                 }
                 GlassTag(label, tint = tint)
+                Icon(
+                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
             }
-            if (r.startedAt != null) {
-                val times = buildList {
-                    add(stringResource(R.string.team_started, Ist.time(r.startedAt)))
-                    r.endedAt?.let { add(stringResource(R.string.team_ended, Ist.time(it))) }
-                    r.hoursWorked?.let { add(stringResource(R.string.team_hours, String.format(Locale.ROOT, "%.1f", it))) }
-                }.joinToString(" · ")
-                Text(times, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-            }
-            Text(
-                stringResource(
-                    R.string.team_counts,
-                    r.visitsToday ?: 0,
-                    String.format(Locale.ROOT, "%.1f", r.kmToday ?: 0.0),
-                    r.cspCount ?: 0,
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val ago = r.lastSeenAt?.let { runCatching { DutyNotificationText.ago(Duration.between(Instant.parse(it), Instant.now()), str) }.getOrNull() }
                 val (liveText, liveTint) = when {
@@ -157,6 +155,28 @@ private fun DcCard(r: TeamRow) {
                     TextButton(onClick = { openMap(context, r.lat, r.lng, r.name) }) {
                         Text(stringResource(R.string.team_open_map), color = EkoBlue)
                     }
+                }
+            }
+            AnimatedVisibility(expanded) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (r.startedAt != null) {
+                        val times = buildList {
+                            add(stringResource(R.string.team_started, Ist.time(r.startedAt)))
+                            r.endedAt?.let { add(stringResource(R.string.team_ended, Ist.time(it))) }
+                            r.hoursWorked?.let { add(stringResource(R.string.team_hours, String.format(Locale.ROOT, "%.1f", it))) }
+                        }.joinToString(" · ")
+                        Text(times, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                    Text(
+                        stringResource(
+                            R.string.team_counts,
+                            r.visitsToday ?: 0,
+                            String.format(Locale.ROOT, "%.1f", r.kmToday ?: 0.0),
+                            r.cspCount ?: 0,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }

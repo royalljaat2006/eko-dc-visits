@@ -18,13 +18,12 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,7 +31,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -41,7 +39,6 @@ import com.eko.dcvisits.app.ui.components.Entrance
 import com.eko.dcvisits.app.ui.components.GlassCard
 import com.eko.dcvisits.app.ui.components.GlassTextField
 import com.eko.dcvisits.app.ui.components.GlowButton
-import com.eko.dcvisits.app.ui.components.glassSurface
 import com.eko.dcvisits.app.ui.theme.EkoBlue
 import androidx.compose.ui.res.stringResource
 import com.eko.dcvisits.app.R
@@ -66,11 +63,17 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Entrance(index = 0) {
-                Box(
-                    Modifier.size(72.dp).glassSurface(shape = CircleShape, tint = EkoBlue, solid = true),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Filled.Bolt, contentDescription = null, tint = Color.White, modifier = Modifier.size(34.dp))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Image(
+                        painterResource(R.drawable.eko_logo),
+                        contentDescription = "Eko",
+                        modifier = Modifier.width(150.dp),
+                    )
+                    Text(
+                        stringResource(R.string.login_since),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             Entrance(index = 1) {

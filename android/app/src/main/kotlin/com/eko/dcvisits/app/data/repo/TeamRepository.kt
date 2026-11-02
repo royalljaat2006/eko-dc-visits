@@ -78,6 +78,30 @@ fun buildTeamRows(
     }.sortedWith(compareBy<TeamRow> { attendanceRank(it.attendance) }.thenBy { it.name.lowercase() })
 }
 
+/** One DC at one CSP on one day: the first check-in plus any repeats (same rule as the dashboard). */
+data class TeamVisitGroup(
+    val first: VisitDto,
+    val repeats: List<VisitDto>,
+) {
+    private val all get() = listOf(first) + repeats
+    /** Geo-verified if any check-in at that CSP was INSIDE — the server's scorecard rule. */
+    val inside: Boolean get() = all.any { it.geofence_result == "INSIDE" }
+    val photoCount: Int get() = all.sumOf { it.photo_count }
+    /** The latest check-in decides whether the visit is still open. */
+    val checkedOutAt: String? get() = all.last().checked_out_at
+}
+
+/**
+ * Repeat auto check-ins at the same CSP (old app re-firing while the DC sat
+ * there) fold into one visit, newest visit first.
+ */
+fun groupTeamVisits(visits: List<VisitDto>): List<TeamVisitGroup> =
+    visits.sortedBy { it.checkin.occurred_at }
+        .groupBy { "${it.dc_user_id}|${it.location_id}" }
+        .values
+        .map { TeamVisitGroup(it.first(), it.drop(1)) }
+        .sortedByDescending { it.first.checkin.occurred_at }
+
 private fun attendanceRank(status: String) = when (status) {
     "ON_DUTY" -> 0
     "ENDED", "AUTO_CLOSED" -> 1

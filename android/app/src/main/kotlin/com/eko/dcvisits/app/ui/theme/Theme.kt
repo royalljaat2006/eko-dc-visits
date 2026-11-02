@@ -12,7 +12,10 @@ import androidx.compose.ui.unit.sp
 // Accent colours double as both text/icon tint on light surfaces AND button
 // fills with white text on top — every value below is dark/saturated enough
 // to clear WCAG AA (4.5:1) against white in both directions.
-val EkoBlue = Color(0xFF1D4ED8) // primary accent + CTA fill
+// Eko brand: deep navy carries text, buttons and links (AA on white); the logo's
+// yellow is the highlight — selected tab, page wash — never small text on white.
+val EkoBlue = Color(0xFF17346E) // primary accent + CTA fill (Eko navy)
+val EkoYellow = Color(0xFFFCB01C) // Eko logo yellow
 val EkoViolet = Color(0xFF6D28D9) // secondary accent
 val EkoCyan = Color(0xFF0E7490)
 val EkoPink = Color(0xFFBE185D)
@@ -20,9 +23,9 @@ val EkoAmber = Color(0xFFB45309) // warning
 val EkoGreen = Color(0xFF15803D) // success / live
 val EkoRed = Color(0xFFB91C1C) // danger / error
 
-private val PageBackground = Color(0xFFF7F8FC)
+private val PageBackground = Color(0xFFFBF8F2)
 private val OnPageText = Color(0xFF14161B)
-private val SurfaceVariantLight = Color(0xFFEDEFF6)
+private val SurfaceVariantLight = Color(0xFFF3EEE3)
 private val OnSurfaceVariantLight = Color(0xFF53586B)
 
 private val AppColors = lightColorScheme(
