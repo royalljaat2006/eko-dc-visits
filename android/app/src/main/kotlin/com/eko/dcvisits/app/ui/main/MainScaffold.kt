@@ -1,6 +1,8 @@
 package com.eko.dcvisits.app.ui.main
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -193,7 +195,12 @@ private fun TopBar(name: String, role: String, onSignOut: () -> Unit, showAvatar
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f, fill = false)) {
+        Image(
+            painterResource(R.drawable.eko_logo),
+            contentDescription = "Eko",
+            modifier = Modifier.padding(end = 12.dp).width(56.dp),
+        )
+        Column(Modifier.weight(1f)) {
             Text(name, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground, maxLines = 1)
             Text(
                 roleLabel(role),

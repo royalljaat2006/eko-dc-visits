@@ -67,7 +67,8 @@
     <string name="login_send_otp">Send OTP</string>
     <string name="login_phone_hint">Use your registered Eko mobile number. An OTP is sent by SMS.</string>
     <string name="login_otp_sent_to">OTP sent to +91 %1$s</string>
-    <string name="login_otp_label">6-digit OTP</string>
+    <string name="login_otp_label">4-digit OTP</string>
+    <string name="login_since">Since 2007</string>
     <string name="login_new_number_name">New number — you\'re registering as a DC. What\'s your name?</string>
     <string name="login_full_name">Full name</string>
     <string name="login_verify">Verify &amp; sign in</string>

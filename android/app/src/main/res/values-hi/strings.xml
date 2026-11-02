@@ -67,7 +67,8 @@
     <string name="login_send_otp">OTP भेजें</string>
     <string name="login_phone_hint">Eko में रजिस्टर्ड मोबाइल नंबर डालें। OTP SMS से आएगा।</string>
     <string name="login_otp_sent_to">OTP +91 %1$s पर भेजा गया</string>
-    <string name="login_otp_label">6 अंकों का OTP</string>
+    <string name="login_otp_label">4 अंकों का OTP</string>
+    <string name="login_since">2007 से</string>
     <string name="login_new_number_name">नया नंबर — आप DC के रूप में रजिस्टर हो रहे हैं। आपका नाम क्या है?</string>
     <string name="login_full_name">पूरा नाम</string>
     <string name="login_verify">वेरिफ़ाई करें और लॉगिन करें</string>
