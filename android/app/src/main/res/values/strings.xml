@@ -298,6 +298,12 @@
     <string name="team_last_seen">Last seen %1$s</string>
     <string name="team_no_location">No location yet</string>
     <string name="team_open_map">Map</string>
+    <string name="tab_live_map">Live Map</string>
+    <string name="live_map_title">Live Map</string>
+    <string name="live_state_live">LIVE</string>
+    <string name="live_state_stale">STALE</string>
+    <string name="live_state_off_duty">OFF DUTY</string>
+    <string name="live_state_no_fix">NO FIX</string>
     <string name="team_today">Today, %1$s</string>
     <string name="team_visits_summary">%1$d visits · %2$d inside · %3$d outside</string>
     <string name="team_no_visits">No visits on this day.</string>

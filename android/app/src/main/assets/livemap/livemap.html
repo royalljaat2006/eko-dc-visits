@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<style>/*LEAFLET_CSS*/</style>
+<style>
+  html, body, #map { margin: 0; height: 100%; width: 100%; background: #f4efe6; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>/*LEAFLET_JS*/</script>
+<script>
+  // Admin Live Map (same look as the web dashboard's Live Tracking): one circle per DC,
+  // coloured by state. LiveMapScreen pushes rows in with setDcs(); nothing is fetched here.
+  var COLOR = { live: '#1d7a3a', stale: '#d9860a', off_duty: '#5d564a', no_fix: '#5d564a' };
+  var map = L.map('map', { zoomControl: true }).setView([22.97, 78.65], 5);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors',
+  }).addTo(map);
+  var layer = L.layerGroup().addTo(map);
+  var byId = {};
+  var fitted = false;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  window.setDcs = function (rows, selectedId) {
+    layer.clearLayers();
+    byId = {};
+    var points = [];
+    rows.forEach(function (r) {
+      var sel = r.id === selectedId;
+      var m = L.circleMarker([r.lat, r.lng], {
+        radius: sel ? 11 : 8,
+        color: COLOR[r.state] || COLOR.no_fix,
+        fillColor: COLOR[r.state] || COLOR.no_fix,
+        fillOpacity: r.state === 'live' ? 0.9 : 0.5,
+        weight: sel ? 3 : 2,
+      }).bindPopup('<strong>' + esc(r.name) + '</strong><br>' + esc(r.label)).addTo(layer);
+      byId[r.id] = m;
+      points.push([r.lat, r.lng]);
+    });
+    if (points.length > 0 && !fitted) {
+      map.fitBounds(L.latLngBounds(points).pad(0.2), { maxZoom: 15 });
+      fitted = true;
+    }
+  };
+
+  window.focusDc = function (id) {
+    var m = byId[id];
+    if (!m) return;
+    map.setView(m.getLatLng(), Math.max(map.getZoom(), 14));
+    m.openPopup();
+  };
+</script>
+</body>
+</html>
