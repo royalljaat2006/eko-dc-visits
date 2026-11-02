@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
@@ -82,6 +83,7 @@ import com.eko.dcvisits.app.ui.logi.LogiScreen
 import com.eko.dcvisits.app.ui.nearestcsp.NearestCspScreen
 import com.eko.dcvisits.app.ui.location.LocationGate
 import com.eko.dcvisits.app.ui.profile.ProfileScreen
+import com.eko.dcvisits.app.ui.team.CspsScreen
 import com.eko.dcvisits.app.ui.team.LiveMapScreen
 import com.eko.dcvisits.app.ui.team.TeamScreen
 import com.eko.dcvisits.app.ui.team.TeamVisitsScreen
@@ -107,6 +109,8 @@ private enum class Tab(@StringRes val label: Int, val icon: ImageVector, val dcG
     // Admin / national head: every DC at a glance (read-only).
     TEAM(R.string.tab_team, Icons.Filled.Groups, dcGated = false),
     LIVE_MAP(R.string.tab_live_map, Icons.Filled.Map, dcGated = false),
+    // Admin: every CSP with its DC, searchable.
+    CSPS(R.string.tab_csps, Icons.Filled.Store, dcGated = false),
     TEAM_VISITS(R.string.tab_visits, Icons.AutoMirrored.Filled.List, dcGated = false),
     // "i": what the app does, in plain words — open to everyone, even before Start Day.
     INFO(R.string.tab_info, Icons.Filled.Info, dcGated = false),
@@ -131,8 +135,8 @@ fun MainScaffold(
     val tabs = when (role) {
         "DC" -> listOf(Tab.HOME, Tab.MY_CSPS, Tab.NAVIGATE, Tab.VISITS, Tab.LOGI, Tab.PROFILE, Tab.INFO)
         "CIRCLE_HEAD" -> listOf(Tab.HOME, Tab.APPROVALS, Tab.PROFILE, Tab.INFO)
-        "CORPORATE_ADMIN" -> listOf(Tab.TEAM, Tab.LIVE_MAP, Tab.TEAM_VISITS, Tab.APPROVALS, Tab.PROFILE, Tab.INFO)
-        "NATIONAL_HEAD" -> listOf(Tab.TEAM, Tab.LIVE_MAP, Tab.TEAM_VISITS, Tab.PROFILE, Tab.INFO)
+        "CORPORATE_ADMIN" -> listOf(Tab.TEAM, Tab.LIVE_MAP, Tab.TEAM_VISITS, Tab.CSPS, Tab.APPROVALS, Tab.PROFILE, Tab.INFO)
+        "NATIONAL_HEAD" -> listOf(Tab.TEAM, Tab.LIVE_MAP, Tab.TEAM_VISITS, Tab.CSPS, Tab.PROFILE, Tab.INFO)
         else -> listOf(Tab.HOME, Tab.PROFILE, Tab.INFO)
     }
     var selected by rememberSaveable { mutableStateOf(Tab.HOME) }
@@ -163,6 +167,7 @@ fun MainScaffold(
                     tab == Tab.APPROVALS -> ApprovalsScreen()
                     tab == Tab.TEAM -> TeamScreen()
                     tab == Tab.LIVE_MAP -> LiveMapScreen()
+                    tab == Tab.CSPS -> CspsScreen()
                     tab == Tab.TEAM_VISITS -> TeamVisitsScreen()
                     tab == Tab.PROFILE -> ProfileScreen(role = role, onSignOut = onSignOut)
                     tab == Tab.INFO -> InfoScreen(role = role)

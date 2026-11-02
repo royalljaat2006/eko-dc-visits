@@ -63,7 +63,9 @@ fun GlassCard(
 ) {
     val shape = RoundedCornerShape(cornerRadius)
     val interaction = remember { MutableInteractionSource() }
-    val base = Modifier
+    // The caller's modifier (width, weight, …) must come first — it was dropped, which
+    // collapsed weighted rows like the Team KPI strip to a single full-width card.
+    val base = modifier
         .glassSurface(shape = shape, tint = tint)
         .let { m -> if (onClick != null) m.clickable(interactionSource = interaction, indication = null, onClick = onClick) else m }
     Box(base.padding(contentPadding), content = content)

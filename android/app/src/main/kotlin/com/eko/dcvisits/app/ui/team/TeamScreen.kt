@@ -1,6 +1,8 @@
 package com.eko.dcvisits.app.ui.team
 
 import android.content.Context
+import com.eko.dcvisits.app.data.net.ScorecardRowDto
+import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +67,11 @@ fun TeamScreen(vm: TeamViewModel = viewModel()) {
     }
     val rows = ui.team?.rows.orEmpty()
     val o = ui.team?.overview
+    // Today's board or everyone's scorecard — one tab, two views.
+    var showScore by rememberSaveable { mutableStateOf(false) }
+    val scoreVm: TeamScorecardViewModel = viewModel()
+    val score by scoreVm.ui.collectAsStateWithLifecycle()
+    LaunchedEffect(showScore) { if (showScore) scoreVm.load() }
 
     ScreenContainer { pad ->
         LazyColumn(
@@ -83,6 +90,25 @@ fun TeamScreen(vm: TeamViewModel = viewModel()) {
                     if (ui.loading) CircularProgressIndicator(Modifier.padding(end = 8.dp), color = EkoBlue, strokeWidth = 2.dp)
                     TextButton(onClick = vm::refresh) { Text(stringResource(R.string.action_refresh), color = EkoBlue) }
                 }
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = !showScore, onClick = { showScore = false }, label = { Text(stringResource(R.string.team_view_today)) })
+                    FilterChip(selected = showScore, onClick = { showScore = true }, label = { Text(stringResource(R.string.team_view_scorecard)) })
+                }
+            }
+            if (showScore) {
+                if (score.failed) {
+                    item { Text(stringResource(R.string.team_load_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                }
+                if (score.loading && score.rows.isEmpty()) item { CircularProgressIndicator(color = EkoBlue, strokeWidth = 2.dp) }
+                item {
+                    Text(stringResource(R.string.scorecard_formula), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                itemsIndexed(score.rows, key = { _, s -> "score-" + s.dc_user_id }) { i, s ->
+                    Entrance(index = i) { ScoreCard(rank = i + 1, s = s) }
+                }
+                return@LazyColumn
             }
             if (ui.failed) {
                 item { Text(stringResource(R.string.team_load_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
@@ -104,6 +130,40 @@ fun TeamScreen(vm: TeamViewModel = viewModel()) {
             }
             itemsIndexed(rows, key = { _, r -> r.dcUserId }) { i, r ->
                 Entrance(index = i + 1) { DcCard(r) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScoreCard(rank: Int, s: ScorecardRowDto) {
+    GlassCard(Modifier.fillMaxWidth(), cornerRadius = 20.dp, contentPadding = 14.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "#$rank",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = if (rank <= 3) EkoBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(end = 12.dp),
+            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(s.dc_name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    stringResource(R.string.scorecard_stats, s.visits_done, s.geo_verified_visits, s.streak_days),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                val tags = buildList {
+                    if (s.on_time_start) add(stringResource(R.string.team_score_on_time))
+                    addAll(s.badges.map { it.replace('_', ' ') })
+                }
+                if (tags.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { tags.forEach { GlassTag(it, tint = EkoGreen) } }
+                }
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text("${s.points}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = EkoBlue)
+                Text(stringResource(R.string.team_score_points), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

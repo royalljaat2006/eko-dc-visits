@@ -1,6 +1,10 @@
 package com.eko.dcvisits.app.ui.team
 
 import android.annotation.SuppressLint
+import kotlinx.serialization.json.add
+import kotlinx.coroutines.launch
+import com.eko.dcvisits.app.di.ServiceLocator
+import androidx.compose.runtime.rememberCoroutineScope
 import com.eko.dcvisits.app.ui.components.glassSurface
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
@@ -85,6 +89,7 @@ fun LiveMapScreen(vm: TeamViewModel = viewModel()) {
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var mapReady by remember { mutableStateOf(false) }
     val webView = remember { liveMapWebView(context) { mapReady = true } }
+    val scope = rememberCoroutineScope()
     DisposableEffect(Unit) { onDispose { webView.destroy() } }
 
     LaunchedEffect(mapReady, rows, selectedId) {
@@ -122,6 +127,12 @@ fun LiveMapScreen(vm: TeamViewModel = viewModel()) {
                     LiveCell(r, selected = r.dcUserId == selectedId, str = str) {
                         selectedId = r.dcUserId
                         if (mapReady) webView.evaluateJavascript("focusDc(${JsonPrimitive(r.dcUserId)})", null)
+                        // Then draw where they went today; the line replaces the previous DC's.
+                        scope.launch {
+                            val points = ServiceLocator.teamRepository.route(Ist.today(), r.dcUserId).orEmpty()
+                            val json = buildJsonArray { points.forEach { p -> add(buildJsonArray { add(p.lat); add(p.lng) }) } }
+                            if (mapReady) webView.evaluateJavascript("setRoute($json)", null)
+                        }
                     }
                 }
             }

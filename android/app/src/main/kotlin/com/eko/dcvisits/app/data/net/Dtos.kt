@@ -274,6 +274,21 @@ data class ScorecardResponse(
     val items: List<ScorecardRowDto> = emptyList(),
 )
 
+@Serializable
+data class DashboardCspDto(
+    val csp_location_id: String,
+    val code: String,
+    val address: String? = null,
+    val district: String? = null,
+    val state: String? = null,
+    val circle: String? = null,
+    val dc_user_id: String? = null,
+    val dc_name: String? = null,
+)
+
+@Serializable
+data class DashboardCspsResponse(val items: List<DashboardCspDto> = emptyList())
+
 // ---- admin team view (GET /dashboard/overview, /dashboard/live-locations) ----
 
 @Serializable

@@ -48,7 +48,7 @@
     <string name="role_circle_head">सर्कल हेड</string>
     <string name="role_national_head">नेशनल हेड</string>
     <string name="role_hr_admin">HR एडमिन</string>
-    <string name="role_corporate_admin">कॉर्पोरेट एडमिन</string>
+    <string name="role_corporate_admin">सुपर एडमिन</string>
     <string name="role_bank_official">बैंक अधिकारी</string>
 
     <!-- ===== Main scaffold / tabs ===== -->
@@ -355,4 +355,15 @@
     <string name="info_colours_body">लाइव (हरा): पिछले 5 मिनट में लोकेशन आई है।\nपुरानी लोकेशन (पीला): 5 मिनट से ज़्यादा से नई लोकेशन नहीं आई। DC को कॉल करें।\nINSIDE: चेक इन के समय DC CSP पर था।\nOUTSIDE: DC CSP की सेव लोकेशन से दूर था। एक बार जाँच लें।</string>
     <string name="info_privacy_title">प्राइवेसी</string>
     <string name="info_privacy_body">लोकेशन सिर्फ़ ड्यूटी के समय रिकॉर्ड होती है, Start Day से End Day तक, और रात 9 बजे हमेशा बंद हो जाती है।</string>
+    <string name="tab_csps">CSP</string>
+    <string name="admin_csps_title">सारे CSP</string>
+    <string name="admin_csps_summary">%1$d CSP · %2$d बिना DC के</string>
+    <string name="admin_csps_search">कोड, पता, ज़िला या DC खोजें</string>
+    <string name="admin_csps_unassigned_only">सिर्फ़ बिना DC वाले</string>
+    <string name="admin_csps_showing">%1$d दिख रहे हैं</string>
+    <string name="admin_csps_no_dc">DC नहीं</string>
+    <string name="team_view_today">आज</string>
+    <string name="team_view_scorecard">स्कोरकार्ड</string>
+    <string name="team_score_on_time">समय पर</string>
+    <string name="team_score_points">पॉइंट</string>
 </resources>

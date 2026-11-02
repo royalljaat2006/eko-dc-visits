@@ -100,6 +100,10 @@ interface C2Api {
         @Query("stale_after_s") staleAfterS: Int,
     ): Response<LiveLocationsResponse>
 
+    /** Every CSP in scope with its assigned DC — admin / national head / circle head. */
+    @GET("dashboard/csps")
+    suspend fun dashboardCsps(@Header("Authorization") bearer: String): Response<DashboardCspsResponse>
+
     @POST("sync/batches")
     suspend fun submitBatch(
         @Header("Authorization") bearer: String,

@@ -30,6 +30,7 @@
     attribution: '&copy; OpenStreetMap contributors',
   }).addTo(map);
   var layer = L.layerGroup().addTo(map);
+  var routeLayer = L.layerGroup().addTo(map);
   var byId = {};
   var fitted = false;
 
@@ -64,6 +65,16 @@
       map.fitBounds(L.latLngBounds(points).pad(0.2), { maxZoom: 15 });
       fitted = true;
     }
+  };
+
+  // Today's route for the picked DC: a blue line from first to latest point.
+  window.setRoute = function (points) {
+    routeLayer.clearLayers();
+    if (!points || points.length < 2) return;
+    var line = L.polyline(points, { color: '#17346E', weight: 4, opacity: 0.8 }).addTo(routeLayer);
+    L.circleMarker(points[0], { radius: 6, color: '#17346E', fillColor: '#fff', fillOpacity: 1, weight: 2 })
+      .bindPopup('Start').addTo(routeLayer);
+    map.fitBounds(line.getBounds().pad(0.2), { maxZoom: 16 });
   };
 
   window.focusDc = function (id) {

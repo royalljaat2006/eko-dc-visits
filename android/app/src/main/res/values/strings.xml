@@ -48,7 +48,7 @@
     <string name="role_circle_head">Circle head</string>
     <string name="role_national_head">National head</string>
     <string name="role_hr_admin">Hr admin</string>
-    <string name="role_corporate_admin">Corporate admin</string>
+    <string name="role_corporate_admin">Super admin</string>
     <string name="role_bank_official">Bank official</string>
 
     <!-- ===== Main scaffold / tabs ===== -->
@@ -355,4 +355,15 @@
     <string name="info_colours_body">LIVE (green): location received in the last 5 minutes.\nSTALE (yellow): no new location for over 5 minutes. Call the DC.\nINSIDE: the DC was at the CSP when checking in.\nOUTSIDE: the DC was away from the CSP\'s saved location. Worth a check.</string>
     <string name="info_privacy_title">Privacy</string>
     <string name="info_privacy_body">Location is recorded only while a DC is on duty, from Start Day to End Day, and it always stops at 9 PM.</string>
+    <string name="tab_csps">CSPs</string>
+    <string name="admin_csps_title">All CSPs</string>
+    <string name="admin_csps_summary">%1$d CSPs · %2$d without a DC</string>
+    <string name="admin_csps_search">Search code, address, district or DC</string>
+    <string name="admin_csps_unassigned_only">Without DC only</string>
+    <string name="admin_csps_showing">Showing %1$d</string>
+    <string name="admin_csps_no_dc">No DC</string>
+    <string name="team_view_today">Today</string>
+    <string name="team_view_scorecard">Scorecard</string>
+    <string name="team_score_on_time">On time</string>
+    <string name="team_score_points">points</string>
 </resources>

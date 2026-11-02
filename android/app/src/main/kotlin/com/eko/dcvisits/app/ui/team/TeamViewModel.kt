@@ -3,6 +3,8 @@ package com.eko.dcvisits.app.ui.team
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eko.dcvisits.app.data.net.VisitDto
+import com.eko.dcvisits.app.data.net.ScorecardRowDto
+import com.eko.dcvisits.app.data.net.DashboardCspDto
 import com.eko.dcvisits.app.data.repo.TeamSnapshot
 import com.eko.dcvisits.app.di.ServiceLocator
 import com.eko.dcvisits.app.util.Ist
@@ -66,5 +68,51 @@ class TeamVisitsViewModel : ViewModel() {
     fun nextDay() {
         val today = LocalDate.parse(Ist.today())
         if (_ui.value.date < today) load(_ui.value.date.plusDays(1))
+    }
+}
+
+data class TeamScorecardUi(
+    val loading: Boolean = true,
+    val rows: List<ScorecardRowDto> = emptyList(),
+    val failed: Boolean = false,
+)
+
+/** Every DC's points for today, best first (admin / national head). */
+class TeamScorecardViewModel : ViewModel() {
+    private val repo = ServiceLocator.teamRepository
+
+    private val _ui = MutableStateFlow(TeamScorecardUi())
+    val ui: StateFlow<TeamScorecardUi> = _ui
+
+    fun load() {
+        _ui.value = _ui.value.copy(loading = true, failed = false)
+        viewModelScope.launch {
+            val rows = repo.scorecard(Ist.today())
+            _ui.value = if (rows != null) TeamScorecardUi(loading = false, rows = rows)
+            else _ui.value.copy(loading = false, failed = true)
+        }
+    }
+}
+
+data class TeamCspsUi(
+    val loading: Boolean = true,
+    val csps: List<DashboardCspDto> = emptyList(),
+    val failed: Boolean = false,
+)
+
+/** All CSPs with their DC; search and the unassigned filter run on the loaded list. */
+class TeamCspsViewModel : ViewModel() {
+    private val repo = ServiceLocator.teamRepository
+
+    private val _ui = MutableStateFlow(TeamCspsUi())
+    val ui: StateFlow<TeamCspsUi> = _ui
+
+    fun load() {
+        _ui.value = _ui.value.copy(loading = true, failed = false)
+        viewModelScope.launch {
+            val list = repo.csps()
+            _ui.value = if (list != null) TeamCspsUi(loading = false, csps = list)
+            else _ui.value.copy(loading = false, failed = true)
+        }
     }
 }
