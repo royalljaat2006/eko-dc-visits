@@ -64,3 +64,20 @@ fun formatDistance(m: Double): String = when {
     m < 10_000 -> "${(m / 100).roundToInt() / 10.0} km"
     else -> "${(m / 1000).roundToInt()} km"
 }
+
+/**
+ * Decides which CSPs to announce on the road: a CSP alerts once when the admin comes
+ * within [alertM], and only alerts again after they have gone beyond [rearmM] — so
+ * parking next to a CSP, or GPS wobble at the edge, never repeats the alert.
+ */
+class NearbyAlertTracker(private val alertM: Double = 1_000.0, private val rearmM: Double = 2_000.0) {
+    private val alerted = mutableSetOf<String>()
+
+    /** The CSPs that just came within range on this fix, nearest first. */
+    fun onFix(all: List<CspLocationDto>, lat: Double, lng: Double): List<NearbyCsp> {
+        val around = nearbyCsps(all, lat, lng, radiusKm = (rearmM / 1000).toInt().coerceAtLeast(1), limit = 200)
+            .filter { it.distanceM <= rearmM }
+        alerted.retainAll(around.map { it.csp.csp_location_id }.toSet())
+        return around.filter { it.distanceM <= alertM && alerted.add(it.csp.csp_location_id) }
+    }
+}

@@ -56,12 +56,13 @@ object LocationProvider {
     /**
      * Fixes for as long as the collector is active — a screen that follows the user
      * while it is open (admin "CSPs near me"). Stops the moment collection stops;
-     * nothing runs in the background. Emits nothing without permission.
+     * nothing runs in the background (the on-the-road alert runs it inside its own visible
+     * foreground service). Emits nothing without permission.
      */
-    fun updates(context: Context, intervalMs: Long = 10_000): Flow<Fix> = callbackFlow {
+    fun updates(context: Context, intervalMs: Long = 10_000, priority: Int = Priority.PRIORITY_HIGH_ACCURACY): Flow<Fix> = callbackFlow {
         if (!hasPermission(context)) { close(); return@callbackFlow }
         val client = LocationServices.getFusedLocationProviderClient(context)
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
+        val request = LocationRequest.Builder(priority, intervalMs)
             .setMinUpdateIntervalMillis(intervalMs / 2)
             .build()
         val callback = object : LocationCallback() {

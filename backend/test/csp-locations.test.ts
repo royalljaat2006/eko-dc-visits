@@ -50,3 +50,16 @@ test("GET /dashboard/csp-locations: role alone is not enough — ungranted admin
   assert.equal((await get(app, await tokenFor(app, "9800000004"))).statusCode, 403, "Corporate Admin without the grant");
   assert.equal((await get(app, await tokenFor(app, "9800000001"))).statusCode, 403, "DC");
 });
+
+test("GET /dashboard/csp-locations: operator name when known, null while it is just the code", async () => {
+  const { app, repos } = await makeApp();
+  const csps = (await repos.listAllLocations("eko")).filter((l) => l.type === "CSP");
+  const named = { ...csps[0]!, name: "Ramesh Kumar" };
+  await repos.insertLocation(named); // same id: overwrites
+  const items = (await get(app, await tokenFor(app, GRANTED))).json().items as Array<{ csp_location_id: string; code: string; name: string | null }>;
+  assert.equal(items.find((i) => i.csp_location_id === named.id)?.name, "Ramesh Kumar");
+  for (const i of items.filter((i) => i.csp_location_id !== named.id)) {
+    const loc = csps.find((l) => l.id === i.csp_location_id)!;
+    assert.equal(i.name, loc.name === loc.code ? null : loc.name);
+  }
+});

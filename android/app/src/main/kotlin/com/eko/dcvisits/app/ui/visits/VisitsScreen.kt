@@ -70,6 +70,7 @@ import kotlin.math.roundToInt
 import androidx.compose.ui.res.stringResource
 import com.eko.dcvisits.app.R
 import com.eko.dcvisits.app.ui.text.asString
+import com.eko.dcvisits.app.ui.text.cspLabel
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -176,7 +177,7 @@ fun VisitsScreen(vm: VisitsViewModel = viewModel()) {
 
     ui.awaitingReasonFor?.let { csp ->
         OutOfRadiusDialog(
-            cspCode = csp.code,
+            cspCode = cspLabel(csp.code, csp.name),
             distanceM = ui.awaitingReasonDistanceM,
             onDismiss = vm::cancelReason,
             onConfirm = { reason, remarks -> vm.confirmOutOfRadius(context, reason, remarks) },

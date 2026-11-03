@@ -1257,8 +1257,9 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       });
 
       // ---- admin portal: all CSPs, in calling-sheet order --------------------
-      // CSP operators are anonymous (name == CSP ID, no operator phone/email);
-      // the DC is a named Eko official, so DC name + phone are returned. HR
+      // CSP operator name only (from Eko's CSP list; null while it is still the CSP ID),
+      // never an operator phone/email; the DC is a named Eko official, so DC name +
+      // phone are returned. HR
       // gets nothing (PII minimisation, same as visits). Scoped via the choke point.
       api.get("/dashboard/csps", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
         const principal = req.principal!;
@@ -1291,6 +1292,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
             return {
               csp_location_id: l.id,
               code: l.code,
+              name: cspName(l),
               address: l.address ?? null,
               district: l.district ?? null,
               state: l.state ?? null,
@@ -1334,6 +1336,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
             return {
               csp_location_id: l.id,
               code: l.code,
+              name: cspName(l),
               lat: l.coordinates.lat,
               lng: l.coordinates.lng,
               coordinates_verified: l.coordinate_confidence !== "UNVERIFIED",
@@ -1382,3 +1385,9 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
 }
 
 export { istDateOf };
+
+/** A CSP's operator name, or null while the name is still just its code (not yet known). */
+function cspName(l: LocationNode): string | null {
+  const n = l.name?.trim();
+  return n && n !== l.code ? n : null;
+}
