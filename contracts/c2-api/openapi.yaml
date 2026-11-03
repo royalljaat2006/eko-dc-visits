@@ -694,8 +694,9 @@ paths:
       summary: >
         Admin Portal "All CSPs": every CSP in the caller's scope (C6), ordered as in
         Eko's calling sheet (sheet_row ascending; CSPs not from the sheet come last,
-        by code). CSP operators are anonymous (the CSP code is the only identity);
-        the assigned DC is a named Eko official, so DC name + phone are returned.
+        by code). `name` is the CSP operator's name from Eko's CSP list (null while
+        unknown; no operator phone/email is ever returned). The assigned DC is a named
+        Eko official, so DC name + phone are returned.
         CORPORATE_ADMIN, NATIONAL_HEAD (tenant-wide) and CIRCLE_HEAD (own circle);
         403 for DC and HR_ADMIN.
       security: [{ bearer: [] }]
@@ -716,6 +717,7 @@ paths:
                       properties:
                         csp_location_id: { type: string, format: uuid }
                         code: { type: string }
+                        name: { type: [string, 'null'] }
                         address: { type: [string, 'null'] }
                         district: { type: [string, 'null'] }
                         state: { type: [string, 'null'] }
@@ -753,6 +755,7 @@ paths:
                       properties:
                         csp_location_id: { type: string, format: uuid }
                         code: { type: string }
+                        name: { type: [string, 'null'] }
                         lat: { type: number }
                         lng: { type: number }
                         coordinates_verified: { type: boolean, description: false while coordinate_confidence is UNVERIFIED }

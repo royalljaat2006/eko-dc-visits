@@ -50,6 +50,12 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
+        <!-- Super admin "CSP nearby" road alert: same visible-FGS rule, switched on by the admin. -->
+        <service
+            android:name=".tracking.NearbyAlertService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
         <!-- Persists the in-app language choice on Android 10–12 (Android 13+ uses
              android:localeConfig and the system per-app language setting). -->
         <service

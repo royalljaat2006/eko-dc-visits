@@ -34,6 +34,7 @@ import com.eko.dcvisits.app.ui.components.GlassTextField
 import com.eko.dcvisits.app.ui.components.ScreenContainer
 import com.eko.dcvisits.app.ui.theme.EkoAmber
 import com.eko.dcvisits.app.ui.theme.EkoBlue
+import com.eko.dcvisits.app.ui.text.cspLabel
 
 /** Admin "All CSPs": search by code, address, district, circle or DC; filter to unassigned. */
 @Composable
@@ -106,7 +107,7 @@ private fun CspRow(c: DashboardCspDto) {
     GlassCard(Modifier.fillMaxWidth(), cornerRadius = 16.dp, contentPadding = 12.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(c.code, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                Text(cspLabel(c.code, c.name), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
                 if (c.dc_name != null) GlassTag(c.dc_name, tint = EkoBlue)
                 else GlassTag(stringResource(R.string.admin_csps_no_dc), tint = EkoAmber)
             }
@@ -123,6 +124,6 @@ internal fun filterCsps(csps: List<DashboardCspDto>, query: String, unassignedOn
     val needle = query.trim().lowercase()
     return csps.filter { c ->
         (!unassignedOnly || c.dc_user_id == null) &&
-            (needle.isEmpty() || listOfNotNull(c.code, c.address, c.district, c.state, c.circle, c.dc_name).any { it.lowercase().contains(needle) })
+            (needle.isEmpty() || listOfNotNull(c.code, c.name, c.address, c.district, c.state, c.circle, c.dc_name).any { it.lowercase().contains(needle) })
     }
 }

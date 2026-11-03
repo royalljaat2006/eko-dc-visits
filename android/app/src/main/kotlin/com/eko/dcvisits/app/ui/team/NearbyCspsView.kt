@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -43,6 +44,8 @@ import com.eko.dcvisits.app.data.repo.NearbyCsp
 import com.eko.dcvisits.app.data.repo.formatDistance
 import com.eko.dcvisits.app.data.repo.nearbyCsps
 import com.eko.dcvisits.app.data.sync.Fix
+import com.eko.dcvisits.app.tracking.NearbyAlertService
+import com.eko.dcvisits.app.tracking.NearbyAlerts
 import com.eko.dcvisits.app.ui.components.GlassCard
 import com.eko.dcvisits.app.ui.location.LocationProvider
 import com.eko.dcvisits.app.ui.theme.EkoAmber
@@ -51,6 +54,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.put
+import com.eko.dcvisits.app.ui.text.cspLabel
 
 private val RADII_KM = listOf(5, 10, 25, 50)
 
@@ -100,6 +104,7 @@ fun NearbyCspsView(source: List<CspLocationDto>, pad: PaddingValues, header: @Co
                 FilterChip(selected = radiusKm == km, onClick = { radiusKm = km }, label = { Text("$km km") })
             }
         }
+        AlertSwitch()
         Text(
             when {
                 me == null -> stringResource(R.string.nearby_finding_you)
@@ -124,6 +129,24 @@ fun NearbyCspsView(source: List<CspLocationDto>, pad: PaddingValues, header: @Co
     }
 }
 
+/** On-the-road alert (app closed too): starts/stops the visible NearbyAlertService. */
+@Composable
+private fun AlertSwitch() {
+    val context = LocalContext.current
+    var on by remember { mutableStateOf(NearbyAlerts.isOn(context)) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.nearby_alert_switch), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+            Text(stringResource(R.string.nearby_alert_switch_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = on, onCheckedChange = { want ->
+            on = want
+            NearbyAlerts.setOn(context, want)
+            if (want) NearbyAlertService.start(context) else NearbyAlertService.stop(context)
+        })
+    }
+}
+
 @Composable
 private fun NearbyRow(n: NearbyCsp, selected: Boolean, onClick: () -> Unit) {
     val context = LocalContext.current
@@ -131,7 +154,7 @@ private fun NearbyRow(n: NearbyCsp, selected: Boolean, onClick: () -> Unit) {
     GlassCard(Modifier.fillMaxWidth(), cornerRadius = 16.dp, contentPadding = 12.dp, onClick = onClick) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(c.code, style = MaterialTheme.typography.titleSmall, color = if (selected) EkoBlue else MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                Text(cspLabel(c.code, c.name), style = MaterialTheme.typography.titleSmall, color = if (selected) EkoBlue else MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
                 Text("${formatDistance(n.distanceM)} ${n.arrow} ${n.direction}", style = MaterialTheme.typography.titleSmall, color = EkoBlue)
             }
             val where = listOfNotNull(c.address?.takeIf { it.isNotBlank() }, c.district).joinToString(" · ")
@@ -163,7 +186,7 @@ private fun pinsJson(near: List<NearbyCsp>): String = buildJsonArray {
     near.forEach { n ->
         addJsonObject {
             put("id", n.csp.csp_location_id)
-            put("code", n.csp.code)
+            put("code", cspLabel(n.csp.code, n.csp.name))
             put("lat", n.csp.lat)
             put("lng", n.csp.lng)
             put("label", formatDistance(n.distanceM) + " " + n.direction + (n.csp.dc_name?.let { " · $it" } ?: ""))

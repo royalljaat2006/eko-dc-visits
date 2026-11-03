@@ -6,6 +6,10 @@ import androidx.compose.ui.res.stringResource
 import com.eko.dcvisits.app.R
 import kotlin.math.roundToInt
 
+/** "1A850004 · Kaushar Jahan": the CSP code with its operator name, or just the code while the name is unknown. */
+fun cspLabel(code: String, name: String?): String =
+    name?.trim()?.takeIf { it.isNotEmpty() && it != code }?.let { "$code · $it" } ?: code
+
 /** Display label for a server role code (the code itself is never translated). */
 @StringRes
 private fun roleLabelRes(role: String): Int? = when (role) {

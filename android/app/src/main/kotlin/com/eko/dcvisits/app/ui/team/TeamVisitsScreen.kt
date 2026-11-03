@@ -36,6 +36,7 @@ import com.eko.dcvisits.app.ui.theme.EkoGreen
 import com.eko.dcvisits.app.util.Ist
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import com.eko.dcvisits.app.ui.text.cspLabel
 
 private val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy")
 
@@ -110,7 +111,7 @@ private fun DcVisitsCard(visits: List<TeamVisitGroup>) {
 private fun CspVisit(g: TeamVisitGroup) {
     val v = g.first
     val context = LocalContext.current
-    val csp = v.location_code ?: v.location_name ?: "—"
+    val csp = v.location_code?.let { cspLabel(it, v.location_name) } ?: v.location_name ?: "—"
     Column(
         Modifier.fillMaxWidth().clickable { openMap(context, v.checkin.fix.lat, v.checkin.fix.lng, "${v.dc_name ?: ""} · $csp") },
         verticalArrangement = Arrangement.spacedBy(4.dp),

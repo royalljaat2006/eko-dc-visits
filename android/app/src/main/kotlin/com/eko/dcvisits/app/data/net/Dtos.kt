@@ -278,6 +278,8 @@ data class ScorecardResponse(
 data class DashboardCspDto(
     val csp_location_id: String,
     val code: String,
+    /** CSP operator name; null while only the code is known. */
+    val name: String? = null,
     val address: String? = null,
     val district: String? = null,
     val state: String? = null,
@@ -294,6 +296,7 @@ data class DashboardCspsResponse(val items: List<DashboardCspDto> = emptyList())
 data class CspLocationDto(
     val csp_location_id: String,
     val code: String,
+    val name: String? = null,
     val lat: Double,
     val lng: Double,
     val coordinates_verified: Boolean = true,

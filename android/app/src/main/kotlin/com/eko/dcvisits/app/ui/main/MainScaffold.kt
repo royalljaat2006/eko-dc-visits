@@ -3,7 +3,6 @@ package com.eko.dcvisits.app.ui.main
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.Image
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -65,11 +64,16 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eko.dcvisits.app.data.repo.DayState
 import com.eko.dcvisits.app.di.ServiceLocator
 import com.eko.dcvisits.app.tracking.BatteryOptimization
+import com.eko.dcvisits.app.tracking.NearbyAlertService
+import com.eko.dcvisits.app.tracking.NearbyAlerts
 import com.eko.dcvisits.app.tracking.TrackingService
 import com.eko.dcvisits.app.ui.approvals.ApprovalsScreen
 import com.eko.dcvisits.app.ui.attendance.AttendanceScreen
@@ -149,7 +153,10 @@ fun MainScaffold(
         else if (day == DayState.ENDED) TrackingService.stop(context)
     }
 
-    val onSignOut = { TrackingService.stop(context); scope.launch { ServiceLocator.authRepository.signOut(); onSignedOut() }; Unit }
+    // A super admin who switched the road alert on gets it back whenever the app opens.
+    LaunchedEffect(role) { if (role == "CORPORATE_ADMIN") NearbyAlertService.start(context) }
+
+    val onSignOut = { TrackingService.stop(context); NearbyAlertService.stop(context); NearbyAlerts.setOn(context, false); scope.launch { ServiceLocator.authRepository.signOut(); onSignedOut() }; Unit }
     val body: @Composable () -> Unit = {
         Box(Modifier.fillMaxSize()) {
             AnimatedContent(
@@ -245,11 +252,12 @@ private fun BottomGlassNav(tabs: List<Tab>, selected: Tab, gated: Boolean, onSel
         shape = RoundedCornerShape(30.dp),
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
+            // Equal slots so every tab keeps its name under the icon, even with 7 tabs.
             tabs.forEach { tab ->
-                NavItem(tab, selected == tab, enabled = !(tab.dcGated && gated), onClick = { onSelect(tab) }, compact = tabs.size > 6)
+                NavItem(tab, selected == tab, enabled = !(tab.dcGated && gated), onClick = { onSelect(tab) }, compact = tabs.size > 5, modifier = Modifier.weight(1f))
             }
         }
     }
@@ -278,7 +286,7 @@ private fun SideGlassRail(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             tabs.forEach { tab ->
-                NavItem(tab, selected == tab, enabled = !(tab.dcGated && gated), onClick = { onSelect(tab) }, compact = tabs.size > 6)
+                NavItem(tab, selected == tab, enabled = !(tab.dcGated && gated), onClick = { onSelect(tab) })
             }
             Box(Modifier.weight(1f).size(1.dp))
             Box(
@@ -296,31 +304,37 @@ private fun SideGlassRail(
 }
 
 @Composable
-private fun NavItem(tab: Tab, isSelected: Boolean, enabled: Boolean, onClick: () -> Unit, compact: Boolean = false) {
+private fun NavItem(tab: Tab, isSelected: Boolean, enabled: Boolean, onClick: () -> Unit, compact: Boolean = false, modifier: Modifier = Modifier) {
     val highlight by animateFloatAsState(if (isSelected) 1f else 0f, label = "navHighlight")
     val tint = if (isSelected) EkoBlue else MaterialTheme.colorScheme.onSurfaceVariant
 
     Column(
-        Modifier
+        modifier
             .pressScale()
             .clip(RoundedCornerShape(18.dp))
             .background(EkoYellow.copy(alpha = 0.30f * highlight))
             .clickable(enabled = enabled, onClick = onClick)
             .alpha(if (enabled) 1f else 0.35f)
-            .padding(horizontal = if (compact) 8.dp else 12.dp, vertical = 9.dp),
+            .padding(horizontal = if (compact) 1.dp else 12.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         val label = stringResource(tab.label)
-        Icon(tab.icon, contentDescription = label, tint = tint, modifier = Modifier.size(21.dp))
-        AnimatedVisibility(visible = isSelected) {
-            Text(
-                label,
-                color = EkoBlue,
-                style = MaterialTheme.typography.labelSmall,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 3.dp),
-            )
-        }
+        Icon(tab.icon, contentDescription = null, tint = tint, modifier = Modifier.size(21.dp))
+        // The name is always shown under the icon, not only on the selected tab.
+        Text(
+            label,
+            color = tint,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = if (compact) 9.sp else 11.sp,
+                letterSpacing = 0.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            ),
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 3.dp),
+        )
     }
 }
 

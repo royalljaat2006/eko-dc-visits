@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Eko Bharat</string>
+    <string name="app_name">Eko Bharat Ventures</string>
 
     <!-- ===== Common actions / words ===== -->
     <string name="action_cancel">Cancel</string>
@@ -346,7 +346,7 @@
     <string name="tab_info">Info</string>
     <string name="info_version">Version %1$s</string>
     <string name="info_what_title">What is this app?</string>
-    <string name="info_what_body">Eko Bharat helps Eko\'s District Coordinators (DCs) visit SBI kiosk CSPs, and keeps a clear record of every visit: who went, to which CSP, at what time, and whether they were really there.</string>
+    <string name="info_what_body">Eko Bharat Ventures helps Eko\'s District Coordinators (DCs) visit SBI kiosk CSPs, and keeps a clear record of every visit: who went, to which CSP, at what time, and whether they were really there.</string>
     <string name="info_dc_title">Your day, step by step</string>
     <string name="info_dc_body">1. Tap Start Day in the morning.\n2. Go to your CSPs. My CSPs lists them; Navigate shows the nearest one.\n3. Stay at the CSP for about 2 minutes and the app checks you in by itself, or tap Check in.\n4. Take the photos and check out.\n5. Tap End Day in the evening. Your KM is counted automatically.</string>
     <string name="info_admin_title">What you can see</string>
@@ -375,4 +375,14 @@
     <string name="nearby_unverified">Location not verified — distance may be off</string>
     <string name="nearby_dc">DC: %1$s</string>
     <string name="nearby_call">Call</string>
+    <string name="nearby_alert_channel">CSP nearby alerts</string>
+    <string name="nearby_alert_watch_channel">CSP nearby alert running</string>
+    <string name="nearby_alert_watch_title">CSP nearby alert is on</string>
+    <string name="nearby_alert_watch_text">You will be told when a CSP is within 1 km (%1$d CSPs)</string>
+    <string name="nearby_alert_watch_loading">Loading the CSP list…</string>
+    <string name="nearby_alert_turn_off">Turn off</string>
+    <string name="nearby_alert_title_one">📍 You are near CSP %1$s</string>
+    <string name="nearby_alert_title_many">📍 %1$d CSPs within 1 km</string>
+    <string name="nearby_alert_switch">🔔 Alert me within 1 km</string>
+    <string name="nearby_alert_switch_hint">Works even when the app is closed. Turn off any time.</string>
 </resources>
