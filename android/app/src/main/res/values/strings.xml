@@ -366,4 +366,13 @@
     <string name="team_view_scorecard">Scorecard</string>
     <string name="team_score_on_time">On time</string>
     <string name="team_score_points">points</string>
+    <string name="nearby_tab">📍 Near me</string>
+    <string name="nearby_all_tab">All</string>
+    <string name="nearby_title">CSPs near me</string>
+    <string name="nearby_finding_you">Finding your location…</string>
+    <string name="nearby_none">No CSP within %1$d km</string>
+    <string name="nearby_count">%1$d CSPs within %2$d km · nearest first</string>
+    <string name="nearby_unverified">Location not verified — distance may be off</string>
+    <string name="nearby_dc">DC: %1$s</string>
+    <string name="nearby_call">Call</string>
 </resources>

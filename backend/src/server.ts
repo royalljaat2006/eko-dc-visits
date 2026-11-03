@@ -36,6 +36,7 @@ export const IMPLEMENTED_ROUTES: ReadonlyArray<{ method: string; path: string }>
   { method: "get", path: "/dashboard/scorecard" },
   { method: "get", path: "/dashboard/overview" },
   { method: "get", path: "/dashboard/csps" },
+  { method: "get", path: "/dashboard/csp-locations" },
   { method: "get", path: "/dashboard/live-locations" },
   { method: "get", path: "/dashboard/route-history" },
   { method: "get", path: "/dc/csp-details" },
@@ -1304,6 +1305,44 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
           })
           .sort((x, y) => x._order - y._order || x.code.localeCompare(y.code))
           .map(({ _order: _unused, ...row }) => row);
+        return reply.code(200).send({ items });
+      });
+
+      // ---- dashboard (C2 /dashboard/csp-locations) --------------------------
+      // "CSPs near me" for a travelling admin: every CSP's coordinates + its DC. The
+      // phone picks the nearby ones, so the admin's own location never reaches us.
+      // Granted per person (users.nearby_csps), not by role alone.
+      api.get("/dashboard/csp-locations", { preHandler: requireAuth }, async (req: AuthedRequest, reply) => {
+        const principal = req.principal!;
+        const me = principal.role === "CORPORATE_ADMIN" ? await repos.getUserById(principal.tenant_id, principal.user_id) : null;
+        if (!me?.nearby_csps) {
+          return problem(reply, 403, "Forbidden", "CSPs near me is enabled per person for super admins");
+        }
+        const asOf = istDateOf(clock());
+        const [all, assignments] = await Promise.all([
+          repos.listAllLocations(principal.tenant_id),
+          repos.listActiveCspAssignments(principal.tenant_id, "ALL", asOf),
+        ]);
+        const assignmentByCsp = new Map(assignments.map((a) => [a.csp_location_id, a]));
+        const dcs = await repos.listUsersByIds(principal.tenant_id, [...new Set(assignments.map((a) => a.dc_user_id))]);
+        const dcById = new Map(dcs.map((u) => [u.id, u]));
+        const items = all
+          .filter((l) => l.type === "CSP" && Number.isFinite(l.coordinates?.lat) && Number.isFinite(l.coordinates?.lng))
+          .map((l) => {
+            const a = assignmentByCsp.get(l.id);
+            const dc = a ? dcById.get(a.dc_user_id) : undefined;
+            return {
+              csp_location_id: l.id,
+              code: l.code,
+              lat: l.coordinates.lat,
+              lng: l.coordinates.lng,
+              coordinates_verified: l.coordinate_confidence !== "UNVERIFIED",
+              address: l.address ?? null,
+              district: l.district ?? null,
+              dc_name: dc?.name ?? null,
+              dc_phone: dc?.phone ?? null,
+            };
+          });
         return reply.code(200).send({ items });
       });
 

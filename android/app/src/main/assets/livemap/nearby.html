@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<style>/*LEAFLET_CSS*/</style>
+<style>
+  html, body, #map { margin: 0; height: 100%; width: 100%; background: #f4efe6; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="err" style="display:none;position:absolute;top:0;left:0;right:0;padding:8px;font:12px sans-serif;color:#b00020;background:#fff8;z-index:2000"></div>
+<script>
+  window.onerror = function (msg, src, line) {
+    var e = document.getElementById('err');
+    e.style.display = 'block';
+    e.textContent += 'Map error: ' + msg + ' (line ' + line + ')\n';
+  };
+</script>
+<script>/*LEAFLET_JS*/</script>
+<script>
+  // Super admin "CSPs near me": the admin's position (blue) and the nearby CSPs (navy).
+  // NearbyCspsView pushes everything in; nothing is fetched here and no position leaves the phone.
+  var NAVY = '#17346E', ME = '#1a73e8';
+  var map = L.map('map', { zoomControl: true }).setView([22.97, 78.65], 5);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors',
+  }).addTo(map);
+  var cspLayer = L.layerGroup().addTo(map);
+  var lineLayer = L.layerGroup().addTo(map);
+  var meMarker = null, meRing = null, me = null;
+  var byId = {};
+  var fitKey = null;
+
+  window.addEventListener('resize', function () { map.invalidateSize(); });
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  window.setMe = function (lat, lng, acc) {
+    map.invalidateSize();
+    me = [lat, lng];
+    if (!meMarker) {
+      meRing = L.circle(me, { radius: acc || 30, color: ME, weight: 1, fillOpacity: 0.12 }).addTo(map);
+      meMarker = L.circleMarker(me, { radius: 8, color: '#fff', weight: 3, fillColor: ME, fillOpacity: 1 }).addTo(map);
+    } else {
+      meMarker.setLatLng(me);
+      meRing.setLatLng(me).setRadius(acc || 30);
+    }
+  };
+
+  // rows: [{id, code, lat, lng, label}]; key changes (new radius / first data) refit the view.
+  window.setCsps = function (rows, key) {
+    map.invalidateSize();
+    cspLayer.clearLayers();
+    byId = {};
+    var pts = me ? [me] : [];
+    rows.forEach(function (r) {
+      var m = L.circleMarker([r.lat, r.lng], { radius: 7, color: NAVY, weight: 2, fillColor: NAVY, fillOpacity: 0.75 })
+        .bindPopup('<strong>' + esc(r.code) + '</strong><br>' + esc(r.label)).addTo(cspLayer);
+      byId[r.id] = m;
+      pts.push([r.lat, r.lng]);
+    });
+    if (key !== fitKey && map.getSize().y > 0) {
+      if (pts.length > 1) map.fitBounds(L.latLngBounds(pts).pad(0.15), { maxZoom: 15 });
+      else if (me) map.setView(me, 13);
+      fitKey = key;
+    }
+  };
+
+  // Straight line from the admin to the picked CSP, both in view.
+  window.select = function (id) {
+    var m = byId[id];
+    lineLayer.clearLayers();
+    if (!m) return;
+    if (me) {
+      L.polyline([me, m.getLatLng()], { color: NAVY, weight: 3, dashArray: '6 6' }).addTo(lineLayer);
+      map.fitBounds(L.latLngBounds([me, m.getLatLng()]).pad(0.3), { maxZoom: 16 });
+    } else {
+      map.setView(m.getLatLng(), 15);
+    }
+    m.openPopup();
+  };
+</script>
+</body>
+</html>

@@ -366,4 +366,13 @@
     <string name="team_view_scorecard">स्कोरकार्ड</string>
     <string name="team_score_on_time">समय पर</string>
     <string name="team_score_points">पॉइंट</string>
+    <string name="nearby_tab">📍 पास के</string>
+    <string name="nearby_all_tab">सारे</string>
+    <string name="nearby_title">पास के CSP</string>
+    <string name="nearby_finding_you">आपकी लोकेशन ढूँढ रहे हैं…</string>
+    <string name="nearby_none">%1$d km में कोई CSP नहीं</string>
+    <string name="nearby_count">%2$d km में %1$d CSP · सबसे पास वाला ऊपर</string>
+    <string name="nearby_unverified">लोकेशन पक्की नहीं — दूरी थोड़ी अलग हो सकती है</string>
+    <string name="nearby_dc">DC: %1$s</string>
+    <string name="nearby_call">कॉल</string>
 </resources>

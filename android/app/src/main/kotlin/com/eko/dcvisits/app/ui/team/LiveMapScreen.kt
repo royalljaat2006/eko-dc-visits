@@ -88,7 +88,7 @@ fun LiveMapScreen(vm: TeamViewModel = viewModel()) {
     val rows = ui.team?.rows.orEmpty()
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var mapReady by remember { mutableStateOf(false) }
-    val webView = remember { liveMapWebView(context) { mapReady = true } }
+    val webView = remember { leafletWebView(context, "livemap.html") { mapReady = true } }
     val scope = rememberCoroutineScope()
     DisposableEffect(Unit) { onDispose { webView.destroy() } }
 
@@ -206,10 +206,10 @@ private fun markersJson(rows: List<TeamRow>, str: StringLookup): String = buildJ
  * origin as base URL so OSM tile requests carry a real Referer, as the web map's do.
  */
 @SuppressLint("SetJavaScriptEnabled")
-private fun liveMapWebView(context: Context, onReady: () -> Unit): WebView {
+internal fun leafletWebView(context: Context, page: String, onReady: () -> Unit): WebView {
     val assets = context.assets
     fun asset(name: String) = assets.open("livemap/$name").bufferedReader().use { it.readText() }
-    val html = asset("livemap.html")
+    val html = asset(page)
         .replace("/*LEAFLET_CSS*/", asset("leaflet.css"))
         .replace("/*LEAFLET_JS*/", asset("leaflet.js"))
     return WebView(context).apply {

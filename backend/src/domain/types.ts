@@ -86,6 +86,8 @@ export interface User {
   /** Reference home location (logged against, never gated — ADR-0004). */
   home_lat?: number;
   home_lng?: number;
+  /** Per-person grant for GET /dashboard/csp-locations (admin "CSPs near me"). */
+  nearby_csps?: boolean;
 }
 
 /** c1-entities/user-device.schema.json#/$defs/device */

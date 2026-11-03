@@ -726,6 +726,41 @@ paths:
                         dc_phone: { type: [string, 'null'] }
                         sheet_row: { type: [integer, 'null'], description: 1-based data-row number in the calling sheet }
         '403': { $ref: '#/components/responses/Problem' }
+  /dashboard/csp-locations:
+    get:
+      tags: [dashboard, master-data]
+      operationId: listCspLocations
+      summary: >
+        "CSPs near me" for a travelling super admin: every CSP with coordinates and
+        its assigned DC, tenant-wide. The app picks the nearby ones on the phone, so
+        the caller's own location is never sent. CORPORATE_ADMIN with the per-person
+        users.nearby_csps grant only; 403 for everyone else.
+      security: [{ bearer: [] }]
+      responses:
+        '200':
+          description: One row per CSP that has coordinates.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [csp_location_id, code, lat, lng, coordinates_verified]
+                      properties:
+                        csp_location_id: { type: string, format: uuid }
+                        code: { type: string }
+                        lat: { type: number }
+                        lng: { type: number }
+                        coordinates_verified: { type: boolean, description: false while coordinate_confidence is UNVERIFIED }
+                        address: { type: [string, 'null'] }
+                        district: { type: [string, 'null'] }
+                        dc_name: { type: [string, 'null'] }
+                        dc_phone: { type: [string, 'null'] }
+        '403': { $ref: '#/components/responses/Problem' }
   /dashboard/live-locations:
     get:
       tags: [tracking, dashboard]

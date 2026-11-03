@@ -65,6 +65,10 @@
         },
         "home_lng": {
           "type": "number"
+        },
+        "nearby_csps": {
+          "type": "boolean",
+          "description": "Per-person grant for the super-admin 'CSPs near me' view (GET /dashboard/csp-locations). Off unless switched on for that person."
         }
       },
       "additionalProperties": false

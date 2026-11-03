@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eko.dcvisits.app.data.net.VisitDto
 import com.eko.dcvisits.app.data.net.ScorecardRowDto
+import com.eko.dcvisits.app.data.net.CspLocationDto
 import com.eko.dcvisits.app.data.net.DashboardCspDto
 import com.eko.dcvisits.app.data.repo.TeamSnapshot
 import com.eko.dcvisits.app.di.ServiceLocator
@@ -98,6 +99,8 @@ data class TeamCspsUi(
     val loading: Boolean = true,
     val csps: List<DashboardCspDto> = emptyList(),
     val failed: Boolean = false,
+    /** Every CSP's coordinates — non-null only for admins granted "CSPs near me". */
+    val nearbySource: List<CspLocationDto>? = null,
 )
 
 /** All CSPs with their DC; search and the unassigned filter run on the loaded list. */
@@ -111,8 +114,10 @@ class TeamCspsViewModel : ViewModel() {
         _ui.value = _ui.value.copy(loading = true, failed = false)
         viewModelScope.launch {
             val list = repo.csps()
-            _ui.value = if (list != null) TeamCspsUi(loading = false, csps = list)
-            else _ui.value.copy(loading = false, failed = true)
+            // The server alone decides who gets "near me"; a 403 just leaves it null.
+            val near = repo.cspLocations() ?: _ui.value.nearbySource
+            _ui.value = if (list != null) TeamCspsUi(loading = false, csps = list, nearbySource = near)
+            else _ui.value.copy(loading = false, failed = true, nearbySource = near)
         }
     }
 }

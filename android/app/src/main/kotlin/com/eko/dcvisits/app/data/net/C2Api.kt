@@ -104,6 +104,10 @@ interface C2Api {
     @GET("dashboard/csps")
     suspend fun dashboardCsps(@Header("Authorization") bearer: String): Response<DashboardCspsResponse>
 
+    /** Per-person super-admin grant; 403 for everyone else (the app then hides "near me"). */
+    @GET("dashboard/csp-locations")
+    suspend fun cspLocations(@Header("Authorization") bearer: String): Response<CspLocationsResponse>
+
     @POST("sync/batches")
     suspend fun submitBatch(
         @Header("Authorization") bearer: String,

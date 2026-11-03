@@ -3,6 +3,7 @@ package com.eko.dcvisits.app.data.repo
 import com.eko.dcvisits.app.data.net.ApiClient
 import com.eko.dcvisits.app.data.net.AttendanceRowDto
 import com.eko.dcvisits.app.data.net.C2Api
+import com.eko.dcvisits.app.data.net.CspLocationDto
 import com.eko.dcvisits.app.data.net.DashboardCspDto
 import com.eko.dcvisits.app.data.net.LiveLocationRowDto
 import com.eko.dcvisits.app.data.net.OverviewResponse
@@ -149,6 +150,12 @@ class TeamRepository(
     suspend fun csps(): List<DashboardCspDto>? {
         val s = session.current() ?: return null
         return runCatching { api.dashboardCsps(bearer(s.accessToken)).bodyOrThrow().items }.getOrNull()
+    }
+
+    /** Every CSP's coordinates for "CSPs near me"; null when not granted (403) or offline. */
+    suspend fun cspLocations(): List<CspLocationDto>? {
+        val s = session.current() ?: return null
+        return runCatching { api.cspLocations(bearer(s.accessToken)).bodyOrThrow().items }.getOrNull()
     }
 
     /** One DC's track points for the day, oldest first — drawn as their route on the Live Map. */

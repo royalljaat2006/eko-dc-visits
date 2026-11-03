@@ -44,11 +44,32 @@ fun CspsScreen(vm: TeamCspsViewModel = viewModel()) {
     var unassignedOnly by rememberSaveable { mutableStateOf(false) }
     val shown = remember(ui.csps, query, unassignedOnly) { filterCsps(ui.csps, query, unassignedOnly) }
     val unassigned = remember(ui.csps) { ui.csps.count { it.dc_user_id == null } }
+    // "Near me" exists only when the server granted it to this person; it opens first.
+    val nearSource = ui.nearbySource
+    var nearMode by rememberSaveable { mutableStateOf(true) }
+    val modeSwitch: @Composable () -> Unit = {
+        if (nearSource != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = nearMode, onClick = { nearMode = true }, label = { Text(stringResource(R.string.nearby_tab)) })
+                FilterChip(selected = !nearMode, onClick = { nearMode = false }, label = { Text(stringResource(R.string.nearby_all_tab)) })
+            }
+        }
+    }
 
     ScreenContainer { pad ->
+        if (nearSource != null && nearMode) {
+            NearbyCspsView(nearSource, pad) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.nearby_title), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
+                    modeSwitch()
+                }
+            }
+            return@ScreenContainer
+        }
         LazyColumn(Modifier.fillMaxSize(), contentPadding = pad, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    modeSwitch()
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(stringResource(R.string.admin_csps_title), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.weight(1f))
                         if (ui.loading) CircularProgressIndicator(color = EkoBlue, strokeWidth = 2.dp)
