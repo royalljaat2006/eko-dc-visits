@@ -100,6 +100,14 @@ interface C2Api {
         @Query("stale_after_s") staleAfterS: Int,
     ): Response<LiveLocationsResponse>
 
+    /** Every CSP in scope with its assigned DC — admin / national head / circle head. */
+    @GET("dashboard/csps")
+    suspend fun dashboardCsps(@Header("Authorization") bearer: String): Response<DashboardCspsResponse>
+
+    /** Per-person super-admin grant; 403 for everyone else (the app then hides "near me"). */
+    @GET("dashboard/csp-locations")
+    suspend fun cspLocations(@Header("Authorization") bearer: String): Response<CspLocationsResponse>
+
     @POST("sync/batches")
     suspend fun submitBatch(
         @Header("Authorization") bearer: String,

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Eko CSP विज़िट</string>
+    <string name="app_name">Eko Bharat</string>
 
     <!-- ===== Common actions / words ===== -->
     <string name="action_cancel">रद्द करें</string>
@@ -48,7 +48,7 @@
     <string name="role_circle_head">सर्कल हेड</string>
     <string name="role_national_head">नेशनल हेड</string>
     <string name="role_hr_admin">HR एडमिन</string>
-    <string name="role_corporate_admin">कॉर्पोरेट एडमिन</string>
+    <string name="role_corporate_admin">सुपर एडमिन</string>
     <string name="role_bank_official">बैंक अधिकारी</string>
 
     <!-- ===== Main scaffold / tabs ===== -->
@@ -346,7 +346,7 @@
     <string name="tab_info">जानकारी</string>
     <string name="info_version">वर्ज़न %1$s</string>
     <string name="info_what_title">यह ऐप क्या है?</string>
-    <string name="info_what_body">Eko CSP विज़िट ऐप Eko के डिस्ट्रिक्ट कोऑर्डिनेटर (DC) को SBI कियोस्क CSP पर विज़िट करने में मदद करता है, और हर विज़िट का साफ़ रिकॉर्ड रखता है: कौन गया, किस CSP पर, कितने बजे, और क्या वह सच में वहाँ था।</string>
+    <string name="info_what_body">Eko Bharat ऐप Eko के डिस्ट्रिक्ट कोऑर्डिनेटर (DC) को SBI कियोस्क CSP पर विज़िट करने में मदद करता है, और हर विज़िट का साफ़ रिकॉर्ड रखता है: कौन गया, किस CSP पर, कितने बजे, और क्या वह सच में वहाँ था।</string>
     <string name="info_dc_title">आपका दिन, एक-एक कदम</string>
     <string name="info_dc_body">1. सुबह Start Day दबाएँ।\n2. अपने CSP पर जाएँ। मेरे CSP में लिस्ट है; नेविगेट सबसे नज़दीकी CSP दिखाता है।\n3. CSP पर लगभग 2 मिनट रुकें, ऐप खुद चेक इन कर देगा, या Check in दबाएँ।\n4. फ़ोटो लें और चेक आउट करें।\n5. शाम को End Day दबाएँ। आपका KM अपने आप गिना जाता है।</string>
     <string name="info_admin_title">आप क्या देख सकते हैं</string>
@@ -355,4 +355,24 @@
     <string name="info_colours_body">लाइव (हरा): पिछले 5 मिनट में लोकेशन आई है।\nपुरानी लोकेशन (पीला): 5 मिनट से ज़्यादा से नई लोकेशन नहीं आई। DC को कॉल करें।\nINSIDE: चेक इन के समय DC CSP पर था।\nOUTSIDE: DC CSP की सेव लोकेशन से दूर था। एक बार जाँच लें।</string>
     <string name="info_privacy_title">प्राइवेसी</string>
     <string name="info_privacy_body">लोकेशन सिर्फ़ ड्यूटी के समय रिकॉर्ड होती है, Start Day से End Day तक, और रात 9 बजे हमेशा बंद हो जाती है।</string>
+    <string name="tab_csps">CSP</string>
+    <string name="admin_csps_title">सारे CSP</string>
+    <string name="admin_csps_summary">%1$d CSP · %2$d बिना DC के</string>
+    <string name="admin_csps_search">कोड, पता, ज़िला या DC खोजें</string>
+    <string name="admin_csps_unassigned_only">सिर्फ़ बिना DC वाले</string>
+    <string name="admin_csps_showing">%1$d दिख रहे हैं</string>
+    <string name="admin_csps_no_dc">DC नहीं</string>
+    <string name="team_view_today">आज</string>
+    <string name="team_view_scorecard">स्कोरकार्ड</string>
+    <string name="team_score_on_time">समय पर</string>
+    <string name="team_score_points">पॉइंट</string>
+    <string name="nearby_tab">📍 पास के</string>
+    <string name="nearby_all_tab">सारे</string>
+    <string name="nearby_title">पास के CSP</string>
+    <string name="nearby_finding_you">आपकी लोकेशन ढूँढ रहे हैं…</string>
+    <string name="nearby_none">%1$d km में कोई CSP नहीं</string>
+    <string name="nearby_count">%2$d km में %1$d CSP · सबसे पास वाला ऊपर</string>
+    <string name="nearby_unverified">लोकेशन पक्की नहीं — दूरी थोड़ी अलग हो सकती है</string>
+    <string name="nearby_dc">DC: %1$s</string>
+    <string name="nearby_call">कॉल</string>
 </resources>

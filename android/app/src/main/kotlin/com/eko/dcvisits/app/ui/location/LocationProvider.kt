@@ -6,9 +6,16 @@ import android.content.pm.PackageManager
 import android.location.LocationManager
 import androidx.core.content.ContextCompat
 import com.eko.dcvisits.app.data.sync.Fix
+import android.os.Looper
 import com.google.android.gms.location.CurrentLocationRequest
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
@@ -44,6 +51,30 @@ object LocationProvider {
                 cont.resume(null)
             }
         }
+    }
+
+    /**
+     * Fixes for as long as the collector is active — a screen that follows the user
+     * while it is open (admin "CSPs near me"). Stops the moment collection stops;
+     * nothing runs in the background. Emits nothing without permission.
+     */
+    fun updates(context: Context, intervalMs: Long = 10_000): Flow<Fix> = callbackFlow {
+        if (!hasPermission(context)) { close(); return@callbackFlow }
+        val client = LocationServices.getFusedLocationProviderClient(context)
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
+            .setMinUpdateIntervalMillis(intervalMs / 2)
+            .build()
+        val callback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                result.lastLocation?.let { trySend(it.toFix()) }
+            }
+        }
+        try {
+            client.requestLocationUpdates(request, callback, Looper.getMainLooper())
+        } catch (_: SecurityException) {
+            close()
+        }
+        awaitClose { client.removeLocationUpdates(callback) }
     }
 
     private fun android.location.Location.toFix() = Fix(

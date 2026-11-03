@@ -54,6 +54,7 @@ function userFromRow(r: Row): User {
     dashboard_url: (r.dashboard_url as string | null) ?? undefined,
     home_lat: (r.home_lat as number | null) ?? undefined,
     home_lng: (r.home_lng as number | null) ?? undefined,
+    nearby_csps: (r.nearby_csps as boolean | null) ?? undefined,
   };
 }
 

@@ -3,8 +3,12 @@ package com.eko.dcvisits.app.data.repo
 import com.eko.dcvisits.app.data.net.ApiClient
 import com.eko.dcvisits.app.data.net.AttendanceRowDto
 import com.eko.dcvisits.app.data.net.C2Api
+import com.eko.dcvisits.app.data.net.CspLocationDto
+import com.eko.dcvisits.app.data.net.DashboardCspDto
 import com.eko.dcvisits.app.data.net.LiveLocationRowDto
 import com.eko.dcvisits.app.data.net.OverviewResponse
+import com.eko.dcvisits.app.data.net.RouteHistoryPointDto
+import com.eko.dcvisits.app.data.net.ScorecardRowDto
 import com.eko.dcvisits.app.data.net.VisitDto
 import com.eko.dcvisits.app.data.net.bearer
 import com.eko.dcvisits.app.data.net.bodyOrThrow
@@ -133,6 +137,32 @@ class TeamRepository(
         val s = session.current() ?: return null
         return runCatching { api.visits(bearer(s.accessToken), date).bodyOrThrow().items }.getOrNull()
             ?.sortedByDescending { it.checkin.occurred_at }
+    }
+
+    /** Every DC's dc_score_v1 card for the day, best first. */
+    suspend fun scorecard(date: String): List<ScorecardRowDto>? {
+        val s = session.current() ?: return null
+        return runCatching { api.scorecard(bearer(s.accessToken), date).bodyOrThrow().items }.getOrNull()
+            ?.sortedByDescending { it.points }
+    }
+
+    /** All CSPs in scope with their DC (null = unassigned), in the calling sheet's order. */
+    suspend fun csps(): List<DashboardCspDto>? {
+        val s = session.current() ?: return null
+        return runCatching { api.dashboardCsps(bearer(s.accessToken)).bodyOrThrow().items }.getOrNull()
+    }
+
+    /** Every CSP's coordinates for "CSPs near me"; null when not granted (403) or offline. */
+    suspend fun cspLocations(): List<CspLocationDto>? {
+        val s = session.current() ?: return null
+        return runCatching { api.cspLocations(bearer(s.accessToken)).bodyOrThrow().items }.getOrNull()
+    }
+
+    /** One DC's track points for the day, oldest first — drawn as their route on the Live Map. */
+    suspend fun route(date: String, dcUserId: String): List<RouteHistoryPointDto>? {
+        val s = session.current() ?: return null
+        return runCatching { api.routeHistory(bearer(s.accessToken), date, dcUserId).bodyOrThrow().points }.getOrNull()
+            ?.sortedBy { it.t }
     }
 
     companion object {

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Eko CSP Visits</string>
+    <string name="app_name">Eko Bharat</string>
 
     <!-- ===== Common actions / words ===== -->
     <string name="action_cancel">Cancel</string>
@@ -48,7 +48,7 @@
     <string name="role_circle_head">Circle head</string>
     <string name="role_national_head">National head</string>
     <string name="role_hr_admin">Hr admin</string>
-    <string name="role_corporate_admin">Corporate admin</string>
+    <string name="role_corporate_admin">Super admin</string>
     <string name="role_bank_official">Bank official</string>
 
     <!-- ===== Main scaffold / tabs ===== -->
@@ -346,7 +346,7 @@
     <string name="tab_info">Info</string>
     <string name="info_version">Version %1$s</string>
     <string name="info_what_title">What is this app?</string>
-    <string name="info_what_body">Eko CSP Visits helps Eko\'s District Coordinators (DCs) visit SBI kiosk CSPs, and keeps a clear record of every visit: who went, to which CSP, at what time, and whether they were really there.</string>
+    <string name="info_what_body">Eko Bharat helps Eko\'s District Coordinators (DCs) visit SBI kiosk CSPs, and keeps a clear record of every visit: who went, to which CSP, at what time, and whether they were really there.</string>
     <string name="info_dc_title">Your day, step by step</string>
     <string name="info_dc_body">1. Tap Start Day in the morning.\n2. Go to your CSPs. My CSPs lists them; Navigate shows the nearest one.\n3. Stay at the CSP for about 2 minutes and the app checks you in by itself, or tap Check in.\n4. Take the photos and check out.\n5. Tap End Day in the evening. Your KM is counted automatically.</string>
     <string name="info_admin_title">What you can see</string>
@@ -355,4 +355,24 @@
     <string name="info_colours_body">LIVE (green): location received in the last 5 minutes.\nSTALE (yellow): no new location for over 5 minutes. Call the DC.\nINSIDE: the DC was at the CSP when checking in.\nOUTSIDE: the DC was away from the CSP\'s saved location. Worth a check.</string>
     <string name="info_privacy_title">Privacy</string>
     <string name="info_privacy_body">Location is recorded only while a DC is on duty, from Start Day to End Day, and it always stops at 9 PM.</string>
+    <string name="tab_csps">CSPs</string>
+    <string name="admin_csps_title">All CSPs</string>
+    <string name="admin_csps_summary">%1$d CSPs · %2$d without a DC</string>
+    <string name="admin_csps_search">Search code, address, district or DC</string>
+    <string name="admin_csps_unassigned_only">Without DC only</string>
+    <string name="admin_csps_showing">Showing %1$d</string>
+    <string name="admin_csps_no_dc">No DC</string>
+    <string name="team_view_today">Today</string>
+    <string name="team_view_scorecard">Scorecard</string>
+    <string name="team_score_on_time">On time</string>
+    <string name="team_score_points">points</string>
+    <string name="nearby_tab">📍 Near me</string>
+    <string name="nearby_all_tab">All</string>
+    <string name="nearby_title">CSPs near me</string>
+    <string name="nearby_finding_you">Finding your location…</string>
+    <string name="nearby_none">No CSP within %1$d km</string>
+    <string name="nearby_count">%1$d CSPs within %2$d km · nearest first</string>
+    <string name="nearby_unverified">Location not verified — distance may be off</string>
+    <string name="nearby_dc">DC: %1$s</string>
+    <string name="nearby_call">Call</string>
 </resources>

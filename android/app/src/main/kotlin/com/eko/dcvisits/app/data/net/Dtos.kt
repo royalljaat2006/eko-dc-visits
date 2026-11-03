@@ -274,6 +274,38 @@ data class ScorecardResponse(
     val items: List<ScorecardRowDto> = emptyList(),
 )
 
+@Serializable
+data class DashboardCspDto(
+    val csp_location_id: String,
+    val code: String,
+    val address: String? = null,
+    val district: String? = null,
+    val state: String? = null,
+    val circle: String? = null,
+    val dc_user_id: String? = null,
+    val dc_name: String? = null,
+)
+
+@Serializable
+data class DashboardCspsResponse(val items: List<DashboardCspDto> = emptyList())
+
+/** GET /dashboard/csp-locations — every CSP with coordinates, for "CSPs near me". */
+@Serializable
+data class CspLocationDto(
+    val csp_location_id: String,
+    val code: String,
+    val lat: Double,
+    val lng: Double,
+    val coordinates_verified: Boolean = true,
+    val address: String? = null,
+    val district: String? = null,
+    val dc_name: String? = null,
+    val dc_phone: String? = null,
+)
+
+@Serializable
+data class CspLocationsResponse(val items: List<CspLocationDto> = emptyList())
+
 // ---- admin team view (GET /dashboard/overview, /dashboard/live-locations) ----
 
 @Serializable
